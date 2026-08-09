@@ -14,6 +14,7 @@ import { type FormEvent, type ReactNode } from "react";
 import { FormInput, MetricCard, MetricGrid, PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldGroup } from "@/components/ui/field";
 import {
   type AutomationsReport,
   type ContactsReport,
@@ -140,21 +141,25 @@ function ReportControls({ search }: { search: ReportSearch }): ReactNode {
             </Button>
           ))}
         </nav>
-        <form
-          className="flex flex-wrap items-end gap-3 border-t pt-4"
-          onSubmit={applyRange}
-          key={`${search.from}-${search.to}`}
-        >
-          <div className="min-w-44">
-            <FormInput label="開始日" name="from" type="date" defaultValue={search.from} required />
-          </div>
-          <div className="min-w-44">
-            <FormInput label="終了日" name="to" type="date" defaultValue={search.to} required />
-          </div>
-          <Button type="submit">期間を適用</Button>
-          <span className="pb-1 text-xs text-muted-foreground">
-            最大366日・終了日を含む期間で集計
-          </span>
+        <form onSubmit={applyRange} key={`${search.from}-${search.to}`}>
+          <FieldGroup className="flex-row flex-wrap items-end gap-3 border-t pt-4">
+            <FieldGroup className="min-w-44">
+              <FormInput
+                label="開始日"
+                name="from"
+                type="date"
+                defaultValue={search.from}
+                required
+              />
+            </FieldGroup>
+            <FieldGroup className="min-w-44">
+              <FormInput label="終了日" name="to" type="date" defaultValue={search.to} required />
+            </FieldGroup>
+            <Button type="submit">期間を適用</Button>
+            <span className="pb-1 text-xs text-muted-foreground">
+              最大366日・終了日を含む期間で集計
+            </span>
+          </FieldGroup>
         </form>
       </CardContent>
     </Card>
@@ -254,7 +259,7 @@ function ReportsOverview({
             <CardTitle>ファネルの状態</CardTitle>
             <CardDescription>顧客獲得から商談獲得までの主要指標</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-col gap-4">
             <ProgressRow
               label="新規連絡先"
               value={contacts.summary.newContacts}

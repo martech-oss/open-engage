@@ -5,6 +5,7 @@ import { authClient } from "@/auth-client";
 import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldGroup } from "@/components/ui/field";
 import { createWorkspaceApiKey } from "@/features/settings/settings-api";
 import { getFormString } from "@/lib/form-data";
 import type { Workspace } from "@/lib/workspace";
@@ -108,11 +109,13 @@ function TwoFactorSettings(): ReactNode {
       </CardHeader>
       <CardContent>
         {!setup ? (
-          <form className="flex flex-col gap-5" onSubmit={(event) => void enable(event)}>
-            <FormInput label="現在のパスワード" name="password" type="password" required />
-            <Button variant="outline" type="submit">
-              セットアップを開始
-            </Button>
+          <form onSubmit={(event) => void enable(event)}>
+            <FieldGroup>
+              <FormInput label="現在のパスワード" name="password" type="password" required />
+              <Button variant="outline" type="submit">
+                セットアップを開始
+              </Button>
+            </FieldGroup>
           </form>
         ) : verified ? (
           <SuccessAlert>
@@ -124,15 +127,17 @@ function TwoFactorSettings(): ReactNode {
             <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
               {setup.backupCodes.join("\n")}
             </pre>
-            <form className="flex items-end gap-2" onSubmit={(event) => void verify(event)}>
-              <FormInput
-                label="認証コード"
-                name="code"
-                inputMode="numeric"
-                placeholder="6桁コード"
-                required
-              />
-              <Button type="submit">確認</Button>
+            <form onSubmit={(event) => void verify(event)}>
+              <FieldGroup className="flex-row items-end gap-2">
+                <FormInput
+                  label="認証コード"
+                  name="code"
+                  inputMode="numeric"
+                  placeholder="6桁コード"
+                  required
+                />
+                <Button type="submit">確認</Button>
+              </FieldGroup>
             </form>
           </div>
         )}

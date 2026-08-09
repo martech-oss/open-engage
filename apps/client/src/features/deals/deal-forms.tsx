@@ -90,7 +90,7 @@ export function DealForm({
           placeholder="例：Acme社 MA導入"
           required
         />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <FormNativeSelect
             label="パイプライン"
             name="pipelineId"
@@ -120,8 +120,8 @@ export function DealForm({
               </FormSelectOption>
             ))}
           </FormNativeSelect>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+        </FieldGroup>
+        <FieldGroup className="grid gap-4 sm:grid-cols-[2fr_1fr]">
           <FormInput
             label="商談金額"
             name="value"
@@ -136,8 +136,8 @@ export function DealForm({
             <FormSelectOption value="USD">USD</FormSelectOption>
             <FormSelectOption value="EUR">EUR</FormSelectOption>
           </FormNativeSelect>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        </FieldGroup>
+        <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <FormNativeSelect label="ステータス" name="status" defaultValue={deal?.status ?? "open"}>
             <FormSelectOption value="open">進行中</FormSelectOption>
             <FormSelectOption value="won">獲得</FormSelectOption>
@@ -149,7 +149,7 @@ export function DealForm({
             type="date"
             defaultValue={deal?.expectedCloseDate ?? ""}
           />
-        </div>
+        </FieldGroup>
         <FormNativeSelect label="担当者" name="ownerUserId" defaultValue={deal?.ownerUserId ?? ""}>
           <FormSelectOption value="">未設定</FormSelectOption>
           {options.members.map((member) => (
@@ -158,7 +158,7 @@ export function DealForm({
             </FormSelectOption>
           ))}
         </FormNativeSelect>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <FormNativeSelect label="連絡先" name="contactId" defaultValue={deal?.contactId ?? ""}>
             <FormSelectOption value="">未設定</FormSelectOption>
             {options.contacts.map((contact) => (
@@ -175,7 +175,7 @@ export function DealForm({
               </FormSelectOption>
             ))}
           </FormNativeSelect>
-        </div>
+        </FieldGroup>
         <FormTextarea
           label="説明・メモ"
           name="description"
@@ -230,7 +230,7 @@ export function DealTaskForm({
           placeholder="例：導入条件を電話で確認"
           required
         />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <FormNativeSelect label="種別" name="type" defaultValue={task?.type ?? "task"}>
             <FormSelectOption value="task">タスク</FormSelectOption>
             <FormSelectOption value="call">電話</FormSelectOption>
@@ -243,7 +243,7 @@ export function DealTaskForm({
             type="datetime-local"
             defaultValue={toDateTimeLocal(task?.dueAt)}
           />
-        </div>
+        </FieldGroup>
         <FormNativeSelect
           label="担当者"
           name="assignedUserId"

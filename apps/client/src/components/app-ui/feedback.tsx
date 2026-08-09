@@ -1,38 +1,42 @@
-import { BlocksIcon, CircleAlertIcon, CircleCheckIcon } from "lucide-react";
+import { BlocksIcon, CircleAlertIcon, CircleCheckIcon, type LucideIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 export function EmptyState({
   title,
   description,
   compact = false,
   action,
+  icon: Icon = BlocksIcon,
 }: {
   title: string;
   description?: string;
   compact?: boolean;
   action?: ReactNode;
+  icon?: LucideIcon;
 }): ReactNode {
   return (
-    <Empty className={compact ? "py-8" : "min-h-56 border"}>
+    <Empty className={cn(compact && "py-8", !compact && "min-h-56 border")}>
       <EmptyHeader>
         <EmptyMedia variant="icon">
-          <BlocksIcon />
+          <Icon />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
         {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
-      {action}
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
     </Empty>
   );
 }
@@ -78,7 +82,7 @@ export function LoadingButton({
   busyLabel?: string;
 }): ReactNode {
   return (
-    <Button disabled={busy || disabled} {...props}>
+    <Button aria-busy={busy} disabled={busy || disabled} {...props}>
       {busy ? <Spinner data-icon="inline-start" /> : null}
       {busy ? (busyLabel ?? "処理中…") : children}
     </Button>

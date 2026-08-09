@@ -16,6 +16,7 @@ import {
 import { type DataTableColumn } from "@/components/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { FieldGroup } from "@/components/ui/field";
 import { WebsiteResourceListPage } from "@/features/website/resource-page";
 import {
   siteMessagesQueryOptions,
@@ -256,7 +257,7 @@ function SiteMessageEditor({
       error={error}
       submitLabel={item ? "変更を保存" : "メッセージを作成"}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormInput
           label="管理用の名前"
           name="name"
@@ -268,7 +269,7 @@ function SiteMessageEditor({
           <FormSelectOption value="draft">下書き</FormSelectOption>
           <FormSelectOption value="published">公開</FormSelectOption>
         </FormNativeSelect>
-      </div>
+      </FieldGroup>
       <FormInput
         label="見出し"
         name="headline"
@@ -277,7 +278,7 @@ function SiteMessageEditor({
         required
       />
       <FormTextarea label="本文" name="body" defaultValue={item?.body} rows={3} />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormInput
           label="CTAラベル"
           name="ctaLabel"
@@ -291,7 +292,7 @@ function SiteMessageEditor({
           defaultValue={item?.ctaUrl ?? ""}
           placeholder="https://example.com/contact"
         />
-      </div>
+      </FieldGroup>
       <FormInput
         label="対象ページ"
         name="pagePattern"
@@ -300,7 +301,7 @@ function SiteMessageEditor({
         placeholder="/pricing*"
         required
       />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormInput
           label="表示開始"
           name="startsAt"
@@ -313,7 +314,7 @@ function SiteMessageEditor({
           type="datetime-local"
           defaultValue={toDateTimeLocal(item?.endsAt)}
         />
-      </div>
+      </FieldGroup>
     </FormDialog>
   );
 }

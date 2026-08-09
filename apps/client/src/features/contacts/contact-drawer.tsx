@@ -19,6 +19,7 @@ import {
   LoadingButton,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import { FieldGroup } from "@/components/ui/field";
 import {
   Sheet,
   SheetContent,
@@ -249,56 +250,58 @@ function ProfileEditForm({
   }
   return (
     <Section title="基本情報" icon={<UserRound className="size-4" />}>
-      <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
+      <form onSubmit={(event) => void submit(event)}>
+        <FieldGroup>
+          <FieldGroup className="grid grid-cols-2 gap-3">
+            <FormInput
+              label="名"
+              name="firstName"
+              defaultValue={contact.firstName ?? ""}
+              disabled={disabled}
+            />
+            <FormInput
+              label="姓"
+              name="lastName"
+              defaultValue={contact.lastName ?? ""}
+              disabled={disabled}
+            />
+          </FieldGroup>
           <FormInput
-            label="名"
-            name="firstName"
-            defaultValue={contact.firstName ?? ""}
+            label="メール"
+            name="email"
+            type="email"
+            defaultValue={contact.email ?? ""}
             disabled={disabled}
           />
+          <FieldGroup className="grid grid-cols-2 gap-3">
+            <FormInput
+              label="電話番号"
+              name="phone"
+              defaultValue={contact.phone ?? ""}
+              disabled={disabled}
+            />
+            <FormInput
+              label="外部ID"
+              name="externalId"
+              defaultValue={contact.externalId ?? ""}
+              disabled={disabled}
+            />
+          </FieldGroup>
           <FormInput
-            label="姓"
-            name="lastName"
-            defaultValue={contact.lastName ?? ""}
+            label="ステージ"
+            name="stage"
+            defaultValue={contact.stage}
             disabled={disabled}
+            required
           />
-        </div>
-        <FormInput
-          label="メール"
-          name="email"
-          type="email"
-          defaultValue={contact.email ?? ""}
-          disabled={disabled}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <FormInput
-            label="電話番号"
-            name="phone"
-            defaultValue={contact.phone ?? ""}
-            disabled={disabled}
-          />
-          <FormInput
-            label="外部ID"
-            name="externalId"
-            defaultValue={contact.externalId ?? ""}
-            disabled={disabled}
-          />
-        </div>
-        <FormInput
-          label="ステージ"
-          name="stage"
-          defaultValue={contact.stage}
-          disabled={disabled}
-          required
-        />
-        {error && <ErrorNotice>{error}</ErrorNotice>}
-        {!disabled && (
-          <LoadingButton busy={busy} variant="outline" type="submit">
-            <Check data-icon="inline-start" />
-            基本情報を保存
-          </LoadingButton>
-        )}
+          {error && <ErrorNotice>{error}</ErrorNotice>}
+          {!disabled && (
+            <LoadingButton busy={busy} variant="outline" type="submit">
+              <Check data-icon="inline-start" />
+              基本情報を保存
+            </LoadingButton>
+          )}
+        </FieldGroup>
       </form>
     </Section>
   );
@@ -330,22 +333,21 @@ function ScoreForm({
   }
   return (
     <Section title="スコアを調整" icon={<Zap className="size-4" />}>
-      <form
-        onSubmit={(event) => void submit(event)}
-        className="grid gap-3 md:grid-cols-[120px_1fr_auto]"
-      >
-        <FormInput label="加減点" name="delta" type="number" required />
-        <FormInput label="理由" name="reason" required />
-        <div className="flex items-end">
-          <LoadingButton busy={busy} variant="outline" type="submit">
-            反映
-          </LoadingButton>
-        </div>
-        {error && (
-          <div className="md:col-span-3">
-            <ErrorNotice>{error}</ErrorNotice>
+      <form onSubmit={(event) => void submit(event)}>
+        <FieldGroup className="grid gap-3 md:grid-cols-[120px_1fr_auto]">
+          <FormInput label="加減点" name="delta" type="number" required />
+          <FormInput label="理由" name="reason" required />
+          <div className="flex items-end">
+            <LoadingButton busy={busy} variant="outline" type="submit">
+              反映
+            </LoadingButton>
           </div>
-        )}
+          {error && (
+            <div className="md:col-span-3">
+              <ErrorNotice>{error}</ErrorNotice>
+            </div>
+          )}
+        </FieldGroup>
       </form>
     </Section>
   );

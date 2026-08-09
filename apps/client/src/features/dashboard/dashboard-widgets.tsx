@@ -1,7 +1,15 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { Card } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,20 +61,24 @@ export function KpiCard({
   children?: ReactNode;
 }): ReactNode {
   return (
-    <Card className="gap-1.5 px-3.5 py-3">
-      <div className="text-[11.5px] text-muted-foreground">{label}</div>
-      <div className="flex items-baseline gap-1.5">
-        <span
-          className={cn(
-            "truncate text-[23px] leading-none font-semibold tabular-nums",
-            emphasis === "alert" && "text-destructive",
-          )}
-        >
-          {value}
-        </span>
-        {delta}
-      </div>
-      <div className="flex h-5 items-center text-[11px] text-muted-foreground">{children}</div>
+    <Card size="sm" className="gap-1.5 py-3">
+      <CardHeader className="gap-1.5 px-3.5">
+        <CardDescription className="text-[11.5px]">{label}</CardDescription>
+        <CardTitle className="flex items-baseline gap-1.5">
+          <span
+            className={cn(
+              "truncate text-[23px] leading-none font-semibold tabular-nums",
+              emphasis === "alert" && "text-destructive",
+            )}
+          >
+            {value}
+          </span>
+          {delta}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex h-5 items-center px-3.5 text-[11px] text-muted-foreground">
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -118,12 +130,12 @@ export function Sparkline({ values }: { values: number[] }): ReactNode {
 
 export function MeterBar({ percent }: { percent: number }): ReactNode {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary" aria-hidden>
-      <div
-        className="h-full rounded-full bg-success"
-        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-      />
-    </div>
+    <Progress
+      className="w-full"
+      value={Math.min(100, Math.max(0, percent))}
+      variant="success"
+      aria-hidden
+    />
   );
 }
 
@@ -140,12 +152,12 @@ export function Panel({
   className?: string;
 }): ReactNode {
   return (
-    <Card className={cn("min-h-0 gap-0 py-0", className)}>
-      <div className="flex shrink-0 items-baseline justify-between gap-3 border-b px-4 py-3">
-        <div className="font-heading text-[13.5px] font-bold">{title}</div>
-        {action}
-      </div>
-      {children}
+    <Card size="sm" className={cn("min-h-0 gap-0 py-0", className)}>
+      <CardHeader className="shrink-0 border-b px-4 py-3">
+        <CardTitle className="text-[13.5px] font-bold">{title}</CardTitle>
+        {action ? <CardAction>{action}</CardAction> : null}
+      </CardHeader>
+      <CardContent className="min-h-0 flex-1 px-0">{children}</CardContent>
     </Card>
   );
 }

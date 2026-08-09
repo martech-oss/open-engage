@@ -8,6 +8,7 @@ import { ErrorAlert, FormInput, LoadingButton, SuccessAlert } from "@/components
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldGroup } from "@/components/ui/field";
 import { getFormString } from "@/lib/form-data";
 import { slugify } from "@/lib/utils";
 
@@ -109,7 +110,6 @@ export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string })
           <CardContent className="flex flex-col gap-6">
             {twoFactorPending ? (
               <form
-                className="flex flex-col gap-5"
                 onSubmit={(event) => {
                   event.preventDefault();
                   const code = getFormString(new FormData(event.currentTarget), "code");
@@ -126,28 +126,32 @@ export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string })
                     .finally(() => setBusy(false));
                 }}
               >
-                <FormInput label="認証アプリの6桁コード" name="code" required />
-                {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-                <LoadingButton busy={busy} className="w-full" type="submit">
-                  確認してログイン
-                </LoadingButton>
+                <FieldGroup>
+                  <FormInput label="認証アプリの6桁コード" name="code" required />
+                  {error ? <ErrorAlert>{error}</ErrorAlert> : null}
+                  <LoadingButton busy={busy} className="w-full" type="submit">
+                    確認してログイン
+                  </LoadingButton>
+                </FieldGroup>
               </form>
             ) : (
-              <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
-                {mode === "signup" ? <FormInput label="名前" name="name" required /> : null}
-                <FormInput label="メールアドレス" name="email" type="email" required />
-                <FormInput
-                  label="パスワード（12文字以上）"
-                  name="password"
-                  type="password"
-                  minLength={12}
-                  required
-                />
-                {notice ? <SuccessAlert>{notice}</SuccessAlert> : null}
-                {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-                <LoadingButton busy={busy} className="w-full" type="submit">
-                  {mode === "signin" ? "ログイン" : "登録"}
-                </LoadingButton>
+              <form onSubmit={(event) => void submit(event)}>
+                <FieldGroup>
+                  {mode === "signup" ? <FormInput label="名前" name="name" required /> : null}
+                  <FormInput label="メールアドレス" name="email" type="email" required />
+                  <FormInput
+                    label="パスワード（12文字以上）"
+                    name="password"
+                    type="password"
+                    minLength={12}
+                    required
+                  />
+                  {notice ? <SuccessAlert>{notice}</SuccessAlert> : null}
+                  {error ? <ErrorAlert>{error}</ErrorAlert> : null}
+                  <LoadingButton busy={busy} className="w-full" type="submit">
+                    {mode === "signin" ? "ログイン" : "登録"}
+                  </LoadingButton>
+                </FieldGroup>
               </form>
             )}
             <Button
@@ -209,12 +213,14 @@ export function WorkspaceSetupPage(): ReactNode {
           <CardDescription>OrganizationがOpenEngageのWorkspaceになります。</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
-            <FormInput label="ワークスペース名" name="name" required />
-            {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-            <LoadingButton busy={busy} className="w-full" type="submit">
-              作成して開始
-            </LoadingButton>
+          <form onSubmit={(event) => void submit(event)}>
+            <FieldGroup>
+              <FormInput label="ワークスペース名" name="name" required />
+              {error ? <ErrorAlert>{error}</ErrorAlert> : null}
+              <LoadingButton busy={busy} className="w-full" type="submit">
+                作成して開始
+              </LoadingButton>
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>

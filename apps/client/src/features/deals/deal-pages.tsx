@@ -39,6 +39,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
   dealDetailQueryOptions,
@@ -140,63 +141,63 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
       </div>
 
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="min-w-52 flex-1">
-            <FormNativeSelect
-              label="パイプライン"
-              name="pipeline"
-              value={activePipeline?.id ?? ""}
-              onChange={(event) =>
-                void navigate({
-                  to: "/deals",
-                  search: { ...search, pipelineId: event.target.value },
-                })
-              }
-            >
-              {options.pipelines.map((pipeline) => (
-                <FormSelectOption key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </FormSelectOption>
-              ))}
-            </FormNativeSelect>
-          </div>
-          <div className="min-w-40">
-            <FormNativeSelect
-              label="ステータス"
-              name="status"
-              value={search.status}
-              onChange={(event) =>
-                void navigate({
-                  to: "/deals",
-                  search: {
-                    ...search,
-                    status: event.target.value as DealSearch["status"],
-                  },
-                })
-              }
-            >
-              <FormSelectOption value="open">進行中</FormSelectOption>
-              <FormSelectOption value="won">獲得</FormSelectOption>
-              <FormSelectOption value="lost">失注</FormSelectOption>
-              <FormSelectOption value="all">すべて</FormSelectOption>
-            </FormNativeSelect>
-          </div>
-          <div className="min-w-64 flex-[2]">
-            <label className="mb-2 block text-sm font-medium" htmlFor="deal-search">
-              検索
-            </label>
-            <InputGroup>
-              <InputGroupInput
-                id="deal-search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="商談、連絡先、会社名で検索"
-              />
-              <InputGroupAddon>
-                <Search />
-              </InputGroupAddon>
-            </InputGroup>
-          </div>
+        <CardContent>
+          <FieldGroup className="flex-row flex-wrap items-end gap-3">
+            <FieldGroup className="min-w-52 flex-1">
+              <FormNativeSelect
+                label="パイプライン"
+                name="pipeline"
+                value={activePipeline?.id ?? ""}
+                onChange={(event) =>
+                  void navigate({
+                    to: "/deals",
+                    search: { ...search, pipelineId: event.target.value },
+                  })
+                }
+              >
+                {options.pipelines.map((pipeline) => (
+                  <FormSelectOption key={pipeline.id} value={pipeline.id}>
+                    {pipeline.name}
+                  </FormSelectOption>
+                ))}
+              </FormNativeSelect>
+            </FieldGroup>
+            <FieldGroup className="min-w-40">
+              <FormNativeSelect
+                label="ステータス"
+                name="status"
+                value={search.status}
+                onChange={(event) =>
+                  void navigate({
+                    to: "/deals",
+                    search: {
+                      ...search,
+                      status: event.target.value as DealSearch["status"],
+                    },
+                  })
+                }
+              >
+                <FormSelectOption value="open">進行中</FormSelectOption>
+                <FormSelectOption value="won">獲得</FormSelectOption>
+                <FormSelectOption value="lost">失注</FormSelectOption>
+                <FormSelectOption value="all">すべて</FormSelectOption>
+              </FormNativeSelect>
+            </FieldGroup>
+            <Field className="min-w-64 flex-[2]">
+              <FieldLabel htmlFor="deal-search">検索</FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  id="deal-search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="商談、連絡先、会社名で検索"
+                />
+                <InputGroupAddon>
+                  <Search />
+                </InputGroupAddon>
+              </InputGroup>
+            </Field>
+          </FieldGroup>
         </CardContent>
       </Card>
 

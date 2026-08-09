@@ -3,6 +3,14 @@ import type { ReactNode } from "react";
 import { EmptyState } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EmailTemplateRow } from "@/features/emails/email-api";
 
@@ -36,19 +44,20 @@ export function ArchivedResources({
           <CardTitle>テンプレート</CardTitle>
           <CardDescription>{templates.length}件</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {templates.map((template) => (
-            <div
-              key={template.id}
-              className="flex items-center justify-between gap-3 rounded-lg border p-3"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-medium">{template.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{template.subject}</p>
-              </div>
-              <Badge variant="secondary">{template.sendable ? "公開済み" : "下書き"}</Badge>
-            </div>
-          ))}
+        <CardContent>
+          <ItemGroup>
+            {templates.map((template) => (
+              <Item key={template.id} variant="outline">
+                <ItemContent className="min-w-0">
+                  <ItemTitle>{template.name}</ItemTitle>
+                  <ItemDescription>{template.subject}</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Badge variant="secondary">{template.sendable ? "公開済み" : "下書き"}</Badge>
+                </ItemActions>
+              </Item>
+            ))}
+          </ItemGroup>
         </CardContent>
       </Card>
     </div>

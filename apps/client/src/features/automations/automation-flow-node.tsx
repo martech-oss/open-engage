@@ -91,11 +91,11 @@ function AutomationFlowNode({
 }: NodeProps<Node<{ node: AutomationNode }>>): ReactNode {
   const node = data.node;
   const colors: Record<AutomationNode["type"], string> = {
-    source: "border-emerald-500",
+    source: "border-success",
     action: "border-primary",
-    condition: "border-amber-500",
-    decision: "border-violet-500",
-    delay: "border-slate-400",
+    condition: "border-warning",
+    decision: "border-chart-4",
+    delay: "border-muted-foreground",
   };
   return (
     <Card

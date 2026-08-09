@@ -13,6 +13,8 @@ import {
   LoadingButton,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Progress } from "@/components/ui/progress";
 import { formatBytes, type Asset, type AssetVisibility } from "@/features/assets/asset-api";
 import { replaceAssetContent, uploadAssetFile } from "@/features/assets/asset-upload";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
@@ -102,26 +104,27 @@ export function AssetUploadDialog({
       description="画像・eBook・スライドなど100MBまでのファイルを追加します。"
       className="sm:max-w-xl"
     >
-      <div className="flex flex-col gap-5">
-        {/* The real input lives inside the label so the drop zone stays keyboard-reachable. */}
-        <div
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={drop}
-          className={cn(
-            "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
-            dragging ? "border-primary bg-primary/5" : "border-muted-foreground/25",
-          )}
-        >
-          <UploadCloud className="mx-auto mb-3 size-8 text-muted-foreground" aria-hidden />
-          <label
-            htmlFor="asset-upload-input"
-            className="cursor-pointer text-sm font-medium underline underline-offset-4"
+      <FieldGroup>
+        <Field>
+          <div
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={drop}
+            className={cn(
+              "rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+              dragging ? "border-primary bg-primary/5" : "border-muted-foreground/25",
+            )}
           >
-            ファイルを選択
+            <UploadCloud className="mx-auto mb-3 size-8 text-muted-foreground" aria-hidden />
+            <FieldLabel
+              htmlFor="asset-upload-input"
+              className="inline-flex cursor-pointer underline underline-offset-4"
+            >
+              ファイルを選択
+            </FieldLabel>
             <input
               id="asset-upload-input"
               type="file"
@@ -132,11 +135,11 @@ export function AssetUploadDialog({
                 event.currentTarget.value = "";
               }}
             />
-          </label>
-          <p className="mt-1 text-sm text-muted-foreground">
-            またはここにドラッグ＆ドロップしてください。
-          </p>
-        </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              またはここにドラッグ＆ドロップしてください。
+            </p>
+          </div>
+        </Field>
 
         <FormNativeSelect
           label="公開設定"
@@ -159,11 +162,10 @@ export function AssetUploadDialog({
                     {formatBytes(item.file.size)}
                   </span>
                 </div>
-                {/* Native <progress>: the UI kit has no progress component and one call site does not justify adding one. */}
-                <progress
-                  className="h-1.5 w-full"
+                <Progress
+                  className="w-full"
                   value={item.percent}
-                  max={100}
+                  variant={item.state === "error" ? "destructive" : "default"}
                   aria-label={`${item.file.name}の進捗`}
                 />
                 {item.error ? <p className="text-xs text-destructive">{item.error}</p> : null}
@@ -181,7 +183,7 @@ export function AssetUploadDialog({
         >
           {queue.length > 0 ? `${queue.length}件をアップロード` : "アップロード"}
         </LoadingButton>
-      </div>
+      </FieldGroup>
     </AppDialog>
   );
 }
@@ -301,7 +303,7 @@ export function AssetReplaceDialog({
       title="ファイルを差し替え"
       description="IDは変わらないため、埋め込み済みのURLはそのまま新しいファイルを指します。"
     >
-      <div className="flex flex-col gap-5">
+      <FieldGroup>
         <FormInput
           label="新しいファイル"
           name="file"
@@ -309,14 +311,7 @@ export function AssetReplaceDialog({
           onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
           description="差し替えると公開URLの ?v= が変わり、キャッシュは自動的に切り替わります。"
         />
-        {busy ? (
-          <progress
-            className="h-1.5 w-full"
-            value={percent}
-            max={100}
-            aria-label="差し替えの進捗"
-          />
-        ) : null}
+        {busy ? <Progress className="w-full" value={percent} aria-label="差し替えの進捗" /> : null}
         {error ? <ErrorAlert>{error}</ErrorAlert> : null}
         <LoadingButton
           busy={busy}
@@ -327,7 +322,7 @@ export function AssetReplaceDialog({
         >
           差し替える
         </LoadingButton>
-      </div>
+      </FieldGroup>
     </AppDialog>
   );
 }

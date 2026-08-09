@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode } from "react";
 
 import { FormDialog, FormInput, FormNativeSelect } from "@/components/app-ui";
+import { FieldGroup } from "@/components/ui/field";
 import { NativeSelectOption } from "@/components/ui/native-select";
 import { invalidateCompanyQueries } from "@/features/companies/company-api";
 import {
@@ -69,17 +70,17 @@ export function ContactCreateForm({
       submitLabel="保存"
       className="sm:max-w-2xl"
     >
-      <div className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto pr-1">
-        <div className="grid grid-cols-2 gap-3">
+      <FieldGroup className="max-h-[75vh] overflow-y-auto pr-1">
+        <FieldGroup className="grid grid-cols-2 gap-3">
           <FormInput label="名" name="firstName" />
           <FormInput label="姓" name="lastName" />
-        </div>
+        </FieldGroup>
         <FormInput label="メールアドレス" name="email" type="email" />
-        <div className="grid grid-cols-2 gap-3">
+        <FieldGroup className="grid grid-cols-2 gap-3">
           <FormInput label="電話番号" name="phone" />
           <FormInput label="外部ID" name="externalId" />
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
+        </FieldGroup>
+        <FieldGroup className="grid gap-3 md:grid-cols-2">
           <FormInput label="ステージ" name="stage" defaultValue="lead" />
           <FormNativeSelect label="会社" name="companyId">
             <NativeSelectOption value="">指定なし</NativeSelectOption>
@@ -107,11 +108,11 @@ export function ContactCreateForm({
                 </NativeSelectOption>
               ))}
           </FormNativeSelect>
-        </div>
+        </FieldGroup>
         <p className="text-xs text-muted-foreground">
           メールアドレスまたは外部IDのどちらかを入力してください。
         </p>
-      </div>
+      </FieldGroup>
     </FormDialog>
   );
 }

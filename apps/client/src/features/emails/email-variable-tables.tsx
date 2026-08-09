@@ -6,6 +6,14 @@ import { ArchiveConfirm, CopyButton } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
 import { type MessageVariableRow, useArchiveEmailVariable } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
@@ -28,19 +36,22 @@ export function VariableReference({ variables }: { variables: MessageVariableRow
         <CardTitle>テンプレート変数</CardTitle>
         <CardDescription>OpenEngageが送信時に安全に展開します。</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
-        {builtInVariables.map(([token, label]) => (
-          <div
-            key={token}
-            className="flex items-center justify-between gap-3 rounded-lg border p-3"
-          >
-            <div className="min-w-0">
-              <code className="text-sm">{token}</code>
-              <p className="text-xs text-muted-foreground">{label}</p>
-            </div>
-            <CopyButton value={token} />
-          </div>
-        ))}
+      <CardContent>
+        <ItemGroup className="grid gap-3 sm:grid-cols-2">
+          {builtInVariables.map(([token, label]) => (
+            <Item key={token} variant="outline">
+              <ItemContent className="min-w-0">
+                <ItemTitle>
+                  <code>{token}</code>
+                </ItemTitle>
+                <ItemDescription>{label}</ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <CopyButton value={token} />
+              </ItemActions>
+            </Item>
+          ))}
+        </ItemGroup>
       </CardContent>
     </Card>
   );

@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Clock3, Plus, UserRound, UsersRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { EmptyState } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -144,9 +145,7 @@ export function DealBoard({
                   </Card>
                 ))}
                 {stageDeals.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-5 text-center text-xs text-muted-foreground">
-                    このステージに商談はありません
-                  </div>
+                  <EmptyState compact title="このステージに商談はありません" />
                 ) : null}
                 {index === 0 ? (
                   <Button variant="ghost" size="sm" className="w-full" onClick={onCreate}>

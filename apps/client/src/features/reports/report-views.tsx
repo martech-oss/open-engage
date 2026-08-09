@@ -52,8 +52,8 @@ export function ContactsReportView({ report }: { report: ContactsReport }): Reac
         description="期間内に追加・アーカイブされた連絡先"
         data={report.trend}
         series={[
-          { key: "added", label: "追加", color: "#3b82f6" },
-          { key: "archived", label: "アーカイブ", color: "#f97316" },
+          { key: "added", label: "追加", color: "var(--color-chart-1)" },
+          { key: "archived", label: "アーカイブ", color: "var(--color-chart-2)" },
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -152,8 +152,8 @@ export function AutomationsReportView({ report }: { report: AutomationsReport })
         description="オートメーションへ入った回数と完了した回数"
         data={report.trend}
         series={[
-          { key: "entries", label: "参加", color: "#8b5cf6" },
-          { key: "completions", label: "完了", color: "#10b981" },
+          { key: "entries", label: "参加", color: "var(--color-chart-4)" },
+          { key: "completions", label: "完了", color: "var(--color-chart-1)" },
         ]}
       />
       <ReportTableCard title="オートメーション別パフォーマンス">
@@ -242,10 +242,10 @@ export function EmailsReportView({ report }: { report: EmailsReport }): ReactNod
         description="送信・到達・ユニーク開封・ユニーククリック"
         data={report.trend}
         series={[
-          { key: "sends", label: "送信", color: "#64748b" },
-          { key: "delivered", label: "到達", color: "#3b82f6" },
-          { key: "opens", label: "開封", color: "#8b5cf6" },
-          { key: "clicks", label: "クリック", color: "#10b981" },
+          { key: "sends", label: "送信", color: "var(--color-chart-5)" },
+          { key: "delivered", label: "到達", color: "var(--color-chart-1)" },
+          { key: "opens", label: "開封", color: "var(--color-chart-4)" },
+          { key: "clicks", label: "クリック", color: "var(--color-chart-2)" },
         ]}
       />
       <ReportTableCard title="キャンペーン／オートメーション別">
@@ -355,9 +355,9 @@ export function DealsReportView({
         description="作成・獲得・失注になった商談数"
         data={report.trend}
         series={[
-          { key: "created", label: "作成", color: "#3b82f6" },
-          { key: "won", label: "獲得", color: "#10b981" },
-          { key: "lost", label: "失注", color: "#ef4444" },
+          { key: "created", label: "作成", color: "var(--color-chart-4)" },
+          { key: "won", label: "獲得", color: "var(--color-chart-1)" },
+          { key: "lost", label: "失注", color: "var(--color-chart-3)" },
         ]}
       />
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
@@ -376,7 +376,7 @@ export function DealsReportView({
             <CardTitle>タスク概要</CardTitle>
             <CardDescription>現在の未完了と期間内の完了</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-col gap-4">
             <ProgressRow
               label="未完了"
               value={report.summary.openTasks}
@@ -550,8 +550,8 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
         description="ページビューとフォーム送信"
         data={report.trend}
         series={[
-          { key: "pageViews", label: "ページビュー", color: "#3b82f6" },
-          { key: "submissions", label: "フォーム送信", color: "#10b981" },
+          { key: "pageViews", label: "ページビュー", color: "var(--color-chart-4)" },
+          { key: "submissions", label: "フォーム送信", color: "var(--color-chart-1)" },
         ]}
       />
       <div className="grid gap-4 xl:grid-cols-2">

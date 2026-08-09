@@ -1,9 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ImagesIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { AppDialog } from "@/components/app-ui";
+import { AppDialog, EmptyState } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import {
   type AssetSummary,
   formatBytes,
@@ -40,33 +49,45 @@ export function AssetPickerDialog({
       className="sm:max-w-2xl"
     >
       {items.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <p className="text-sm text-muted-foreground">公開されている画像がありません。</p>
-          <Button variant="outline" render={<Link to="/website/assets" />} nativeButton={false}>
-            アセットライブラリを開く
-          </Button>
-        </div>
+        <EmptyState
+          compact
+          icon={ImagesIcon}
+          title="公開されている画像がありません"
+          description="画像を公開すると、ここからコンテンツへ埋め込めます。"
+          action={
+            <Button variant="outline" render={<Link to="/website/assets" />} nativeButton={false}>
+              アセットライブラリを開く
+            </Button>
+          }
+        />
       ) : (
-        <ul className="grid max-h-96 gap-3 overflow-y-auto sm:grid-cols-3">
+        <ItemGroup className="grid max-h-96 gap-3 overflow-y-auto sm:grid-cols-3">
           {items.map((asset) => (
-            <li key={asset.id}>
-              <button
-                type="button"
-                className="flex w-full flex-col overflow-hidden rounded-lg border text-left transition-colors hover:border-primary"
-                onClick={() => onSelect(asset)}
-              >
-                <div className="flex aspect-video items-center justify-center overflow-hidden bg-muted">
-                  <AssetThumbnail asset={asset} />
-                </div>
-                <span className="truncate px-2 pt-2 text-sm font-medium">{asset.name}</span>
-                <span className="px-2 pb-2 text-xs text-muted-foreground">
+            <Item
+              key={asset.id}
+              render={
+                <button
+                  type="button"
+                  aria-label={`${asset.name}を選択`}
+                  onClick={() => onSelect(asset)}
+                />
+              }
+              variant="outline"
+              className="h-full flex-col items-stretch overflow-hidden p-0 text-left"
+            >
+              <ItemMedia className="aspect-video w-full overflow-hidden bg-muted">
+                <AssetThumbnail asset={asset} />
+              </ItemMedia>
+              <ItemContent className="w-full px-3 pb-3">
+                <ItemTitle>{asset.name}</ItemTitle>
+                <ItemDescription>
                   {formatBytes(asset.size)}
                   {asset.width && asset.height ? ` ・ ${asset.width}×${asset.height}` : ""}
-                </span>
-              </button>
-            </li>
+                </ItemDescription>
+              </ItemContent>
+            </Item>
           ))}
-        </ul>
+        </ItemGroup>
       )}
     </AppDialog>
   );

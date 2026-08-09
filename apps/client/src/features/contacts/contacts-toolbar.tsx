@@ -1,10 +1,12 @@
 import { EllipsisVertical, Plus, RefreshCw, Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -39,12 +41,12 @@ const SORT_OPTIONS = [
 /** Removable pill for one applied filter, tinted like the design's active-filter chip. */
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }): ReactNode {
   return (
-    <span className="flex shrink-0 items-center gap-1.5 rounded-md border border-primary/25 bg-accent px-2.5 py-1 text-xs whitespace-nowrap text-accent-foreground">
+    <Badge variant="outline" className="shrink-0 gap-1 whitespace-nowrap">
       {label}
-      <button type="button" onClick={onRemove} aria-label={`${label}を解除`}>
-        <X className="size-3" />
-      </button>
-    </span>
+      <Button variant="ghost" size="icon-xs" onClick={onRemove} aria-label={`${label}を解除`}>
+        <X />
+      </Button>
+    </Badge>
   );
 }
 
@@ -179,14 +181,16 @@ export function ContactsToolbar({
             <EllipsisVertical />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onExport}>CSVエクスポート</DropdownMenuItem>
-            <DropdownMenuItem onClick={filters.clearFilters}>条件をクリア</DropdownMenuItem>
-            {selectedSegment ? (
-              <DropdownMenuItem disabled={busy} onClick={onRefreshSegment}>
-                <RefreshCw />
-                セグメントを再評価
-              </DropdownMenuItem>
-            ) : null}
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onExport}>CSVエクスポート</DropdownMenuItem>
+              <DropdownMenuItem onClick={filters.clearFilters}>条件をクリア</DropdownMenuItem>
+              {selectedSegment ? (
+                <DropdownMenuItem disabled={busy} onClick={onRefreshSegment}>
+                  <RefreshCw />
+                  セグメントを再評価
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

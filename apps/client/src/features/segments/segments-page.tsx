@@ -13,6 +13,7 @@ import {
   SimpleEmpty,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import { FieldGroup } from "@/components/ui/field";
 import { segmentsQueryOptions, useCreateSegment } from "@/features/segments/segment-api";
 import {
   createSegmentCondition,
@@ -132,7 +133,7 @@ function SegmentFormDialog({
       </FormNativeSelect>
       {kind === "dynamic" && (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <FieldGroup className="grid grid-cols-2 gap-3">
             <FormNativeSelect
               label="フィールド"
               name="field"
@@ -161,7 +162,7 @@ function SegmentFormDialog({
                 </FormSelectOption>
               ))}
             </FormNativeSelect>
-          </div>
+          </FieldGroup>
           {needsValue ? (
             <FormInput
               label="値"

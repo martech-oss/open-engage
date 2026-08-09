@@ -15,7 +15,7 @@ import {
 } from "@/components/app-ui";
 import { type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { AssetPickerDialog } from "@/features/assets/asset-picker";
 import {
   ContentDocumentEditor,
@@ -247,7 +247,7 @@ function LandingPageEditor({
       error={error}
       submitLabel={item ? "新しいバージョンを保存" : "ページを作成"}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormInput
           label="管理用の名前"
           name="name"
@@ -262,7 +262,7 @@ function LandingPageEditor({
           description="未入力なら名前から自動生成します。"
           placeholder="spring-campaign"
         />
-      </div>
+      </FieldGroup>
       <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
         <FormSelectOption value="draft">下書き</FormSelectOption>
         <FormSelectOption value="published">公開</FormSelectOption>

@@ -300,7 +300,7 @@ function SignupFormEditor({
       error={error}
       submitLabel={item ? "変更を保存" : "フォームを作成"}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
         <FormInput
           label="名前"
           name="name"
@@ -329,7 +329,7 @@ function SignupFormEditor({
           <FormSelectOption value="draft">下書き</FormSelectOption>
           <FormSelectOption value="published">公開</FormSelectOption>
         </FormNativeSelect>
-      </div>
+      </FieldGroup>
 
       <FieldSet>
         <FieldLegend variant="label">取得する項目</FieldLegend>

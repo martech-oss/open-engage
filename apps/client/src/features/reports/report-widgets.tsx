@@ -10,9 +10,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { TableCell } from "@/components/ui/table";
 import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
-import { cn } from "@/lib/utils";
 
 export function TrendCard({
   title,
@@ -64,7 +64,7 @@ export function RankingCard({
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         {items.map((item) => (
           <div key={item.id}>
             <div className="mb-1.5 flex justify-between gap-3 text-sm">
@@ -74,12 +74,10 @@ export function RankingCard({
               </span>
               <span className="tabular-nums">{item.contactCount.toLocaleString()}人</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${(item.contactCount / maximum) * 100}%` }}
-              />
-            </div>
+            <Progress
+              value={(item.contactCount / maximum) * 100}
+              aria-label={`${item.name}: ${item.contactCount.toLocaleString()}人`}
+            />
           </div>
         ))}
         {items.length === 0 ? <NoReportData /> : null}
@@ -128,19 +126,12 @@ export function ProgressRow({
   maximum: number;
   destructive?: boolean;
 }): ReactNode {
+  const percentage = Math.min(100, (value / Math.max(maximum, 1)) * 100);
   return (
-    <div>
-      <div className="mb-1.5 flex justify-between text-sm">
-        <span>{label}</span>
-        <span className="font-medium tabular-nums">{value.toLocaleString()}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn("h-full rounded-full", destructive ? "bg-destructive" : "bg-primary")}
-          style={{ width: `${Math.min(100, (value / Math.max(maximum, 1)) * 100)}%` }}
-        />
-      </div>
-    </div>
+    <Progress value={percentage} variant={destructive ? "destructive" : "default"}>
+      <ProgressLabel>{label}</ProgressLabel>
+      <span className="ml-auto text-sm font-medium tabular-nums">{value.toLocaleString()}</span>
+    </Progress>
   );
 }
 

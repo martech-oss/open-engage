@@ -5,6 +5,7 @@ import { type ReactNode, useState } from "react";
 import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import {
   assignCompanyContact,
   invalidateCompanyQueries,
@@ -196,14 +197,13 @@ export function SegmentEditor({
   const assigned = new Set(profile.segments.map((segment) => segment.id));
   return (
     <Section title="セグメント" icon={<Filter className="size-4" />}>
-      <div className="flex flex-col gap-2">
+      <ItemGroup>
         {profile.segments.map((segment) => (
-          <div
-            key={segment.id}
-            className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm"
-          >
-            <span>{segment.name}</span>
-            <div className="flex items-center gap-2">
+          <Item key={segment.id} variant="muted" size="sm">
+            <ItemContent>
+              <ItemTitle>{segment.name}</ItemTitle>
+            </ItemContent>
+            <ItemActions>
               <Badge variant="outline">{segment.kind}</Badge>
               {!disabled && segment.source === "static" && (
                 <Button
@@ -215,13 +215,13 @@ export function SegmentEditor({
                   <X />
                 </Button>
               )}
-            </div>
-          </div>
+            </ItemActions>
+          </Item>
         ))}
         {profile.segments.length === 0 && (
           <span className="text-sm text-muted-foreground">未所属</span>
         )}
-      </div>
+      </ItemGroup>
       {!disabled && (
         <div className="flex gap-2">
           <ControlledSelect

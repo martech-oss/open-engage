@@ -1,11 +1,13 @@
 import { EllipsisVertical } from "lucide-react";
 
 import type { DataTableColumn } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -103,13 +105,10 @@ export function contactColumns({
             {contact.companies[0]?.name ?? "—"}
           </span>
           {contact.tags.slice(0, 2).map((tag) => (
-            <span
-              key={tag.id}
-              className="flex shrink-0 items-center gap-1 rounded-full border bg-secondary px-2 py-px text-[10.5px] whitespace-nowrap"
-            >
+            <Badge key={tag.id} variant="secondary" className="shrink-0 gap-1">
               <span className="size-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
               {tag.name}
-            </span>
+            </Badge>
           ))}
         </div>
       ),
@@ -145,10 +144,12 @@ export function contactColumns({
             <EllipsisVertical />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onOpen(contact)}>詳細を開く</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onArchive(contact)}>
-              {contact.status === "archived" ? "復元" : "アーカイブ"}
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => onOpen(contact)}>詳細を開く</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onArchive(contact)}>
+                {contact.status === "archived" ? "復元" : "アーカイブ"}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       ),

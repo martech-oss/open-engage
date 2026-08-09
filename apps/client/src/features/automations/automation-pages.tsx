@@ -34,7 +34,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   automationsQueryOptions,
   useCreateAutomation,
@@ -46,7 +48,6 @@ import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
-import { cn } from "@/lib/utils";
 import type { AutomationRow } from "@openengage/core/automations";
 
 import { automationNodeTypes, StepButton } from "./automation-flow-node";
@@ -188,26 +189,31 @@ export function AutomationsPage(): ReactNode {
         description="目的に近いテンプレートを選び、あとからフローを調整できます。"
         className="sm:max-w-3xl"
       >
-        <div className="grid gap-3 sm:grid-cols-2">
+        <ToggleGroup
+          value={[preset]}
+          onValueChange={(values) => {
+            const nextPreset = values[0] as PresetId | undefined;
+            if (nextPreset) selectPreset(nextPreset);
+          }}
+          variant="outline"
+          className="grid w-full gap-3 sm:grid-cols-2"
+        >
           {presets.map((item) => (
-            <button
+            <ToggleGroupItem
               key={item.id}
-              type="button"
-              className={cn(
-                "rounded-xl border p-4 text-left transition-colors",
-                preset === item.id
-                  ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                  : "hover:bg-muted/60",
-              )}
-              onClick={() => selectPreset(item.id)}
+              value={item.id}
+              aria-label={item.name}
+              className="h-auto items-start justify-start gap-3 p-4 text-left whitespace-normal"
             >
-              <item.icon className="mb-3 size-5 text-primary" />
-              <div className="font-medium">{item.name}</div>
-              <div className="mt-1 text-sm leading-5 text-muted-foreground">{item.description}</div>
-            </button>
+              <item.icon data-icon="inline-start" />
+              <span className="flex flex-col items-start gap-1">
+                <span className="font-medium">{item.name}</span>
+                <span className="text-sm leading-5 text-muted-foreground">{item.description}</span>
+              </span>
+            </ToggleGroupItem>
           ))}
-        </div>
-        <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
+        </ToggleGroup>
+        <FieldGroup className="grid gap-4 border-t pt-4 sm:grid-cols-2">
           <FormInput
             name="automationName"
             label="フロー名"
@@ -228,7 +234,7 @@ export function AutomationsPage(): ReactNode {
               </FormSelectOption>
             ))}
           </FormNativeSelect>
-        </div>
+        </FieldGroup>
         {templates.length === 0 ? (
           <p className="text-sm text-destructive">
             先に「メール → テンプレート」で送信内容を作成してください。
@@ -381,7 +387,7 @@ export function AutomationBuilder({
           fitView
           deleteKeyCode={null}
         >
-          <Background color="#cbd5e1" gap={24} />
+          <Background color="var(--color-border)" gap={24} />
           <Panel position="top-center">
             <Badge variant="secondary" className="shadow-sm">
               右端の丸から、次のノードの左端の丸へドラッグして接続

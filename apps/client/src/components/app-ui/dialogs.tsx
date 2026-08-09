@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FieldGroup } from "@/components/ui/field";
 
 import { ErrorAlert, LoadingButton } from "./feedback";
 
@@ -83,12 +84,14 @@ export function FormDialog({
       {...(description !== undefined ? { description } : {})}
       {...(className !== undefined ? { className } : {})}
     >
-      <form onSubmit={onSubmit} className="flex flex-col gap-5">
-        {children}
-        {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton busy={busy} className="w-full" type="submit">
-          {submitLabel}
-        </LoadingButton>
+      <form onSubmit={onSubmit}>
+        <FieldGroup>
+          {children}
+          {error ? <ErrorAlert>{error}</ErrorAlert> : null}
+          <LoadingButton busy={busy} className="w-full" type="submit">
+            {submitLabel}
+          </LoadingButton>
+        </FieldGroup>
       </form>
     </AppDialog>
   );
