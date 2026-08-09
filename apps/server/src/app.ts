@@ -1,12 +1,14 @@
-import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+
+import { DatabaseHealthRepository } from "@openengage/database";
 
 import { registerAgentGatewayRoutes } from "./agents/gateway";
 import { apiError, requestContext } from "./auth/access";
 import { createAuth } from "./auth/service";
 import { type AppEnvironment } from "./env";
 import { registerMcpRoutes } from "./mcp/handler";
+import { registerEmailImageRoutes } from "./messaging/email-image-routes";
 import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
@@ -32,17 +34,13 @@ app.use("/api/rpc/*", createOrpcRequestHandler());
 app.use("/api/v1/*", createOpenApiRequestHandler());
 app.get("/api/health", async (context) => {
   try {
-    // d1_migrations is Wrangler-managed, outside our Drizzle schema, so this
-    // is a raw tagged-template query rather than a schema table reference.
-    const result = await context
-      .get("database")
-      .first<{ count: number }>(sql`SELECT COUNT(*) AS count FROM d1_migrations`);
+    const migrations = await new DatabaseHealthRepository(context.get("database")).migrationCount();
     return context.json({
       data: {
         status: "ok",
         service: context.env.APP_NAME,
         environment: context.env.ENVIRONMENT,
-        migrations: result?.count ?? 0,
+        migrations,
       },
     });
   } catch (error) {
@@ -59,6 +57,7 @@ app.get("/api/openapi.json", async (context) =>
   context.json(await generateOpenApiDocument(context.env.APP_URL)),
 );
 registerAgentGatewayRoutes(app);
+registerEmailImageRoutes(app);
 registerAssetRoutes(app);
 registerPublicRoutes(app);
 app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));

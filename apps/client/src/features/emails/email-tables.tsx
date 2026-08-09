@@ -66,16 +66,23 @@ export function TemplateTable({
     {
       key: "purpose",
       header: "用途",
-      cell: () => <Badge variant="outline">Transactional</Badge>,
+      cell: (template) => (
+        <Badge variant="outline">
+          {template.purpose === "transactional" ? "Transactional" : "Marketing"}
+        </Badge>
+      ),
     },
     {
       key: "status",
       header: "公開状態",
       cell: (template) => (
         <div className="flex flex-wrap gap-1">
-          <Badge variant={template.sendable ? "secondary" : "outline"}>
-            {template.sendable ? "公開済み" : "下書き"}
+          <Badge variant={template.publishedRevision ? "secondary" : "outline"}>
+            {template.publishedRevision ? "公開済み" : "下書き"}
           </Badge>
+          {template.purpose === "marketing" && template.publishedRevision ? (
+            <Badge variant="outline">送信無効</Badge>
+          ) : null}
           {template.hasUnpublishedChanges ? (
             <Badge variant="outline">未公開の変更あり</Badge>
           ) : null}
@@ -91,7 +98,9 @@ export function TemplateTable({
           <span className="text-xs text-muted-foreground">
             {template.publishedRevision
               ? `revision ${template.publishedRevision}`
-              : "Automationでは利用不可"}
+              : template.purpose === "transactional"
+                ? "Automationでは利用不可"
+                : "送信機能は未提供"}
           </span>
         </div>
       ),
@@ -129,7 +138,7 @@ export function TemplateTable({
         loading={loading}
         skeletonRowCount={3}
         emptyTitle="テンプレートがありません"
-        emptyDescription="Transactionalテンプレートを作成して公開してください。"
+        emptyDescription="AIまたは手動でメールテンプレートを作成してください。"
       />
     </div>
   );

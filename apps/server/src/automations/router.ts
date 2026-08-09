@@ -6,7 +6,9 @@ import { ack } from "@openengage/orpc";
 import { authed, requireRole } from "../orpc/base";
 import { getAutomationAnalytics } from "./analytics-service";
 import { enrollContactManually } from "./enrollment";
+import { AutomationGenerationError, generateAutomation } from "./generation-service";
 import { listAutomations, normalizeAutomationStatus } from "./list-service";
+import { loadAutomationResourceContext, validateAutomationResources } from "./resource-validation";
 import { automationTrigger } from "./triggers";
 
 export const listAutomationsProcedure = authed.automations.list.handler(async ({ context }) => {
@@ -24,6 +26,25 @@ export const createAutomationProcedure = authed.automations.create.handler(
       graph: input,
     });
     return { id: created.id, draftVersionId: created.draftVersionId };
+  },
+);
+
+export const generateAutomationProcedure = authed.automations.generate.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    try {
+      return await generateAutomation(context.database, context.workspace, context.env, input);
+    } catch (error) {
+      if (!(error instanceof AutomationGenerationError)) throw error;
+      switch (error.kind) {
+        case "failed":
+          throw errors.AI_GENERATION_FAILED();
+        case "timeout":
+          throw errors.AI_GENERATION_TIMEOUT();
+        case "unavailable":
+          throw errors.AI_GENERATION_UNAVAILABLE();
+      }
+    }
   },
 );
 
@@ -65,24 +86,13 @@ export const publishAutomationProcedure = authed.automations.publish.handler(
       throw errors.INVALID_GRAPH({ data: { issues: validation } });
     }
 
-    const templateIds = [
-      ...new Set(
-        definition.nodes.flatMap((node) =>
-          node.type === "action" && node.config.action === "send_email"
-            ? [node.config.templateId]
-            : [],
-        ),
-      ),
-    ];
-    if (templateIds.length > 0) {
-      const availableIds = new Set(await repository.listPublishedTemplateIds(templateIds));
-      const unavailableIds = templateIds.filter((templateId) => !availableIds.has(templateId));
-      if (unavailableIds.length > 0) {
-        throw errors.INVALID_GRAPH({
-          message: "公開済みのTransactionalテンプレートを参照していないメールノードがあります",
-          data: { templateIds: unavailableIds },
-        });
-      }
+    const resources = await loadAutomationResourceContext(context.database, context.workspace);
+    const resourceIssues = validateAutomationResources(definition, resources);
+    if (resourceIssues.length > 0) {
+      throw errors.INVALID_GRAPH({
+        message: "利用できないワークスペースリソースを参照しているノードがあります",
+        data: { issues: resourceIssues },
+      });
     }
 
     const source = definition.nodes.find((node) => node.type === "source");
@@ -147,6 +157,7 @@ export const automationAnalyticsProcedure = authed.automations.analytics.handler
 export const automationProcedures = {
   list: listAutomationsProcedure,
   create: createAutomationProcedure,
+  generate: generateAutomationProcedure,
   getDraft: getAutomationDraftProcedure,
   saveDraft: saveAutomationDraftProcedure,
   publish: publishAutomationProcedure,

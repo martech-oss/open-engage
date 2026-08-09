@@ -5,9 +5,6 @@ import { dirname, extname, relative, resolve } from "node:path";
 // above. Shrink (via splitting) as files come back under the line, never grow
 // it for a new large file - split that file instead.
 const largeFileAllowlist = [
-  "packages/database/src/automations/repository.ts",
-  "packages/database/src/web/repository.ts",
-  "packages/database/src/messaging/repository.ts",
   "apps/client/src/components/ui/sidebar.tsx",
   "packages/database/src/deals/repository.ts",
 ];
@@ -25,14 +22,7 @@ const sharedErrorMessages = [
 // apps/server/src should read/write through packages/database repositories.
 // This allowlist is a ratchet: shrink it as files migrate to a repository,
 // never grow it for a new raw-drizzle call site.
-const drizzleImportAllowlist = [
-  "apps/server/src/app.ts",
-  "apps/server/src/automations/analytics-service.ts",
-  "apps/server/src/mcp/confirmation-store.ts",
-  "apps/server/src/web/project-service.ts",
-  "apps/server/src/workspaces/service.ts",
-  "apps/server/src/workspaces/webhook-endpoint-service.ts",
-];
+const drizzleImportAllowlist = [];
 
 const root = resolve(import.meta.dirname, "..");
 const sourceRoots = [resolve(root, "apps"), resolve(root, "packages")];

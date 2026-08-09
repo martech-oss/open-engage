@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, isNull, lt, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, type SQL } from "drizzle-orm";
 
 import { organization } from "../auth/schema";
 import { changedExactlyOne, likeContains, nowIso } from "../shared/database-utils";
@@ -120,6 +120,14 @@ export class AssetRepository extends WorkspaceRepository {
       .where(and(this.inWorkspace(assets), eq(assets.id, assetId)))
       .limit(1);
     return row ?? null;
+  }
+
+  public async getByIds(assetIds: string[]): Promise<AssetRow[]> {
+    if (assetIds.length === 0) return [];
+    return this.database.orm
+      .select(assetColumns)
+      .from(assets)
+      .where(and(this.inWorkspace(assets), inArray(assets.id, assetIds)));
   }
 
   public async insert(row: AssetRow): Promise<void> {

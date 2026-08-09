@@ -4,7 +4,9 @@ import * as z from "zod";
 import {
   automationDefinitionSchema,
   automationDraftSchema,
+  automationGenerationResultSchema,
   automationRowSchema,
+  generateAutomationInputSchema,
 } from "@openengage/core/automations";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
@@ -20,6 +22,16 @@ export const automationsContract = {
     .errors(authedErrors)
     .input(automationDefinitionSchema)
     .output(z.object({ id: z.string(), draftVersionId: z.string() })),
+  generate: oc
+    .route({ method: "POST", path: "/automations/generate" })
+    .errors({
+      ...authedErrors,
+      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なフローを生成できませんでした" },
+      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
+      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+    })
+    .input(generateAutomationInputSchema)
+    .output(automationGenerationResultSchema),
   getDraft: oc
     .route({ method: "GET", path: "/automations/{id}/draft" })
     .errors({

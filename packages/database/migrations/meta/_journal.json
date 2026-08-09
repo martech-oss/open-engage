@@ -8,6 +8,13 @@
       "when": 1785922853457,
       "tag": "0000_quick_ender_wiggin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786055190457,
+      "tag": "0001_workable_hitman",
+      "breakpoints": true
     }
   ]
 }

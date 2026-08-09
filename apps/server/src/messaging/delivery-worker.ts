@@ -20,9 +20,14 @@ import {
 } from "../channels";
 import { type RuntimeEnv } from "../env";
 import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
+import {
+  EmailTemplateServiceError,
+  resolveEmailRenderOptions,
+} from "../messaging/email-template-service";
 import { buildReplyAddress } from "../messaging/reply-address";
 import { decryptCredentials } from "../platform/crypto";
-import { renderContent, renderSubject } from "../rendering/content-renderer";
+import { renderSubject } from "../rendering/content-renderer";
+import { renderEmailDocument } from "../rendering/email-renderer";
 
 export type DeliveryRow = DeliveryClaimRecord;
 
@@ -55,7 +60,25 @@ export async function createEmailDelivery(
     workspace,
     message,
   };
-  const rendered = renderContent(template.content, renderContext);
+  let renderOptions;
+  try {
+    renderOptions = await resolveEmailRenderOptions(
+      database,
+      job.workspaceId,
+      env.APP_URL,
+      template.content,
+      false,
+    );
+  } catch (error) {
+    if (error instanceof EmailTemplateServiceError) {
+      throw new PermanentChannelError("Email template references an unavailable image");
+    }
+    throw error;
+  }
+  const rendered = await renderEmailDocument(template.content, renderContext, {
+    purpose: "transactional",
+    ...renderOptions,
+  });
   const replyTo = await buildReplyAddress(env, job.workspaceId, deliveryId, job.contactId);
   const payload: ChannelMessage = {
     kind: "email",

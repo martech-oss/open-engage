@@ -1,10 +1,23 @@
 import { authed, requireRole } from "../orpc/base";
 import { createApiKey } from "./api-key-service";
-import { getWorkspace } from "./service";
+import { getEmailBrandProfile, getWorkspace, updateEmailBrandProfile } from "./service";
 import { createWebhookEndpoint, listWebhookEndpoints } from "./webhook-endpoint-service";
 
 export const getWorkspaceProcedure = authed.workspace.get.handler(async ({ context }) =>
   getWorkspace(context.database, context.workspace),
+);
+
+export const getEmailBrandProcedure = authed.workspace.getEmailBrand.handler(({ context }) =>
+  getEmailBrandProfile(context.database, context.workspace),
+);
+
+export const updateEmailBrandProcedure = authed.workspace.updateEmailBrand.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
+    const result = await updateEmailBrandProfile(context.database, context.workspace, input);
+    if (result.kind === "invalid_logo") throw errors.BRAND_LOGO_INVALID();
+    return result.profile;
+  },
 );
 
 export const listWebhookEndpointsProcedure = authed.workspace.listWebhookEndpoints.handler(
@@ -37,6 +50,8 @@ export const createApiKeyProcedure = authed.workspace.createApiKey.handler(
 
 export const workspaceProcedures = {
   get: getWorkspaceProcedure,
+  getEmailBrand: getEmailBrandProcedure,
+  updateEmailBrand: updateEmailBrandProcedure,
   createApiKey: createApiKeyProcedure,
   listWebhookEndpoints: listWebhookEndpointsProcedure,
   createWebhookEndpoint: createWebhookEndpointProcedure,

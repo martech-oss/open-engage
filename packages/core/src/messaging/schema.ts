@@ -1,13 +1,14 @@
 import * as z from "zod";
 
-import { contentDocumentSchema } from "../web/content";
+import { emailDocumentV2Schema } from "./content.js";
+import { emailPurposeSchema } from "./generation.js";
 
 export const emailTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
-  purpose: z.literal("transactional"),
+  purpose: emailPurposeSchema,
   subject: z.string(),
-  content: contentDocumentSchema,
+  content: emailDocumentV2Schema,
   draftRevision: z.number().int().positive(),
   publishedRevision: z.number().int().positive().nullable(),
   hasUnpublishedChanges: z.boolean(),
@@ -21,10 +22,14 @@ export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
 
 export const emailTemplateWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
+  purpose: emailPurposeSchema,
   subject: z.string().trim().min(1).max(998),
-  content: contentDocumentSchema,
+  content: emailDocumentV2Schema,
 });
 export type EmailTemplateWrite = z.infer<typeof emailTemplateWriteSchema>;
+
+export const emailTemplateUpdateSchema = emailTemplateWriteSchema.omit({ purpose: true });
+export type EmailTemplateUpdate = z.infer<typeof emailTemplateUpdateSchema>;
 
 export const emailTemplatePreviewSchema = z.object({
   subject: z.string(),

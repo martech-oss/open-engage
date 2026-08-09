@@ -1,24 +1,17 @@
-import { eq } from "drizzle-orm";
-
+import type { EmailBrandProfileWrite } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { Workspace } from "@openengage/core/workspaces";
-import { type OpenEngageDatabase, organization } from "@openengage/database";
+import {
+  EmailDesignRepository,
+  type OpenEngageDatabase,
+  WorkspaceSettingsRepository,
+} from "@openengage/database";
 
 export async function getWorkspace(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<Workspace> {
-  const row = await database.orm.query.organization.findFirst({
-    columns: {
-      id: true,
-      name: true,
-      slug: true,
-      logo: true,
-      timezone: true,
-      createdAt: true,
-    },
-    where: eq(organization.id, workspace.workspaceId),
-  });
+  const row = await new WorkspaceSettingsRepository(database, workspace).getWorkspace();
 
   if (!row) {
     throw new Error("Workspace organization could not be loaded");
@@ -33,4 +26,25 @@ export async function getWorkspace(
     created_at: row.createdAt.getTime(),
     role: workspace.role,
   };
+}
+
+export function getEmailBrandProfile(database: OpenEngageDatabase, workspace: WorkspaceContext) {
+  return new EmailDesignRepository(database, workspace).getBrandProfile();
+}
+
+export async function updateEmailBrandProfile(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  input: EmailBrandProfileWrite,
+): Promise<
+  | { kind: "invalid_logo" }
+  | { kind: "ok"; profile: Awaited<ReturnType<EmailDesignRepository["getBrandProfile"]>> }
+> {
+  const repository = new EmailDesignRepository(database, workspace);
+  if (input.logoAssetId) {
+    const valid = await repository.validatePublicImageAssets([input.logoAssetId]);
+    if (!valid.has(input.logoAssetId)) return { kind: "invalid_logo" };
+  }
+  const profile = await repository.upsertBrandProfile(input);
+  return { kind: "ok", profile };
 }

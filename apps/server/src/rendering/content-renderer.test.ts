@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderContent, renderSubject } from "./content-renderer";
 
-describe("email renderer", () => {
+describe("landing page content renderer", () => {
   it("escapes variables and rejects arbitrary HTML attributes", () => {
     const rendered = renderContent(
       {

@@ -266,20 +266,28 @@ describe("OpenEngage Worker", () => {
     ).resolves.toEqual({ ok: true });
 
     const content = {
-      schemaVersion: 1 as const,
-      backgroundColor: "#f4f5f7",
-      contentColor: "#ffffff",
-      width: 600,
+      schemaVersion: 2 as const,
+      previewText: "",
+      theme: {
+        backgroundColor: "#f4f5f7",
+        surfaceColor: "#ffffff",
+        textColor: "#171717",
+        mutedTextColor: "#64748b",
+        accentColor: "#171717",
+        fontFamily: "sans" as const,
+        width: 600,
+      },
       blocks: [
         {
           id: "body",
-          type: "text" as const,
-          html: "<p>Hello {{ contact.first_name }} from {{ workspace.name }}</p>",
+          type: "markdown" as const,
+          markdown: "Hello {{ contact.first_name }} from {{ workspace.name }}",
         },
       ],
     };
     const template = await client.emails.createTemplate({
       name: "Welcome",
+      purpose: "transactional",
       subject: "Welcome {{ contact.first_name }}",
       content,
     });
@@ -295,6 +303,7 @@ describe("OpenEngage Worker", () => {
     });
     await expect(
       client.emails.previewTemplate({
+        purpose: "transactional",
         subject: "Welcome\n{{ contact.first_name }}",
         content,
       }),
@@ -417,13 +426,21 @@ describe("OpenEngage Worker", () => {
     });
     const template = await client.emails.createTemplate({
       name: "Welcome",
+      purpose: "transactional",
       subject: "Welcome {{ contact.first_name }}",
       content: {
-        schemaVersion: 1 as const,
-        backgroundColor: "#f4f5f7",
-        contentColor: "#ffffff",
-        width: 600,
-        blocks: [{ id: "body", type: "text" as const, html: "<p>Hello</p>" }],
+        schemaVersion: 2 as const,
+        previewText: "",
+        theme: {
+          backgroundColor: "#f4f5f7",
+          surfaceColor: "#ffffff",
+          textColor: "#171717",
+          mutedTextColor: "#64748b",
+          accentColor: "#171717",
+          fontFamily: "sans" as const,
+          width: 600,
+        },
+        blocks: [{ id: "body", type: "markdown" as const, markdown: "Hello" }],
       },
     });
 
@@ -433,5 +450,49 @@ describe("OpenEngage Worker", () => {
     await expect(client.emails.archiveVariable({ id: variable.id })).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
+  });
+
+  it("requires managed brand details before publishing a marketing email", async () => {
+    const { client } = await seedWorkspaceClient(env.DB);
+    const template = await client.emails.createTemplate({
+      name: "Newsletter",
+      purpose: "marketing",
+      subject: "今月のお知らせ",
+      content: {
+        schemaVersion: 2,
+        previewText: "今月の更新情報",
+        theme: {
+          backgroundColor: "#f4f5f7",
+          surfaceColor: "#ffffff",
+          textColor: "#171717",
+          mutedTextColor: "#64748b",
+          accentColor: "#171717",
+          fontFamily: "sans",
+          width: 600,
+        },
+        blocks: [{ id: "body", type: "markdown", markdown: "# 今月のお知らせ" }],
+      },
+    });
+
+    await expect(client.emails.publishTemplate({ id: template.id })).rejects.toMatchObject({
+      code: "MARKETING_BRAND_INCOMPLETE",
+    });
+    await client.workspace.updateEmailBrand({
+      brandName: "OpenEngage",
+      companyDescription: "Customer engagement platform",
+      tone: "簡潔で親しみやすい",
+      logoAssetId: null,
+      websiteUrl: "https://example.com",
+      primaryColor: "#171717",
+      backgroundColor: "#f4f5f7",
+      textColor: "#171717",
+      postalAddress: "東京都千代田区1-1",
+    });
+    await expect(client.emails.publishTemplate({ id: template.id })).resolves.toEqual({ ok: true });
+    expect(
+      (await client.emails.listTemplates({ archived: false })).find(
+        (item) => item.id === template.id,
+      ),
+    ).toMatchObject({ purpose: "marketing", publishedRevision: 1, sendable: false });
   });
 });

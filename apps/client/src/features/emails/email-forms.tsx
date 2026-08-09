@@ -1,12 +1,11 @@
+import { Sparkles } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog, FormInput, FormTextarea } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import {
-  ContentDocumentEditor,
-  defaultContentDocument,
-} from "@/features/content/content-document-editor";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   type EmailTemplateRow,
   type MessageVariableRow,
@@ -19,83 +18,123 @@ import {
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import type { ContentDocument } from "@openengage/core/web";
+import {
+  defaultEmailDocumentV2,
+  type EmailDocumentV2,
+  type EmailGenerationProposal,
+  type EmailPurpose,
+} from "@openengage/core/messaging";
+
+import { EmailAiSheet } from "./email-ai-sheet";
+import { EmailDocumentEditor } from "./email-document-editor";
 
 export function TemplateForm({
   open,
   onOpenChange,
   template,
   onSaved,
+  initialAiOpen = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: EmailTemplateRow | null;
   onSaved: () => void;
+  initialAiOpen?: boolean;
 }): ReactNode {
   const createTemplate = useCreateEmailTemplate();
   const updateTemplate = useUpdateEmailTemplate();
   const previewTemplate = usePreviewEmailTemplate();
-  const [content, setContent] = useState<ContentDocument>(
-    template?.content ?? defaultContentDocument(),
+  const [name, setName] = useState(template?.name ?? "");
+  const [subject, setSubject] = useState(template?.subject ?? "");
+  const [purpose, setPurpose] = useState<EmailPurpose>(template?.purpose ?? "transactional");
+  const [content, setContent] = useState<EmailDocumentV2>(
+    template?.content ?? defaultEmailDocumentV2(),
   );
+  const [aiOpen, setAiOpen] = useState(initialAiOpen);
   const [preview, setPreview] = useState<{ subject: string; html: string; text: string } | null>(
     null,
   );
   const { busy, error, run } = useFormSubmission("テンプレートを保存できませんでした");
 
-  function readPayload(form: FormData) {
-    return {
-      name: getFormString(form, "name"),
-      subject: getFormString(form, "subject"),
-      content,
-    };
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const payload = readPayload(form);
-    await run(() =>
-      saveResource({
-        editing: template,
-        payload,
-        create: (data) => createTemplate.mutateAsync(data),
-        update: (id, data) => updateTemplate.mutateAsync({ id, ...data }),
-        createdMessage: "テンプレートを作成しました",
-        updatedMessage: "テンプレートを更新しました",
-        onSaved,
-      }),
-    );
+    await run(async () => {
+      if (template) {
+        await updateTemplate.mutateAsync({ id: template.id, name, subject, content });
+        toast.success("テンプレートを更新しました");
+      } else {
+        await createTemplate.mutateAsync({ name, purpose, subject, content });
+        toast.success("テンプレートを作成しました");
+      }
+      onSaved();
+    });
   }
+
+  const currentProposal: EmailGenerationProposal = { name, subject, content };
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={template ? "Transactionalテンプレートを編集" : "Transactionalテンプレートを作成"}
-      description="OpenEngageが安全なHTMLとplain textを生成します。公開するまでAutomationには反映されません。"
+      title={template ? "メールテンプレートを編集" : "メールテンプレートを作成"}
+      description="構造化された下書きからReact Emailが安全なHTMLとplain textを生成します。"
       className="sm:max-w-3xl"
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}
       submitLabel={template ? "下書きを保存" : "テンプレートを作成"}
     >
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 p-3">
+        <div>
+          <p className="text-sm font-medium">AIメールデザイナー</p>
+          <p className="text-sm text-muted-foreground">
+            提案を確認してから、この下書きへ反映します。
+          </p>
+        </div>
+        <Button type="button" onClick={() => setAiOpen(true)}>
+          <Sparkles data-icon="inline-start" />
+          {template ? "AIで改善" : "AIで作成"}
+        </Button>
+      </div>
+      <Field data-disabled={Boolean(template)}>
+        <FieldLabel>用途</FieldLabel>
+        <ToggleGroup
+          value={[purpose]}
+          disabled={Boolean(template)}
+          onValueChange={(next) => {
+            const selected = next[0] as EmailPurpose | undefined;
+            if (selected) setPurpose(selected);
+          }}
+          variant="outline"
+          spacing={0}
+        >
+          <ToggleGroupItem value="transactional">Transactional</ToggleGroupItem>
+          <ToggleGroupItem value="marketing">Marketing</ToggleGroupItem>
+        </ToggleGroup>
+        <FieldDescription>
+          {purpose === "marketing"
+            ? "作成・プレビュー・公開に対応しています。実送信とAutomation利用はまだ無効です。"
+            : "公開後にAutomationから送信できます。用途は作成後に変更できません。"}
+        </FieldDescription>
+      </Field>
       <FormInput
         label="管理名"
         name="name"
-        defaultValue={template?.name}
+        value={name}
         placeholder="申込確認"
+        onChange={(event) => setName(event.target.value)}
         required
       />
       <FormInput
         label="件名"
         name="subject"
-        defaultValue={template?.subject}
+        value={subject}
         placeholder="{{ contact.first_name }}さん、お申し込みありがとうございます"
         maxLength={998}
+        onChange={(event) => setSubject(event.target.value)}
         required
       />
-      <ContentDocumentEditor value={content} onChange={setContent} />
+      <EmailDocumentEditor value={content} onChange={setContent} />
       <Button
         type="button"
         variant="outline"
@@ -103,7 +142,7 @@ export function TemplateForm({
           const form = event.currentTarget.form;
           if (!form) return;
           void previewTemplate
-            .mutateAsync(readPayload(new FormData(form)))
+            .mutateAsync({ purpose, subject, content })
             .then(setPreview)
             .catch((caught: unknown) =>
               toast.error(getErrorMessage(caught, "プレビューを生成できませんでした")),
@@ -118,11 +157,25 @@ export function TemplateForm({
           <iframe
             title="メールHTMLプレビュー"
             srcDoc={preview.html}
+            sandbox=""
             className="h-72 w-full rounded border"
           />
           <pre className="max-h-48 overflow-auto text-xs whitespace-pre-wrap">{preview.text}</pre>
         </div>
       ) : null}
+      <EmailAiSheet
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        mode={template ? "refine" : "create"}
+        purpose={purpose}
+        current={currentProposal}
+        onApply={(proposal) => {
+          setName(proposal.name);
+          setSubject(proposal.subject);
+          setContent(proposal.content);
+          setPreview(null);
+        }}
+      />
     </FormDialog>
   );
 }

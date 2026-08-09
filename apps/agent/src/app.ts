@@ -1,6 +1,8 @@
 import { createAgentRouter } from "@flue/runtime/routing";
 import { Hono } from "hono";
 
+import { AutomationDesigner } from "./agents/automation-designer.ts";
+import { EmailDesigner } from "./agents/email-designer.ts";
 import { Hello } from "./agents/hello.ts";
 
 const app = new Hono();
@@ -12,5 +14,7 @@ const app = new Hono();
 //     -H 'content-type: application/json' \
 //     -d '{"kind":"user","body":"Tell me a joke."}'
 app.route("/api/agents/hello", createAgentRouter(Hello));
+app.route("/internal/automation-designer", createAgentRouter(AutomationDesigner));
+app.route("/internal/email-designer", createAgentRouter(EmailDesigner));
 
 export default app;

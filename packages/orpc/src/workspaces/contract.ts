@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import { emailBrandProfileSchema, emailBrandProfileWriteSchema } from "@openengage/core/messaging";
 import { workspaceRoleSchema } from "@openengage/core/shared";
 import { webhookEndpointRowSchema, workspaceSchema } from "@openengage/core/workspaces";
 
@@ -11,6 +12,21 @@ export const workspaceContract = {
     .route({ method: "GET", path: "/workspace" })
     .errors(workspaceErrors)
     .output(workspaceSchema),
+  getEmailBrand: oc
+    .route({ method: "GET", path: "/workspace/email-brand" })
+    .errors(workspaceErrors)
+    .output(emailBrandProfileSchema),
+  updateEmailBrand: oc
+    .route({ method: "PUT", path: "/workspace/email-brand" })
+    .errors({
+      ...authedErrors,
+      BRAND_LOGO_INVALID: {
+        status: 422,
+        message: "ロゴには公開中の画像アセットを指定してください",
+      },
+    })
+    .input(emailBrandProfileWriteSchema)
+    .output(emailBrandProfileSchema),
   createApiKey: oc
     .route({ method: "POST", path: "/workspace/api-keys", successStatus: 201 })
     .errors(authedErrors)

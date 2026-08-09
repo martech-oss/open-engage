@@ -9,8 +9,10 @@ import {
   Pause,
   Play,
   Plus,
+  RotateCcw,
   Save,
   Send,
+  Sparkles,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -50,6 +52,7 @@ import { formatDateTime } from "@/lib/format";
 import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
 import type { AutomationRow } from "@openengage/core/automations";
 
+import { AutomationAiSheet } from "./automation-ai-sheet";
 import { automationNodeTypes, StepButton } from "./automation-flow-node";
 import { triggerLabel } from "./automation-labels";
 import { NodeSettings } from "./automation-node-settings";
@@ -73,6 +76,7 @@ export function AutomationsPage(): ReactNode {
     [allTemplates],
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [preset, setPreset] = useState<PresetId>("welcome");
   const [name, setName] = useState("ウェルカムシリーズ");
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
@@ -122,10 +126,16 @@ export function AutomationsPage(): ReactNode {
     <PageLayout
       title="オートメーション"
       action={
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus data-icon="inline-start" />
-          フローを作成
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setAiOpen(true)}>
+            <Sparkles data-icon="inline-start" />
+            AIで作成
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus data-icon="inline-start" />
+            フローを作成
+          </Button>
+        </div>
       }
     >
       <div className="max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -252,6 +262,16 @@ export function AutomationsPage(): ReactNode {
           </Button>
         </div>
       </AppDialog>
+      <AutomationAiSheet
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        mode="create"
+        onApply={async (definition) => {
+          const created = await createAutomation.mutateAsync(definition);
+          setAiOpen(false);
+          await navigate({ to: "/automations/$id", params: { id: created.id } });
+        }}
+      />
     </PageLayout>
   );
 }
@@ -273,6 +293,8 @@ export function AutomationBuilder({
   const [status, setStatus] = useState(initialDraft.status);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [undoDefinition, setUndoDefinition] = useState<typeof definition | null>(null);
 
   function addNode(kind: "email" | "delay" | "decision" | "condition"): void {
     const result = builder.addNode(kind, options);
@@ -348,6 +370,24 @@ export function AutomationBuilder({
               {status === "active" ? "一時停止" : "再開"}
             </Button>
           ) : null}
+          {undoDefinition ? (
+            <Button
+              variant="ghost"
+              disabled={saving}
+              onClick={() => {
+                builder.replaceDefinition(undoDefinition);
+                setUndoDefinition(null);
+                toast.success("AI適用前の状態に戻しました");
+              }}
+            >
+              <RotateCcw data-icon="inline-start" />
+              AI変更を元に戻す
+            </Button>
+          ) : null}
+          <Button variant="outline" disabled={saving} onClick={() => setAiOpen(true)}>
+            <Sparkles data-icon="inline-start" />
+            AIで編集
+          </Button>
           <Button variant="outline" disabled={saving} onClick={() => void save()}>
             <Save data-icon="inline-start" />
             保存
@@ -416,6 +456,18 @@ export function AutomationBuilder({
           />
         </div>
       </div>
+      <AutomationAiSheet
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        mode="refine"
+        currentDefinition={definition}
+        onApply={async (nextDefinition) => {
+          setUndoDefinition(definition);
+          builder.replaceDefinition(nextDefinition);
+          setAiOpen(false);
+          toast.success("AIの提案をキャンバスに適用しました。保存前に内容を確認してください");
+        }}
+      />
     </div>
   );
 }

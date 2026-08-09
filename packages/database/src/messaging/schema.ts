@@ -13,6 +13,48 @@ import { automationEnrollments } from "../automations/schema";
 import { subscriptionTopics } from "../consent/schema";
 import { contacts } from "../contacts/schema";
 import { checkEnum } from "../shared/enum-check";
+import { assets } from "../web/schema";
+
+export const emailBrandProfiles = sqliteTable("email_brand_profiles", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  brandName: text("brand_name").default("").notNull(),
+  companyDescription: text("company_description").default("").notNull(),
+  tone: text().default("").notNull(),
+  logoAssetId: text("logo_asset_id").references(() => assets.id, { onDelete: "set null" }),
+  websiteUrl: text("website_url"),
+  primaryColor: text("primary_color").default("#171717").notNull(),
+  backgroundColor: text("background_color").default("#f4f5f7").notNull(),
+  textColor: text("text_color").default("#171717").notNull(),
+  postalAddress: text("postal_address").default("").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const generatedEmailImages = sqliteTable(
+  "generated_email_images",
+  {
+    assetId: text("asset_id")
+      .primaryKey()
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    requestId: text("request_id").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    claimedAt: text("claimed_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("generated_email_images_workspace_expiry_idx").on(
+      table.workspaceId,
+      table.claimedAt,
+      table.expiresAt,
+    ),
+  ],
+);
 
 export const emailTemplates = sqliteTable(
   "email_templates",

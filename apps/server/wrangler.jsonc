@@ -11,6 +11,9 @@
       "service": "openengage-agent",
     },
   ],
+  "ai": {
+    "binding": "AI",
+  },
   "d1_databases": [
     {
       "binding": "DB",

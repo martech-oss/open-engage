@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
+    "@flue/sdk": "2.0.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openengage/core": "workspace:*",
     "@openengage/database": "workspace:*",

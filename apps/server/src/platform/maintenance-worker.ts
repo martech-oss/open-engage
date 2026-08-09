@@ -1,6 +1,7 @@
 import {
   createDatabase,
   DeadLetterRepository,
+  GeneratedEmailImageRepository,
   MaintenanceRepository,
   uuidv7,
 } from "@openengage/database";
@@ -57,4 +58,13 @@ export async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   await repository.rollupDailyMetrics(yesterday);
   await repository.purgeExpiredIdempotencyKeys(new Date().toISOString());
   await repository.reconcileContactScores(new Date().toISOString());
+  await purgeExpiredGeneratedEmailImages(env);
+}
+
+async function purgeExpiredGeneratedEmailImages(env: RuntimeEnv): Promise<void> {
+  const repository = new GeneratedEmailImageRepository(createDatabase(env.DB));
+  const expired = await repository.findExpired(new Date().toISOString());
+  if (expired.length === 0) return;
+  await Promise.all(expired.map((image) => env.ASSETS_BUCKET.delete(image.r2Key)));
+  await repository.deleteExpiredRows(expired.map((image) => image.assetId));
 }

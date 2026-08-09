@@ -5,7 +5,12 @@ import {
   emailTemplatePreviewSchema,
   emailSegmentOptionSchema,
   emailTemplateSchema,
+  emailTemplateUpdateSchema,
   emailTemplateWriteSchema,
+  emailGenerationResultSchema,
+  generateEmailImageInputSchema,
+  generateEmailInputSchema,
+  generatedEmailImageSchema,
   messageVariableSchema,
   messageVariableWriteSchema,
   subscriptionTopicOptionSchema,
@@ -21,6 +26,12 @@ const variableNotFound = notFoundError(
   "MESSAGE_VARIABLE_NOT_FOUND",
   "メッセージ変数が見つかりません",
 );
+const emailTemplateAssetErrors = {
+  EMAIL_ASSET_INVALID: {
+    status: 422,
+    message: "メールが利用できない画像アセットを参照しています",
+  },
+};
 
 export const emailsContract = {
   listTemplates: oc
@@ -28,24 +39,52 @@ export const emailsContract = {
     .errors(workspaceErrors)
     .input(archivedInput)
     .output(z.array(emailTemplateSchema)),
+  generateTemplate: oc
+    .route({ method: "POST", path: "/emails/templates/generate" })
+    .errors({
+      ...base,
+      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なメールを生成できませんでした" },
+      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
+      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+    })
+    .input(generateEmailInputSchema)
+    .output(emailGenerationResultSchema),
+  generateImage: oc
+    .route({ method: "POST", path: "/emails/images/generate", successStatus: 201 })
+    .errors({
+      ...base,
+      IMAGE_GENERATION_FAILED: { status: 502, message: "画像を生成できませんでした" },
+      IMAGE_GENERATION_UNAVAILABLE: { status: 503, message: "画像生成を現在利用できません" },
+      IMAGE_GENERATION_TIMEOUT: { status: 504, message: "画像生成がタイムアウトしました" },
+    })
+    .input(generateEmailImageInputSchema)
+    .output(generatedEmailImageSchema),
   createTemplate: oc
     .route({ method: "POST", path: "/emails/templates", successStatus: 201 })
-    .errors(base)
+    .errors({ ...base, ...emailTemplateAssetErrors })
     .input(emailTemplateWriteSchema)
     .output(z.object({ id: z.string() })),
   updateTemplate: oc
     .route({ method: "PATCH", path: "/emails/templates/{id}" })
-    .errors({ ...base, ...templateNotFound })
-    .input(emailTemplateWriteSchema.extend({ id: z.string().min(1) }))
+    .errors({ ...base, ...templateNotFound, ...emailTemplateAssetErrors })
+    .input(emailTemplateUpdateSchema.extend({ id: z.string().min(1) }))
     .output(ackSchema),
   previewTemplate: oc
     .route({ method: "POST", path: "/emails/templates/preview" })
-    .errors(base)
-    .input(emailTemplateWriteSchema.pick({ subject: true, content: true }))
+    .errors({ ...base, ...emailTemplateAssetErrors })
+    .input(emailTemplateWriteSchema.pick({ purpose: true, subject: true, content: true }))
     .output(emailTemplatePreviewSchema),
   publishTemplate: oc
     .route({ method: "POST", path: "/emails/templates/{id}/publish" })
-    .errors({ ...base, ...templateNotFound })
+    .errors({
+      ...base,
+      ...templateNotFound,
+      ...emailTemplateAssetErrors,
+      MARKETING_BRAND_INCOMPLETE: {
+        status: 422,
+        message: "マーケティングメールの公開にはブランド名と所在地が必要です",
+      },
+    })
     .input(idInput)
     .output(ackSchema),
   archiveTemplate: oc

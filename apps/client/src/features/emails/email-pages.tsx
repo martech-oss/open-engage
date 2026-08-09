@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { PageLayout } from "@/components/app-ui";
@@ -71,6 +71,15 @@ function EmailCenterPage({
   const [showVariableForm, setShowVariableForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplateRow | null>(null);
   const [editingVariable, setEditingVariable] = useState<MessageVariableRow | null>(null);
+  const [templateFormSession, setTemplateFormSession] = useState(0);
+  const [startWithAi, setStartWithAi] = useState(false);
+
+  function openTemplateForm(template: EmailTemplateRow | null, ai: boolean): void {
+    setEditingTemplate(template);
+    setStartWithAi(ai);
+    setTemplateFormSession((current) => current + 1);
+    setShowTemplateForm(true);
+  }
 
   const pageTitle = {
     templates: "メールテンプレート",
@@ -80,15 +89,16 @@ function EmailCenterPage({
 
   const action =
     view === "templates" ? (
-      <Button
-        onClick={() => {
-          setEditingTemplate(null);
-          setShowTemplateForm(true);
-        }}
-      >
-        <Plus data-icon="inline-start" />
-        Transactionalテンプレート
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" onClick={() => openTemplateForm(null, false)}>
+          <Plus data-icon="inline-start" />
+          手動で作成
+        </Button>
+        <Button onClick={() => openTemplateForm(null, true)}>
+          <Sparkles data-icon="inline-start" />
+          AIでメールを作成
+        </Button>
+      </div>
     ) : view === "variables" ? (
       <Button
         onClick={() => {
@@ -109,8 +119,7 @@ function EmailCenterPage({
             items={templates}
             loading={loading}
             onEdit={(template) => {
-              setEditingTemplate(template);
-              setShowTemplateForm(true);
+              openTemplateForm(template, false);
             }}
           />
           <VariableReference variables={variables} />
@@ -136,10 +145,11 @@ function EmailCenterPage({
       ) : null}
 
       <TemplateForm
-        key={editingTemplate?.id ?? "new-template"}
+        key={`${editingTemplate?.id ?? "new-template"}-${templateFormSession}`}
         open={showTemplateForm}
         onOpenChange={setShowTemplateForm}
         template={editingTemplate}
+        initialAiOpen={startWithAi}
         onSaved={() => {
           setShowTemplateForm(false);
           setEditingTemplate(null);

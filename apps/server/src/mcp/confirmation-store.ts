@@ -1,7 +1,6 @@
-import { and, eq, gt } from "drizzle-orm";
 import * as z from "zod";
 
-import { idempotencyKeys, type OpenEngageDatabase } from "@openengage/database";
+import { IdempotencyRepository, type OpenEngageDatabase } from "@openengage/database";
 
 const confirmationLifetimeMs = 5 * 60_000;
 const confirmationPayloadSchema = z.object({
@@ -20,14 +19,13 @@ export async function createAutomationConfirmation(
   const token = crypto.randomUUID();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + confirmationLifetimeMs).toISOString();
-  await database.orm.insert(idempotencyKeys).values({
+  await new IdempotencyRepository(database).store(
     workspaceId,
-    scope: confirmationScope(apiKeyId),
-    idempotencyKey: token,
-    responseBody: JSON.stringify(payload),
-    createdAt: now.toISOString(),
+    confirmationScope(apiKeyId),
+    token,
+    JSON.stringify(payload),
     expiresAt,
-  });
+  );
   return { token, expiresAt };
 }
 
@@ -37,20 +35,15 @@ export async function consumeAutomationConfirmation(
   apiKeyId: string,
   token: string,
 ): Promise<AutomationConfirmation | null> {
-  const [row] = await database.orm
-    .delete(idempotencyKeys)
-    .where(
-      and(
-        eq(idempotencyKeys.workspaceId, workspaceId),
-        eq(idempotencyKeys.scope, confirmationScope(apiKeyId)),
-        eq(idempotencyKeys.idempotencyKey, token),
-        gt(idempotencyKeys.expiresAt, new Date().toISOString()),
-      ),
-    )
-    .returning({ payload: idempotencyKeys.responseBody });
-  if (!row?.payload) return null;
+  const payload = await new IdempotencyRepository(database).consume(
+    workspaceId,
+    confirmationScope(apiKeyId),
+    token,
+    new Date().toISOString(),
+  );
+  if (!payload) return null;
   try {
-    const parsed = confirmationPayloadSchema.safeParse(JSON.parse(row.payload));
+    const parsed = confirmationPayloadSchema.safeParse(JSON.parse(payload));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;

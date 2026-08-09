@@ -2,12 +2,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpcQuery } from "@/lib/orpc";
 import type {
+  EmailBrandProfile,
   EmailSegmentOption,
   EmailTemplate,
   MessageVariable,
 } from "@openengage/core/messaging";
 
 export type { EmailTemplate, MessageVariable };
+export type { EmailBrandProfile };
 
 /** Retained aliases so the table and form components read the same. */
 export type EmailTemplateRow = EmailTemplate;
@@ -22,6 +24,10 @@ export function emailVariablesListQueryOptions() {
   return orpcQuery.emails.listVariables.queryOptions({ input: { archived: false } });
 }
 
+export function emailBrandProfileQueryOptions() {
+  return orpcQuery.workspace.getEmailBrand.queryOptions();
+}
+
 /** The editor filters this list to published Transactional templates. */
 export function emailTemplateOptionsQueryOptions() {
   return orpcQuery.emails.listTemplates.queryOptions({ input: { archived: false } });
@@ -34,6 +40,14 @@ export function useCreateEmailTemplate() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
   });
+}
+
+export function useGenerateEmailTemplate() {
+  return useMutation(orpcQuery.emails.generateTemplate.mutationOptions());
+}
+
+export function useGenerateEmailImage() {
+  return useMutation(orpcQuery.emails.generateImage.mutationOptions());
 }
 
 export function useUpdateEmailTemplate() {
@@ -92,5 +106,15 @@ export function useArchiveEmailVariable() {
     ...orpcQuery.emails.archiveVariable.mutationOptions(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() }),
+  });
+}
+
+export function useUpdateEmailBrandProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.workspace.updateEmailBrand.mutationOptions(),
+    onSuccess: (profile) => {
+      queryClient.setQueryData(orpcQuery.workspace.getEmailBrand.key(), profile);
+    },
   });
 }

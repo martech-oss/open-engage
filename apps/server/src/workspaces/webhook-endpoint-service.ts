@@ -1,31 +1,15 @@
-import { desc, eq } from "drizzle-orm";
-
 import type { WebhookEndpointRow } from "@openengage/core/workspaces";
-import { uuidv7, webhookEndpoints, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase, WorkspaceSettingsRepository } from "@openengage/database";
 
 import { assertSafeWebhookUrl } from "../channels";
 import { encryptCredentials } from "../platform/crypto";
 import { randomString } from "../platform/crypto";
-import { parseJsonValue } from "../platform/values";
 
 export async function listWebhookEndpoints(
   database: OpenEngageDatabase,
   workspaceId: string,
 ): Promise<WebhookEndpointRow[]> {
-  const rows = await database.orm
-    .select()
-    .from(webhookEndpoints)
-    .where(eq(webhookEndpoints.workspaceId, workspaceId))
-    .orderBy(desc(webhookEndpoints.updatedAt));
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    url: row.url,
-    eventTypes: parseJsonValue<string[]>(row.eventTypes, []),
-    enabled: row.enabled,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  }));
+  return new WorkspaceSettingsRepository(database, { workspaceId }).listWebhookEndpoints();
 }
 
 export type WebhookEndpointCreateOutcome =
@@ -45,17 +29,13 @@ export async function createWebhookEndpoint(
   }
   const secret = randomString(40);
   const encryptedSecret = await encryptCredentials(encryptionKey, { secret });
-  const id = uuidv7();
-  const now = new Date().toISOString();
-  await database.orm.insert(webhookEndpoints).values({
-    id,
+  const { id } = await new WorkspaceSettingsRepository(database, {
     workspaceId,
+  }).createWebhookEndpoint({
     name: input.name,
     url: input.url,
     encryptedSecret,
-    eventTypes: JSON.stringify(input.eventTypes),
-    createdAt: now,
-    updatedAt: now,
+    eventTypes: input.eventTypes,
   });
   return { kind: "created", id, signingSecret: secret };
 }

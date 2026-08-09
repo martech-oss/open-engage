@@ -1,4 +1,3 @@
-import type { EmailTemplateWrite } from "@openengage/core/messaging";
 import type { ContentDocument, EmailBlock } from "@openengage/core/web";
 
 import { escapeHtml } from "../public/html";
@@ -7,8 +6,6 @@ export interface RenderContext {
   contact: Record<string, unknown>;
   workspace: Record<string, unknown>;
   message?: Record<string, unknown>;
-  unsubscribeUrl?: string;
-  preferenceUrl?: string;
 }
 
 export interface RenderedContent {
@@ -21,49 +18,14 @@ export function renderContent(document: ContentDocument, context: RenderContext)
     .map((block) => renderBlock(block, context))
     .filter(Boolean)
     .join("");
-  const footer =
-    context.unsubscribeUrl || context.preferenceUrl
-      ? `<div style="padding:24px;text-align:center;color:#64748b;font-size:12px">${[
-          context.preferenceUrl
-            ? `<a href="${escapeAttribute(context.preferenceUrl)}">配信設定</a>`
-            : "",
-          context.unsubscribeUrl
-            ? `<a href="${escapeAttribute(context.unsubscribeUrl)}">配信停止</a>`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" · ")}</div>`
-      : "";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body style="margin:0;background:${document.backgroundColor}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="${document.width}" style="max-width:100%;background:${document.contentColor}" cellspacing="0" cellpadding="0"><tr><td>${body}${footer}</td></tr></table></td></tr></table></body></html>`;
-  return { html, text: htmlToText(`${body}${footer}`) };
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body style="margin:0;background:${document.backgroundColor}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="${document.width}" style="max-width:100%;background:${document.contentColor}" cellspacing="0" cellpadding="0"><tr><td>${body}</td></tr></table></td></tr></table></body></html>`;
+  return { html, text: htmlToText(body) };
 }
 
 export function renderSubject(template: string, context: RenderContext): string {
   return interpolate(template, context, false)
     .replaceAll(/[\r\n]+/g, " ")
     .trim();
-}
-
-const PREVIEW_CONTEXT: RenderContext = {
-  contact: {
-    email: "taro@example.com",
-    first_name: "太郎",
-    last_name: "山田",
-    stage: "lead",
-    score: 10,
-  },
-  workspace: { name: "OpenEngage Workspace" },
-  message: { brand: "OpenEngage" },
-};
-
-/** Renders a template draft against fixture contact/workspace data, for the editor's live preview. */
-export function previewEmailTemplate(
-  input: Pick<EmailTemplateWrite, "subject" | "content">,
-): RenderedContent & { subject: string } {
-  return {
-    subject: renderSubject(input.subject, PREVIEW_CONTEXT),
-    ...renderContent(input.content, PREVIEW_CONTEXT),
-  };
 }
 
 export function interpolate(template: string, context: RenderContext, escape = true): string {

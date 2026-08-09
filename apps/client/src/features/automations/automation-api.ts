@@ -26,6 +26,10 @@ export function useCreateAutomation() {
   });
 }
 
+export function useGenerateAutomation() {
+  return useMutation(orpcQuery.automations.generate.mutationOptions());
+}
+
 /** Shared by the list page and the editor header, both of which only toggle active/paused. */
 export function useSetAutomationStatus() {
   const queryClient = useQueryClient();
