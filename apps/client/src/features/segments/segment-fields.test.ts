@@ -8,16 +8,16 @@ import {
 } from "@/features/segments/segment-fields";
 
 describe("segment field editor", () => {
-  it("only exposes fields supported by the current editor", () => {
+  it("exposes every field supported by the segment schema", () => {
     const fields = segmentFieldOptions.map((option) => option.field);
 
     expect(fields).toContain("email");
     expect(fields).toContain("tag");
     expect(fields).toContain("company");
-    expect(fields).not.toContain("event");
-    expect(fields).not.toContain("custom_field");
-    expect(fields).not.toContain("segment");
-    expect(fields).not.toContain("subscription");
+    expect(fields).toContain("event");
+    expect(fields).toContain("custom_field");
+    expect(fields).toContain("segment");
+    expect(fields).toContain("subscription");
   });
 
   it("resets an unsupported operator when the field changes", () => {

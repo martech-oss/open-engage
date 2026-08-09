@@ -135,6 +135,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         resourceType: "contact",
         resourceId: contactId,
         occurredAt: now,
+        queue: context.env.JOBS_QUEUE,
       });
     }
     try {
@@ -157,6 +158,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       resourceId: form.id,
       properties: { formId: form.id },
       occurredAt: now,
+      queue: context.env.JOBS_QUEUE,
     });
     return context.json({ data: { accepted: true, message: form.successMessage } }, 202);
   });

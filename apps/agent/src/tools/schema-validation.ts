@@ -5,12 +5,15 @@ import {
   type AutomationDefinition,
   type AutomationValidationIssue,
   automationDefinitionSchema,
+  type EmailSequenceProposal,
+  emailSequenceProposalSchema,
   validateAutomation,
+  validateEmailSequenceProposal,
 } from "@openengage/core/automations";
 import { type SegmentFilter, segmentFilterSchema } from "@openengage/core/segments";
 
 export interface ValidationIssue {
-  phase: "schema" | "graph";
+  phase: "schema" | "graph" | "sequence";
   code: string;
   path: string;
   message: string;
@@ -25,6 +28,10 @@ export type SegmentFilterValidationResult =
 export type AutomationDefinitionValidationResult =
   | { valid: true; normalized: AutomationDefinition; issues: [] }
   | { valid: false; issues: ValidationIssue[]; normalized?: AutomationDefinition };
+
+export type EmailSequenceProposalValidationResult =
+  | { valid: true; normalized: EmailSequenceProposal; issues: [] }
+  | { valid: false; issues: ValidationIssue[]; normalized?: EmailSequenceProposal };
 
 export function validateSegmentFilterInput(filter: unknown): SegmentFilterValidationResult {
   const parsed = segmentFilterSchema.safeParse(filter);
@@ -71,6 +78,38 @@ export function validateAutomationDefinitionInput(
   return { valid: true, normalized: parsed.data, issues: [] };
 }
 
+export function validateEmailSequenceProposalInput(
+  proposal: unknown,
+): EmailSequenceProposalValidationResult {
+  const parsed = emailSequenceProposalSchema.safeParse(proposal);
+  if (!parsed.success) {
+    return {
+      valid: false,
+      issues: parsed.error.issues.map((issue) => ({
+        phase: "schema",
+        code: issue.code,
+        path: formatPath(issue.path),
+        message: issue.message,
+      })),
+    };
+  }
+  const issues = validateEmailSequenceProposal(parsed.data);
+  if (issues.length > 0) {
+    return {
+      valid: false,
+      normalized: parsed.data,
+      issues: issues.map((issue) => ({
+        phase: "sequence",
+        code: issue.code,
+        path: issue.emailRef ? `$.emails[${JSON.stringify(issue.emailRef)}]` : "$",
+        message: issue.message,
+        ...(issue.nodeId ? { nodeId: issue.nodeId } : {}),
+      })),
+    };
+  }
+  return { valid: true, normalized: parsed.data, issues: [] };
+}
+
 export const validateSegmentFilterTool = defineTool({
   name: "validate_segment_filter",
   description:
@@ -88,6 +127,16 @@ export const validateAutomationDefinitionTool = defineTool({
   input: v.object({ definition: v.unknown() }),
   run({ data }) {
     return { output: toJsonValue(validateAutomationDefinitionInput(data.definition)) };
+  },
+});
+
+export const validateEmailSequenceProposalTool = defineTool({
+  name: "validate_email_sequence_proposal",
+  description:
+    "Validate an OpenEngage email sequence proposal, including EmailDocumentV2 drafts, template references, capability classification, and its AutomationDefinition. It does not verify workspace resources or write data.",
+  input: v.object({ proposal: v.unknown() }),
+  run({ data }) {
+    return { output: toJsonValue(validateEmailSequenceProposalInput(data.proposal)) };
   },
 });
 

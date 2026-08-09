@@ -4,6 +4,19 @@ import { segmentOperatorSchema, segmentValueSchema } from "../segments/schema";
 
 const automationStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
 
+export const EMAIL_SEQUENCE_TYPES = [
+  "onboarding",
+  "lead_nurture",
+  "re_engagement",
+  "win_back",
+  "product_launch",
+  "event_follow_up",
+  "upgrade_upsell",
+  "educational_drip",
+] as const;
+export const emailSequenceTypeSchema = z.enum(EMAIL_SEQUENCE_TYPES);
+export type EmailSequenceType = z.infer<typeof emailSequenceTypeSchema>;
+
 export const automationRowSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -147,6 +160,15 @@ export const automationDefinitionSchema = z.object({
   name: z.string().trim().min(1).max(191),
   description: z.string().max(2_000).default(""),
   timezone: z.string().min(1).default("UTC"),
+  metadata: z
+    .object({
+      origin: z.literal("email_sequence"),
+      sequenceType: emailSequenceTypeSchema,
+      outcome: z.string().trim().min(1).max(2_000),
+      primaryMetric: z.string().trim().min(1).max(500),
+      earlySignal: z.string().trim().min(1).max(500),
+    })
+    .optional(),
   nodes: z.array(automationNodeSchema).min(1).max(500),
   edges: z.array(automationEdgeSchema).max(1_000),
 });
@@ -155,5 +177,22 @@ export type AutomationDefinition = z.infer<typeof automationDefinitionSchema>;
 export const automationDraftSchema = z.object({
   graph: automationDefinitionSchema,
   status: automationStatusSchema,
+  publishability: z.object({
+    publishable: z.boolean(),
+    capabilityState: z.enum(["transactional-compatible", "delivery-capability-blocked"]).nullable(),
+    issues: z.array(z.string().max(2_000)).max(500),
+    templates: z.array(
+      z.object({
+        nodeId: z.string(),
+        templateId: z.string(),
+        name: z.string().nullable(),
+        purpose: z.enum(["transactional", "marketing"]).nullable(),
+        published: z.boolean(),
+        archived: z.boolean(),
+        publishable: z.boolean(),
+        reason: z.string().nullable(),
+      }),
+    ),
+  }),
 });
 export type AutomationDraft = z.infer<typeof automationDraftSchema>;

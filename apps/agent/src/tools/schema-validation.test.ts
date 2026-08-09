@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { validateAutomationDefinitionInput, validateSegmentFilterInput } from "./schema-validation";
+import {
+  validateAutomationDefinitionInput,
+  validateEmailSequenceProposalInput,
+  validateSegmentFilterInput,
+} from "./schema-validation";
 
 const position = { x: 0, y: 0 };
 
@@ -167,6 +171,30 @@ describe("validateAutomationDefinitionInput", () => {
     );
 
     expect(issueCodes(result)).toContain("missing_endpoint");
+  });
+
+  it("reports duplicate outgoing branches", () => {
+    const secondAction = { ...action, id: "action-2" };
+    const result = validateAutomationDefinitionInput(
+      automation(
+        [source, action, secondAction],
+        [
+          { id: "edge-1", source: source.id, target: action.id, branch: "next" },
+          { id: "edge-2", source: source.id, target: secondAction.id, branch: "next" },
+        ],
+      ),
+    );
+    expect(issueCodes(result)).toContain("duplicate_branch");
+  });
+});
+
+describe("validateEmailSequenceProposalInput", () => {
+  it("reports schema issues before sequence validation", () => {
+    const result = validateEmailSequenceProposalInput({ emails: [] });
+    expect(result).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining([expect.objectContaining({ phase: "schema" })]),
+    });
   });
 });
 

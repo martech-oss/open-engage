@@ -35,7 +35,11 @@ The Hello agent mounts six progressively disclosed skills:
 - `email-sequence` designs complete multi-email copy, cadence, branches, exits, measurement handoffs, and OpenEngage delivery-capability status.
 - `analytics-tracking` creates a GA4-first event, Key Event, attribution, implementation, and QA plan with an OpenEngage compatibility appendix.
 
-The two schema-validation tools use `@openengage/core` as the source of truth. They only validate and normalize supplied JSON: they do not query IDs, create segments or automations, publish flows, or make any API call.
+The schema-validation tools use `@openengage/core` as the source of truth. They only validate and normalize supplied JSON: they do not query IDs, create segments, templates, or automations, publish flows, or make any API call.
+
+The internal `SegmentDesigner` agent uses the same segment skill with a trusted workspace catalog and submits a structured proposal. The Server Worker revalidates resources and measures the audience before the management UI lets a marketer apply it; the agent never saves a segment directly.
+
+The internal `EmailSequenceDesigner` agent combines the email-sequence, email-template, and automation-flow skills into a validated bundle. The Server Worker owns resource checks and atomic draft creation; the agent never persists or publishes the generated templates or automation.
 
 The agent has a lightweight in-memory sandbox for drafting Markdown. Workspace files are temporary and are not exposed as downloadable artifacts, so the agent always returns the complete result in the conversation. Network access is disabled; provide research, analytics, or source material in the conversation when it should inform an answer.
 

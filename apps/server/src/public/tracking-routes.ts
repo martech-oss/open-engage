@@ -79,6 +79,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
       ...(parsed.data.resourceId ? { resourceId: parsed.data.resourceId } : {}),
       properties: parsed.data.properties,
       occurredAt: now,
+      queue: context.env.JOBS_QUEUE,
     });
     return context.json(
       {
@@ -107,6 +108,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
           type: "email_opened",
           resourceType: "delivery",
           resourceId: payload.resourceId,
+          queue: context.env.JOBS_QUEUE,
         }).then(() => undefined),
       );
     }

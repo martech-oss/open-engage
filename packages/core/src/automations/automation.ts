@@ -9,7 +9,8 @@ export interface AutomationValidationIssue {
     | "missing_endpoint"
     | "cycle"
     | "unreachable"
-    | "invalid_branch";
+    | "invalid_branch"
+    | "duplicate_branch";
   message: string;
   nodeId?: string;
   edgeId?: string;
@@ -50,6 +51,7 @@ export function validateAutomation(definition: AutomationDefinition): Automation
   }
 
   const adjacency = new Map<string, string[]>();
+  const outgoingBranches = new Set<string>();
   for (const node of definition.nodes) adjacency.set(node.id, []);
 
   for (const edge of definition.edges) {
@@ -79,6 +81,16 @@ export function validateAutomation(definition: AutomationDefinition): Automation
         nodeId: source.id,
       });
     }
+    const branchKey = `${source.id}:${edge.branch}`;
+    if (outgoingBranches.has(branchKey)) {
+      issues.push({
+        code: "duplicate_branch",
+        message: `Node ${source.id} has more than one ${edge.branch} branch`,
+        edgeId: edge.id,
+        nodeId: source.id,
+      });
+    }
+    outgoingBranches.add(branchKey);
     adjacency.get(source.id)?.push(target.id);
   }
 

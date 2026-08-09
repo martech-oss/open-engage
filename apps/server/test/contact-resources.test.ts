@@ -41,10 +41,15 @@ describe("contact resources over oRPC", () => {
         id: group.id,
         name: "Customers",
         slug: group.slug,
+        description: "",
         kind: "static",
         filterAst: null,
+        membershipSource: "Manual selection",
+        filterVersion: 1,
         memberCount: 1,
         evaluatedAt: null,
+        evaluationStatus: "ready",
+        evaluationError: null,
       },
     ]);
     expect(options.stages).toEqual([{ stage: "customer", contactCount: 1 }]);

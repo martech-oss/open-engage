@@ -1,4 +1,4 @@
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import {
   type CompiledSegment,
@@ -6,6 +6,15 @@ import {
   type SegmentFilter,
 } from "@openengage/core/segments";
 
+import type { OpenEngageDatabase } from "../client";
+import { subscriptionTopics } from "../consent/schema";
+import {
+  companies,
+  contactEvents,
+  contacts,
+  customFieldDefinitions,
+  tags,
+} from "../contacts/schema";
 import { nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
@@ -36,8 +45,10 @@ export class SegmentRepository extends WorkspaceRepository {
   public async createSegment(input: {
     name: string;
     slug: string;
+    description?: string | undefined;
     kind: "static" | "dynamic";
     filter?: SegmentFilter | undefined;
+    membershipSource?: string | null | undefined;
   }): Promise<{ id: string; createdAt: string; updatedAt: string }> {
     const id = uuidv7();
     const now = nowIso();
@@ -46,8 +57,11 @@ export class SegmentRepository extends WorkspaceRepository {
       workspaceId: this.context.workspaceId,
       name: input.name,
       slug: input.slug,
+      description: input.description ?? "",
       kind: input.kind,
       filterAst: input.filter ? filterAstCodec.encode(input.filter) : null,
+      membershipSource: input.kind === "static" ? (input.membershipSource ?? null) : null,
+      evaluationStatus: input.kind === "dynamic" ? "pending" : "ready",
       createdAt: now,
       updatedAt: now,
     });
@@ -58,15 +72,82 @@ export class SegmentRepository extends WorkspaceRepository {
    * Loads the fields a membership refresh needs. `kind` intentionally stays a
    * plain string: callers treat anything that is not "static" as dynamic.
    */
-  public async findSegmentDefinition(
-    id: string,
-  ): Promise<{ kind: string; filterAst: SegmentFilter | null } | null> {
+  public async findSegmentDefinition(id: string): Promise<{
+    id: string;
+    kind: string;
+    filterAst: SegmentFilter | null;
+    filterVersion: number;
+  } | null> {
     const [row] = await this.database.orm
-      .select({ kind: segments.kind, filterAst: segments.filterAst })
+      .select({
+        id: segments.id,
+        kind: segments.kind,
+        filterAst: segments.filterAst,
+        filterVersion: segments.filterVersion,
+      })
       .from(segments)
       .where(and(this.inWorkspace(segments), eq(segments.id, id)))
       .limit(1);
     return row ? { ...row, filterAst: filterAstCodec.decodeNullable(row.filterAst) } : null;
+  }
+
+  public async getSegment(id: string): Promise<SegmentRecord | null> {
+    const [row] = await this.database.orm
+      .select()
+      .from(segments)
+      .where(and(this.inWorkspace(segments), eq(segments.id, id)))
+      .limit(1);
+    return row ? { ...row, filterAst: filterAstCodec.decodeNullable(row.filterAst) } : null;
+  }
+
+  public async updateSegment(
+    id: string,
+    input: {
+      name: string;
+      slug: string;
+      description: string;
+      kind: "static" | "dynamic";
+      filter?: SegmentFilter | undefined;
+      membershipSource?: string | null | undefined;
+    },
+  ): Promise<{ filterVersion: number } | null> {
+    const current = await this.getSegment(id);
+    if (!current) return null;
+    const filterVersion = current.filterVersion + 1;
+    await this.database.orm
+      .update(segments)
+      .set({
+        name: input.name,
+        slug: input.slug,
+        description: input.description,
+        kind: input.kind,
+        filterAst: input.filter ? filterAstCodec.encode(input.filter) : null,
+        membershipSource: input.kind === "static" ? (input.membershipSource ?? null) : null,
+        filterVersion,
+        evaluationStatus: input.kind === "dynamic" ? "pending" : "ready",
+        evaluationError: null,
+        evaluatedAt: input.kind === "dynamic" ? current.evaluatedAt : null,
+        updatedAt: nowIso(),
+      })
+      .where(and(this.inWorkspace(segments), eq(segments.id, id)));
+    if (current.kind !== input.kind) {
+      await this.database.orm
+        .delete(segmentMemberships)
+        .where(and(this.inWorkspace(segmentMemberships), eq(segmentMemberships.segmentId, id)));
+      await this.updateMemberCount(id);
+    }
+    return { filterVersion };
+  }
+
+  public async setEvaluationState(
+    segmentId: string,
+    status: "pending" | "running" | "ready" | "failed",
+    error: string | null = null,
+  ): Promise<void> {
+    await this.database.orm
+      .update(segments)
+      .set({ evaluationStatus: status, evaluationError: error, updatedAt: nowIso() })
+      .where(and(this.inWorkspace(segments), eq(segments.id, segmentId)));
   }
 
   /** Recomputes the denormalized `member_count` of one segment. */
@@ -85,7 +166,12 @@ export class SegmentRepository extends WorkspaceRepository {
   public async replaceDynamicMemberships(
     segmentId: string,
     compiled: CompiledSegment,
+    filterVersion?: number,
   ): Promise<void> {
+    if (filterVersion !== undefined) {
+      const definition = await this.findSegmentDefinition(segmentId);
+      if (!definition || definition.filterVersion !== filterVersion) return;
+    }
     const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
@@ -111,7 +197,13 @@ export class SegmentRepository extends WorkspaceRepository {
         .onConflictDoNothing(),
       orm
         .update(segments)
-        .set({ memberCount: memberCountExpression(), evaluatedAt: now, updatedAt: now })
+        .set({
+          memberCount: memberCountExpression(),
+          evaluatedAt: now,
+          evaluationStatus: "ready",
+          evaluationError: null,
+          updatedAt: now,
+        })
         .where(and(this.inWorkspace(segments), eq(segments.id, segmentId))),
     ]);
   }
@@ -122,8 +214,194 @@ export class SegmentRepository extends WorkspaceRepository {
     limit: number,
   ): Promise<Record<string, unknown>[]> {
     return await this.database.orm.all<Record<string, unknown>>(
-      sql`${compiledFilterSql(compiled)} ORDER BY c.id DESC LIMIT ${limit}`,
+      sql`SELECT * FROM (${compiledFilterSql(compiled)}) matched
+          WHERE matched.status != 'archived' ORDER BY matched.id DESC LIMIT ${limit}`,
     );
+  }
+
+  public async previewCount(compiled: CompiledSegment): Promise<number> {
+    const rows = await this.database.orm.all<{ count: number }>(
+      sql`SELECT COUNT(*) AS count FROM (${compiledFilterSql(compiled)}) matched
+          WHERE matched.status != 'archived'`,
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  public async loadGenerationCatalogRows(): Promise<{
+    tags: Array<{ id: string; name: string; slug: string }>;
+    staticSegments: Array<{ id: string; name: string; slug: string }>;
+    companies: Array<{ id: string; name: string }>;
+    subscriptionTopics: Array<{ id: string; name: string; slug: string; description: string }>;
+    events: Array<{ type: string; resourceId: string | null }>;
+    customFields: Array<{ id: string; key: string; label: string; dataType: string }>;
+    stages: Array<{ stage: string }>;
+  }> {
+    const orm = this.database.orm;
+    const [
+      tagRows,
+      staticSegmentRows,
+      companyRows,
+      topicRows,
+      eventRows,
+      customFieldRows,
+      stageRows,
+    ] = await orm.batch([
+      orm
+        .select({ id: tags.id, name: tags.name, slug: tags.slug })
+        .from(tags)
+        .where(this.inWorkspace(tags))
+        .orderBy(asc(tags.name))
+        .limit(1_000),
+      orm
+        .select({ id: segments.id, name: segments.name, slug: segments.slug })
+        .from(segments)
+        .where(and(this.inWorkspace(segments), eq(segments.kind, "static")))
+        .orderBy(asc(segments.name))
+        .limit(1_000),
+      orm
+        .select({ id: companies.id, name: companies.name })
+        .from(companies)
+        .where(this.inWorkspace(companies))
+        .orderBy(asc(companies.name))
+        .limit(1_000),
+      orm
+        .select({
+          id: subscriptionTopics.id,
+          name: subscriptionTopics.name,
+          slug: subscriptionTopics.slug,
+          description: subscriptionTopics.description,
+        })
+        .from(subscriptionTopics)
+        .where(this.inWorkspace(subscriptionTopics))
+        .orderBy(asc(subscriptionTopics.name))
+        .limit(1_000),
+      orm
+        .selectDistinct({ type: contactEvents.type, resourceId: contactEvents.resourceId })
+        .from(contactEvents)
+        .where(this.inWorkspace(contactEvents))
+        .orderBy(desc(contactEvents.occurredAt))
+        .limit(1_000),
+      orm
+        .select({
+          id: customFieldDefinitions.id,
+          key: customFieldDefinitions.key,
+          label: customFieldDefinitions.label,
+          dataType: customFieldDefinitions.dataType,
+        })
+        .from(customFieldDefinitions)
+        .where(
+          and(
+            this.inWorkspace(customFieldDefinitions),
+            eq(customFieldDefinitions.entityType, "contact"),
+          ),
+        )
+        .orderBy(asc(customFieldDefinitions.label))
+        .limit(1_000),
+      orm
+        .selectDistinct({ stage: contacts.stage })
+        .from(contacts)
+        .where(this.inWorkspace(contacts))
+        .orderBy(asc(contacts.stage))
+        .limit(1_000),
+    ]);
+    return {
+      tags: tagRows,
+      staticSegments: staticSegmentRows,
+      companies: companyRows,
+      subscriptionTopics: topicRows,
+      events: eventRows,
+      customFields: customFieldRows,
+      stages: stageRows,
+    };
+  }
+
+  public async listDynamicDefinitions(
+    limit = 1_000,
+  ): Promise<Array<{ id: string; filterAst: SegmentFilter; filterVersion: number }>> {
+    const rows = await this.database.orm
+      .select({
+        id: segments.id,
+        filterAst: segments.filterAst,
+        filterVersion: segments.filterVersion,
+      })
+      .from(segments)
+      .where(and(this.inWorkspace(segments), eq(segments.kind, "dynamic")))
+      .orderBy(asc(segments.id))
+      .limit(limit);
+    return rows.flatMap((row) => {
+      const filterAst = filterAstCodec.decodeNullable(row.filterAst);
+      return filterAst ? [{ id: row.id, filterAst, filterVersion: row.filterVersion }] : [];
+    });
+  }
+
+  public async contactMatches(compiled: CompiledSegment, contactId: string): Promise<boolean> {
+    const rows = await this.database.orm.all<{ matched: number }>(
+      sql`SELECT 1 AS matched FROM (${compiledFilterSql(compiled)}) matched
+          WHERE matched.id = ${contactId} AND matched.status != 'archived' LIMIT 1`,
+    );
+    return rows.length > 0;
+  }
+
+  public async setDynamicMembership(
+    segmentId: string,
+    contactId: string,
+    matched: boolean,
+  ): Promise<void> {
+    const now = nowIso();
+    const orm = this.database.orm;
+    const membershipMutation = matched
+      ? orm
+          .insert(segmentMemberships)
+          .values({
+            workspaceId: this.context.workspaceId,
+            segmentId,
+            contactId,
+            source: "dynamic",
+            joinedAt: now,
+          })
+          .onConflictDoNothing()
+      : orm
+          .delete(segmentMemberships)
+          .where(
+            and(
+              this.inWorkspace(segmentMemberships),
+              eq(segmentMemberships.segmentId, segmentId),
+              eq(segmentMemberships.contactId, contactId),
+              eq(segmentMemberships.source, "dynamic"),
+            ),
+          );
+    await orm.batch([
+      membershipMutation,
+      orm
+        .update(segments)
+        .set({
+          memberCount: memberCountExpression(),
+          evaluatedAt: now,
+          evaluationStatus: "ready",
+          evaluationError: null,
+          updatedAt: now,
+        })
+        .where(and(this.inWorkspace(segments), eq(segments.id, segmentId))),
+    ]);
+  }
+}
+
+export class SegmentMaintenanceRepository {
+  public constructor(private readonly database: OpenEngageDatabase) {}
+
+  public listDynamicSegmentsForCorrection(): Promise<
+    Array<{ workspaceId: string; segmentId: string; filterVersion: number }>
+  > {
+    return this.database.orm
+      .select({
+        workspaceId: segments.workspaceId,
+        segmentId: segments.id,
+        filterVersion: segments.filterVersion,
+      })
+      .from(segments)
+      .where(eq(segments.kind, "dynamic"))
+      .orderBy(asc(segments.workspaceId), asc(segments.id))
+      .limit(10_000);
   }
 }
 

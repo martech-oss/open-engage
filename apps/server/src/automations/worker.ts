@@ -17,6 +17,7 @@ import { recordContactEvent } from "../contacts/event-service";
 import { type RuntimeEnv } from "../env";
 import { createEmailDelivery, createWebhookDelivery } from "../messaging/delivery-worker";
 import { primitiveString } from "../platform/values";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
 export async function processAutomationJob(
   jobId: string,
@@ -126,6 +127,7 @@ export async function executeNode(
           type: "segment_joined",
           resourceType: "segment",
           resourceId: action.segmentId,
+          queue: env.JOBS_QUEUE,
         });
       }
       break;
@@ -145,6 +147,7 @@ export async function executeNode(
       await updateContactField(job, action.field, action.value, engine);
       break;
   }
+  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, job.workspaceId, [job.contactId]);
   return { branch: "next" };
 }
 

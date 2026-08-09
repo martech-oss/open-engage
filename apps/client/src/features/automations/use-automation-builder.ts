@@ -142,7 +142,7 @@ export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
     const position = { x: 360, y: 120 + definition.nodes.length * 70 };
     let node: AutomationNode;
     if (kind === "email") {
-      const template = options.templates[0];
+      const template = options.templates.find((candidate) => candidate.sendable);
       if (!template) return "template_missing";
       node = emailNode(id, position, template);
     } else if (kind === "delay") {

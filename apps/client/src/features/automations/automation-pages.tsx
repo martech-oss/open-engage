@@ -13,6 +13,7 @@ import {
   Save,
   Send,
   Sparkles,
+  TriangleAlert,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -25,6 +26,7 @@ import {
   PageLayout,
   SimpleEmpty,
 } from "@/components/app-ui";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,7 +52,7 @@ import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
-import type { AutomationRow } from "@openengage/core/automations";
+import { type AutomationRow, validateAutomation } from "@openengage/core/automations";
 
 import { AutomationAiSheet } from "./automation-ai-sheet";
 import { automationNodeTypes, StepButton } from "./automation-flow-node";
@@ -58,6 +60,7 @@ import { triggerLabel } from "./automation-labels";
 import { NodeSettings } from "./automation-node-settings";
 import { createPresetAutomation, type PresetId, presets } from "./automation-presets";
 import { type AutomationDraft, type AutomationOptions } from "./automation-types";
+import { EmailSequenceAiSheet } from "./email-sequence-ai-sheet";
 import { useAutomationBuilder } from "./use-automation-builder";
 
 export type {
@@ -77,6 +80,7 @@ export function AutomationsPage(): ReactNode {
   );
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [sequenceOpen, setSequenceOpen] = useState(false);
   const [preset, setPreset] = useState<PresetId>("welcome");
   const [name, setName] = useState("ウェルカムシリーズ");
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
@@ -127,6 +131,10 @@ export function AutomationsPage(): ReactNode {
       title="オートメーション"
       action={
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setSequenceOpen(true)}>
+            <Mail data-icon="inline-start" />
+            AIメールシーケンス
+          </Button>
           <Button variant="outline" onClick={() => setAiOpen(true)}>
             <Sparkles data-icon="inline-start" />
             AIで作成
@@ -272,6 +280,14 @@ export function AutomationsPage(): ReactNode {
           await navigate({ to: "/automations/$id", params: { id: created.id } });
         }}
       />
+      <EmailSequenceAiSheet
+        open={sequenceOpen}
+        onOpenChange={setSequenceOpen}
+        onApplied={async (created) => {
+          setSequenceOpen(false);
+          await navigate({ to: "/automations/$id", params: { id: created.automationId } });
+        }}
+      />
     </PageLayout>
   );
 }
@@ -295,6 +311,24 @@ export function AutomationBuilder({
   const [notice, setNotice] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
   const [undoDefinition, setUndoDefinition] = useState<typeof definition | null>(null);
+  const templateIssues = useMemo(() => {
+    const byId = new Map(options.templates.map((template) => [template.id, template]));
+    return definition.nodes.flatMap((node) => {
+      if (node.type !== "action" || node.config.action !== "send_email") return [];
+      const template = byId.get(node.config.templateId);
+      if (!template) return ["参照しているメールテンプレートが見つかりません"];
+      if (template.purpose === "marketing") {
+        return [`メールテンプレート「${template.name}」はMarketing送信未対応です`];
+      }
+      if (!template.sendable) return [`メールテンプレート「${template.name}」が未公開です`];
+      return [];
+    });
+  }, [definition.nodes, options.templates]);
+  const graphIssues = useMemo(
+    () => validateAutomation(definition).map((issue) => issue.message),
+    [definition],
+  );
+  const blockingIssues = [...new Set([...graphIssues, ...templateIssues])];
 
   function addNode(kind: "email" | "delay" | "decision" | "condition"): void {
     const result = builder.addNode(kind, options);
@@ -392,12 +426,23 @@ export function AutomationBuilder({
             <Save data-icon="inline-start" />
             保存
           </Button>
-          <Button disabled={saving} onClick={() => void save(true)}>
+          <Button
+            disabled={saving || blockingIssues.length > 0}
+            title={blockingIssues[0]}
+            onClick={() => void save(true)}
+          >
             <Send data-icon="inline-start" />
             公開
           </Button>
         </div>
       </div>
+      {blockingIssues.length > 0 ? (
+        <Alert variant="default" className="m-4 lg:mx-8">
+          <TriangleAlert />
+          <AlertTitle>公開前の対応が必要です</AlertTitle>
+          <AlertDescription>{blockingIssues.join(" / ")}</AlertDescription>
+        </Alert>
+      ) : null}
       <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] grid-cols-[64px_minmax(0,1fr)] bg-muted/60 lg:grid-cols-[180px_minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-2 border-r bg-background p-2 lg:p-3">
           <div className="hidden px-1 pb-1 text-xs font-medium text-muted-foreground lg:block">

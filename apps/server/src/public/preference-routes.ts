@@ -5,6 +5,7 @@ import { ConsentRepository } from "@openengage/database";
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
 import { verifySignedToken } from "../platform/crypto";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 import { escapeHtml } from "./html";
 
 export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>): void {
@@ -21,6 +22,9 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
     await new ConsentRepository(database, {
       workspaceId: payload.workspaceId,
     }).applyOneClickUnsubscribe(payload.contactId);
+    await enqueueSegmentContactReconciliation(context.env.JOBS_QUEUE, payload.workspaceId, [
+      payload.contactId,
+    ]);
     return context.html(
       '<!doctype html><html lang="ja"><meta charset="utf-8"><title>配信停止</title><body><main><h1>配信を停止しました</h1><p>設定はすぐに反映されます。</p></main></body></html>',
     );
@@ -82,6 +86,9 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       selectedTopicIds,
       globalStop: Boolean(form.get("globalStop")),
     });
+    await enqueueSegmentContactReconciliation(context.env.JOBS_QUEUE, payload.workspaceId, [
+      payload.contactId,
+    ]);
     return context.html(
       '<!doctype html><html lang="ja"><meta charset="utf-8"><body><main><h1>設定を保存しました</h1><p>変更は次回の送信判定から反映されます。</p></main></body></html>',
     );

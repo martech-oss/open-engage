@@ -1,6 +1,7 @@
 import { contactEvents, type OpenEngageDatabase, uuidv7 } from "@openengage/database";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
 export interface ContactEventInput {
   id?: string;
@@ -12,6 +13,7 @@ export interface ContactEventInput {
   resourceId?: string | null;
   properties?: Record<string, unknown>;
   occurredAt?: string;
+  queue?: Queue;
 }
 
 export async function recordContactEvent(
@@ -40,5 +42,8 @@ export async function recordContactEvent(
     type: input.type,
     ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
   });
+  if (input.queue) {
+    await enqueueSegmentContactReconciliation(input.queue, input.workspaceId, [input.contactId]);
+  }
   return { eventId, enrollmentCount: enrollments.length };
 }

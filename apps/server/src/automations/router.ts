@@ -1,13 +1,19 @@
 import { validateAutomation } from "@openengage/core/automations";
 import type { AutomationDefinition } from "@openengage/core/automations";
-import { AutomationRepository, uuidv7 } from "@openengage/database";
+import { AutomationRepository, uuidv7, writeAuditLog } from "@openengage/database";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { getAutomationAnalytics } from "./analytics-service";
+import {
+  applyEmailSequence,
+  EmailSequenceError,
+  generateEmailSequence,
+} from "./email-sequence-service";
 import { enrollContactManually } from "./enrollment";
 import { AutomationGenerationError, generateAutomation } from "./generation-service";
 import { listAutomations, normalizeAutomationStatus } from "./list-service";
+import { getAutomationPublishability } from "./publishability-service";
 import { loadAutomationResourceContext, validateAutomationResources } from "./resource-validation";
 import { automationTrigger } from "./triggers";
 
@@ -48,12 +54,61 @@ export const generateAutomationProcedure = authed.automations.generate.handler(
   },
 );
 
+export const generateEmailSequenceProcedure = authed.automations.generateSequence.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    try {
+      return await generateEmailSequence(context.database, context.workspace, context.env, input);
+    } catch (error) {
+      if (!(error instanceof EmailSequenceError)) throw error;
+      switch (error.kind) {
+        case "failed":
+        case "conflict":
+          throw errors.AI_GENERATION_FAILED();
+        case "timeout":
+          throw errors.AI_GENERATION_TIMEOUT();
+        case "unavailable":
+          throw errors.AI_GENERATION_UNAVAILABLE();
+      }
+    }
+  },
+);
+
+export const applyEmailSequenceProcedure = authed.automations.applySequence.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    try {
+      const result = await applyEmailSequence(context.database, context.workspace, input);
+      context.executionContext.waitUntil(
+        writeAuditLog(context.database, context.workspace, {
+          action: "email_sequence.create",
+          resourceType: "automation",
+          resourceId: result.automationId,
+        }),
+      );
+      return result;
+    } catch (error) {
+      if (!(error instanceof EmailSequenceError)) throw error;
+      if (error.kind === "conflict") throw errors.SEQUENCE_CONFLICT();
+      throw errors.INVALID_SEQUENCE();
+    }
+  },
+);
+
 export const getAutomationDraftProcedure = authed.automations.getDraft.handler(
   async ({ context, input, errors }) => {
     const repository = new AutomationRepository(context.database, context.workspace);
     const row = await repository.getDraft(input.id);
     if (!row) throw errors.AUTOMATION_NOT_FOUND();
-    return { graph: row.graph, status: normalizeAutomationStatus(row.status) };
+    return {
+      graph: row.graph,
+      status: normalizeAutomationStatus(row.status),
+      publishability: await getAutomationPublishability(
+        context.database,
+        context.workspace,
+        row.graph,
+      ),
+    };
   },
 );
 
@@ -158,6 +213,8 @@ export const automationProcedures = {
   list: listAutomationsProcedure,
   create: createAutomationProcedure,
   generate: generateAutomationProcedure,
+  generateSequence: generateEmailSequenceProcedure,
+  applySequence: applyEmailSequenceProcedure,
   getDraft: getAutomationDraftProcedure,
   saveDraft: saveAutomationDraftProcedure,
   publish: publishAutomationProcedure,

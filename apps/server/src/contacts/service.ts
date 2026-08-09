@@ -35,6 +35,7 @@ export async function createContact(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: ContactCreate,
+  queue?: Queue,
 ): Promise<Contact> {
   const repository = new ContactRepository(database, workspace);
   const contact = await repository.createContact(input);
@@ -44,6 +45,7 @@ export async function createContact(
     type: "contact_created",
     resourceType: "contact",
     resourceId: contact.id,
+    ...(queue ? { queue } : {}),
   });
   return contact;
 }
@@ -72,6 +74,7 @@ export async function recordContactApiEvent(
     properties: Record<string, unknown>;
     occurredAt?: string;
   },
+  queue?: Queue,
 ): Promise<ContactEventOutcome> {
   const contactId = await new ContactResourceRepository(database, {
     workspaceId,
@@ -85,6 +88,7 @@ export async function recordContactApiEvent(
     resourceId: input.eventName,
     properties: input.properties,
     ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
+    ...(queue ? { queue } : {}),
   });
   return { kind: "recorded", ...result };
 }

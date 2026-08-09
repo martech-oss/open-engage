@@ -16,10 +16,15 @@ const segmentOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),
+  description: z.string(),
   kind: z.enum(["static", "dynamic"]),
   filterAst: segmentFilterSchema.nullable(),
+  membershipSource: z.string().nullable(),
+  filterVersion: z.number().int().positive(),
   memberCount: z.number().int().nonnegative(),
   evaluatedAt: z.string().nullable(),
+  evaluationStatus: z.enum(["pending", "running", "ready", "failed"]),
+  evaluationError: z.string().nullable(),
 });
 export type SegmentOption = z.infer<typeof segmentOptionSchema>;
 

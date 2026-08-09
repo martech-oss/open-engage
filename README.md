@@ -17,6 +17,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - Cloudflare Email ServiceによるTransactionalメール
 - React Emailで管理する認証メールと、OpenEngage内で管理・公開するWorkspaceテンプレート
 - React Flowを使ったビジュアルオートメーションビルダー
+- メール文面・間隔・分岐・終了条件をまとめて下書き化するAI Email Sequence Designer
 - ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
 - Contact・Automation・Email・Deals・Siteを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
@@ -459,11 +460,20 @@ POST   /api/v1/contacts/imports
 POST   /api/v1/contacts/exports
 
 GET    /api/v1/segments
+GET    /api/v1/segments/options
+GET    /api/v1/segments/:id
 POST   /api/v1/segments
+PATCH  /api/v1/segments/:id
+POST   /api/v1/segments/validate
 POST   /api/v1/segments/preview
+POST   /api/v1/segments/generate
+POST   /api/v1/segments/:id/refresh
 
 GET    /api/v1/automations
 POST   /api/v1/automations
+POST   /api/v1/automations/generate
+POST   /api/v1/automations/sequences/generate
+POST   /api/v1/automations/sequences/apply
 PUT    /api/v1/automations/:id/draft
 POST   /api/v1/automations/:id/publish
 POST   /api/v1/automations/:id/enroll

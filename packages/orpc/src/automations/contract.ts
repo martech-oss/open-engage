@@ -6,7 +6,11 @@ import {
   automationDraftSchema,
   automationGenerationResultSchema,
   automationRowSchema,
+  applyEmailSequenceInputSchema,
+  applyEmailSequenceResultSchema,
+  emailSequenceGenerationResultSchema,
   generateAutomationInputSchema,
+  generateEmailSequenceInputSchema,
 } from "@openengage/core/automations";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
@@ -32,6 +36,25 @@ export const automationsContract = {
     })
     .input(generateAutomationInputSchema)
     .output(automationGenerationResultSchema),
+  generateSequence: oc
+    .route({ method: "POST", path: "/automations/sequences/generate" })
+    .errors({
+      ...authedErrors,
+      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なシーケンスを生成できませんでした" },
+      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
+      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+    })
+    .input(generateEmailSequenceInputSchema)
+    .output(emailSequenceGenerationResultSchema),
+  applySequence: oc
+    .route({ method: "POST", path: "/automations/sequences/apply", successStatus: 201 })
+    .errors({
+      ...authedErrors,
+      INVALID_SEQUENCE: { status: 422, message: "シーケンス提案を適用できません" },
+      SEQUENCE_CONFLICT: { status: 409, message: "シーケンスのIDが競合しています" },
+    })
+    .input(applyEmailSequenceInputSchema)
+    .output(applyEmailSequenceResultSchema),
   getDraft: oc
     .route({ method: "GET", path: "/automations/{id}/draft" })
     .errors({

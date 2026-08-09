@@ -143,14 +143,15 @@ export class DataJobWorkerRepository extends DatabaseRepository {
   }
 
   /** Inserts one import part atomically, skipping duplicate identifiers. */
-  public async insertContacts(workspaceId: string, rows: ContactImportRow[]): Promise<void> {
-    if (rows.length === 0) return;
+  public async insertContacts(workspaceId: string, rows: ContactImportRow[]): Promise<string[]> {
+    if (rows.length === 0) return [];
     const now = nowIso();
-    const [first, ...rest] = rows.map((row) =>
+    const prepared = rows.map((row) => ({ id: uuidv7(), row }));
+    const [first, ...rest] = prepared.map(({ id, row }) =>
       this.database.orm
         .insert(contacts)
         .values({
-          id: uuidv7(),
+          id,
           workspaceId,
           email: row.email,
           firstName: row.firstName,
@@ -167,6 +168,7 @@ export class DataJobWorkerRepository extends DatabaseRepository {
         .onConflictDoNothing(),
     );
     if (first) await this.database.orm.batch([first, ...rest]);
+    return prepared.map((item) => item.id);
   }
 
   public async recordImportProgress(

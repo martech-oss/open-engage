@@ -19,6 +19,10 @@ export const segmentFieldOptions = [
   { field: "updated_at", label: "更新日時" },
   { field: "company", label: "会社" },
   { field: "tag", label: "タグ" },
+  { field: "segment", label: "静的セグメント" },
+  { field: "subscription", label: "購読トピック" },
+  { field: "event", label: "イベント" },
+  { field: "custom_field", label: "カスタム項目" },
 ] as const satisfies readonly { field: SegmentField; label: string }[];
 
 const segmentOperatorLabels = {
@@ -60,7 +64,8 @@ export function segmentConditionNeedsValue(
 ): boolean {
   const definition = getSegmentFieldDefinition(field);
   return (
-    definition.valueType === "relation" || (operator !== "exists" && operator !== "not_exists")
+    (definition.valueType === "relation" && field !== "event") ||
+    (operator !== "exists" && operator !== "not_exists")
   );
 }
 
@@ -68,26 +73,36 @@ export function createSegmentCondition(
   field: SegmentField,
   operator: SegmentOperator,
   rawValue: string,
+  key?: string,
+  customValueType?: "text" | "number" | "boolean" | "date" | "select",
 ): SegmentCondition {
   if (!isSegmentOperatorAllowed(field, operator)) {
     throw new Error(`${operator} is not supported for ${field}`);
   }
 
   const definition = getSegmentFieldDefinition(field);
-  const value = segmentConditionNeedsValue(field, operator)
-    ? parseSegmentValue(definition.valueType, operator, rawValue)
-    : null;
+  const value =
+    field === "event"
+      ? null
+      : segmentConditionNeedsValue(field, operator)
+        ? parseSegmentValue(
+            definition.valueType === "custom" ? (customValueType ?? "text") : definition.valueType,
+            operator,
+            rawValue,
+          )
+        : null;
 
   return {
     kind: "condition",
     field,
+    ...((field === "event" || field === "custom_field") && key ? { key } : {}),
     operator,
     value,
   };
 }
 
 function parseSegmentValue(
-  valueType: ReturnType<typeof getSegmentFieldDefinition>["valueType"],
+  valueType: ReturnType<typeof getSegmentFieldDefinition>["valueType"] | "boolean" | "select",
   operator: SegmentOperator,
   rawValue: string,
 ): SegmentCondition["value"] {
@@ -99,7 +114,9 @@ function parseSegmentValue(
       .filter(Boolean);
     return valueType === "number" ? values.map(parseFiniteNumber) : values;
   }
-  return valueType === "number" ? parseFiniteNumber(value) : value;
+  if (valueType === "number") return parseFiniteNumber(value);
+  if (valueType === "boolean") return value === "true";
+  return value;
 }
 
 function parseFiniteNumber(value: string): number {

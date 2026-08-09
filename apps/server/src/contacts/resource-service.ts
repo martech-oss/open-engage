@@ -37,10 +37,20 @@ export async function getContactOptions(
       id: row.id,
       name: row.name,
       slug: row.slug,
+      description: row.description,
       kind: row.kind === "dynamic" ? "dynamic" : "static",
       filterAst: row.filterAst,
+      membershipSource: row.membershipSource,
+      filterVersion: row.filterVersion,
       memberCount: row.memberCount,
       evaluatedAt: row.evaluatedAt,
+      evaluationStatus:
+        row.evaluationStatus === "pending" ||
+        row.evaluationStatus === "running" ||
+        row.evaluationStatus === "failed"
+          ? row.evaluationStatus
+          : "ready",
+      evaluationError: row.evaluationError,
     })),
     companies: rows.accounts,
     stages: rows.stages,

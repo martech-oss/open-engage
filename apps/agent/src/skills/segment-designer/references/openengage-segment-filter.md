@@ -21,7 +21,7 @@ A filter is one condition or a recursive group. A group contains 1–25 children
 }
 ```
 
-A condition always contains `kind`, `field`, `operator`, and `value`. Add `key` only for keyed fields. Use `null` as the value for `exists` and `not_exists`.
+A condition always contains `kind`, `field`, `operator`, and `value`. Add `key` only for keyed fields. Use `null` for scalar, event, and custom-field `exists`/`not_exists`. Relationship fields retain the selected resource value for these operators.
 
 ## Fields and operators
 
@@ -42,10 +42,10 @@ Supported operators are `eq`, `neq`, `contains`, `starts_with`, `in`, `gt`, `gte
 ## Value rules
 
 - Values may be a string, number, boolean, string/number array, or `null`.
-- Use a non-empty array for `in` even though the schema permits an empty array.
-- Use `null` for unary existence checks; do not invent a comparison value.
-- For `event`, put the event type in `key`; the compiler ignores `value`.
-- Keep custom-field keys to letters, digits, `_`, `.`, and `-`; database compilation rejects other JSON-path characters even if schema validation succeeds.
+- Use a non-empty array for `in`.
+- Use `null` for scalar, event, and custom-field unary existence checks. For `tag`, `segment`, `company`, and `subscription`, keep the selected resource value.
+- For `event`, put the semantic event name in `key`; the compiler matches both system event types and API/Webhook custom-event names and ignores `value`.
+- Keep custom-field keys to letters, digits, `_`, `.`, and `-`; schema validation and database compilation reject other JSON-path characters.
 - `neq` and `not_exists` on relationship fields compile as absence of the relationship.
 
 ## Consent and suppression

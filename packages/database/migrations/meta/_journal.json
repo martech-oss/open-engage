@@ -15,6 +15,13 @@
       "when": 1786055190457,
       "tag": "0001_workable_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786253446817,
+      "tag": "0002_breezy_photon",
+      "breakpoints": true
     }
   ]
 }

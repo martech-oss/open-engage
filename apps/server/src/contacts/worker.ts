@@ -7,6 +7,7 @@ import {
 import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
 import { parseJsonRecord, stringValue } from "../platform/values";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
 export async function processContactImport(
   jobId: string,
@@ -57,7 +58,8 @@ export async function processContactImport(
       failed += 1;
     }
   }
-  await repository.insertContacts(job.workspaceId, rows);
+  const contactIds = await repository.insertContacts(job.workspaceId, rows);
+  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, job.workspaceId, contactIds);
   const finished = part + 1 >= totalParts;
   await repository.recordImportProgress(jobId, {
     finished,

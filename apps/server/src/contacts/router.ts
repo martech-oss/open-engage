@@ -3,6 +3,7 @@ import { ContactRepository } from "@openengage/database";
 import { ack, CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 import {
   getContactExportFile,
   getDataJob,
@@ -39,13 +40,18 @@ export const contactTimelineProcedure = authed.contacts.timeline.handler(
 export const recordContactEventProcedure = authed.contacts.recordEvent.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const outcome = await recordContactApiEvent(context.database, context.workspace.workspaceId, {
-      contactId: input.id,
-      eventName: input.eventName,
-      source: input.source,
-      properties: input.properties,
-      ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
-    });
+    const outcome = await recordContactApiEvent(
+      context.database,
+      context.workspace.workspaceId,
+      {
+        contactId: input.id,
+        eventName: input.eventName,
+        source: input.source,
+        properties: input.properties,
+        ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
+      },
+      context.env.JOBS_QUEUE,
+    );
     if (outcome.kind === "contact_not_found") throw errors.CONTACT_NOT_FOUND();
     return { eventId: outcome.eventId, enrollmentCount: outcome.enrollmentCount };
   },
@@ -56,7 +62,12 @@ export const createContactProcedure = authed.contacts.create.handler(
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
 
     try {
-      const contact = await createContact(context.database, context.workspace, input);
+      const contact = await createContact(
+        context.database,
+        context.workspace,
+        input,
+        context.env.JOBS_QUEUE,
+      );
       context.executionContext.waitUntil(
         writeAuditLog(context.database, context.workspace, {
           action: "contact.create",
@@ -81,6 +92,11 @@ export const updateContactProcedure = authed.contacts.update.handler(
     if (existing.status === "archived") throw errors.CONTACT_ARCHIVED();
     const contact = await repository.updateContact(id, changes);
     if (!contact) throw errors.CONTACT_NOT_FOUND();
+    await enqueueSegmentContactReconciliation(
+      context.env.JOBS_QUEUE,
+      context.workspace.workspaceId,
+      [id],
+    );
     return contact;
   },
 );
@@ -93,6 +109,11 @@ export const archiveContactProcedure = authed.contacts.archive.handler(
       context.workspace,
     ).archiveContact(input.id);
     if (!archived) throw errors.CONTACT_NOT_FOUND();
+    await enqueueSegmentContactReconciliation(
+      context.env.JOBS_QUEUE,
+      context.workspace.workspaceId,
+      [input.id],
+    );
     return ack;
   },
 );

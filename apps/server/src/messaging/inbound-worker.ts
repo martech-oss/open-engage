@@ -6,6 +6,7 @@ import { enrollAutomationsForEvent } from "../automations/enrollment";
 import type { RuntimeEnv } from "../env";
 import { verifySignedToken } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
 const maximumInboundSize = 5 * 1024 * 1024;
 
@@ -95,4 +96,7 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     type: "email_replied",
     resourceId: delivery.id,
   });
+  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, payload.workspaceId, [
+    payload.contactId,
+  ]);
 }

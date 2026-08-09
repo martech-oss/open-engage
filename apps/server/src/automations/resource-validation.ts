@@ -105,9 +105,14 @@ export async function loadAutomationResourceContext(
 export function validateAutomationResources(
   definition: AutomationDefinition,
   context: AutomationResourceContext,
+  options?: { additionalEmailTemplateIds?: readonly string[] },
 ): AutomationResourceValidationIssue[] {
   const issues: AutomationResourceValidationIssue[] = [];
   const { references } = context;
+  const emailTemplateIds = new Set([
+    ...references.emailTemplates,
+    ...(options?.additionalEmailTemplateIds ?? []),
+  ]);
 
   for (const node of definition.nodes) {
     if (node.type === "source") {
@@ -138,7 +143,7 @@ export function validateAutomationResources(
       case "send_email":
         requireResource(
           issues,
-          references.emailTemplates,
+          emailTemplateIds,
           "email_template",
           node.config.templateId,
           node.id,

@@ -30,6 +30,23 @@ export function useGenerateAutomation() {
   return useMutation(orpcQuery.automations.generate.mutationOptions());
 }
 
+export function useGenerateEmailSequence() {
+  return useMutation(orpcQuery.automations.generateSequence.mutationOptions());
+}
+
+export function useApplyEmailSequence() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.automations.applySequence.mutationOptions(),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
+        queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
+      ]);
+    },
+  });
+}
+
 /** Shared by the list page and the editor header, both of which only toggle active/paused. */
 export function useSetAutomationStatus() {
   const queryClient = useQueryClient();

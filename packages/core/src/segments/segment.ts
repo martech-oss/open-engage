@@ -86,10 +86,14 @@ function compileCondition(
           AND st.slug = ? AND cs.status = 'subscribed'
       )`;
     case "event":
-      params.push(condition.key ?? "");
+      params.push(condition.key ?? "", condition.key ?? "");
       return `${existsPrefix(condition.operator)} EXISTS (
         SELECT 1 FROM contact_events ce
-        WHERE ce.contact_id = c.id AND ce.workspace_id = c.workspace_id AND ce.type = ?
+        WHERE ce.contact_id = c.id AND ce.workspace_id = c.workspace_id
+          AND (
+            ce.type = ?
+            OR (ce.type IN ('custom_event', 'webhook_event') AND ce.resource_id = ?)
+          )
       )`;
     case "custom_field":
       params.push(`$.${sanitizeJsonPath(condition.key ?? "")}`);

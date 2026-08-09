@@ -113,6 +113,19 @@ describe("segment compiler", () => {
       }),
     ).toThrow("event requires key");
   });
+
+  it("matches system and named custom events without interpolating the event name", () => {
+    const result = compileSegmentFilter("workspace", {
+      kind: "condition",
+      field: "event",
+      key: "trial_activated",
+      operator: "exists",
+      value: null,
+    });
+
+    expect(result.sql).toContain("ce.resource_id = ?");
+    expect(result.params).toEqual(["workspace", "trial_activated", "trial_activated"]);
+  });
 });
 
 describe("delivery safeguards", () => {

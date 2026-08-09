@@ -21,10 +21,15 @@ export const segments = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text().notNull(),
     slug: text().notNull(),
+    description: text().default("").notNull(),
     kind: text().notNull(),
     filterAst: text("filter_ast"),
+    membershipSource: text("membership_source"),
+    filterVersion: integer("filter_version").default(1).notNull(),
     memberCount: integer("member_count").default(0).notNull(),
     evaluatedAt: text("evaluated_at"),
+    evaluationStatus: text("evaluation_status").default("ready").notNull(),
+    evaluationError: text("evaluation_error"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -32,6 +37,10 @@ export const segments = sqliteTable(
     index("segments_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
     uniqueIndex("segments_workspace_slug_unique").on(table.workspaceId, table.slug),
     check("segments_kind_check", sql`${table.kind} IN ('static', 'dynamic')`),
+    check(
+      "segments_evaluation_status_check",
+      sql`${table.evaluationStatus} IN ('pending', 'running', 'ready', 'failed')`,
+    ),
   ],
 );
 

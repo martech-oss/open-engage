@@ -16,6 +16,11 @@ import { processDelivery } from "../messaging/delivery-worker";
 import { logError } from "../observability";
 import { persistDeadLetter, runDailyMaintenance } from "../platform/maintenance-worker";
 import {
+  listDynamicSegmentsForCorrection,
+  reconcileContactSegmentMemberships,
+  refreshSegmentMemberships,
+} from "../segments/membership-service";
+import {
   deliveryQueueMessageSchema,
   jobsQueueMessageSchema,
   type QueueMessage as OpenEngageQueueMessage,
@@ -27,7 +32,7 @@ export async function scheduled(
   context: ExecutionContext,
 ): Promise<void> {
   if (controller.cron === "17 3 * * *") {
-    context.waitUntil(runDailyMaintenance(env));
+    context.waitUntil(Promise.all([runDailyMaintenance(env), enqueueSegmentCorrections(env)]));
     return;
   }
   const database = createDatabase(env.DB);
@@ -83,6 +88,21 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
           case "contact_export":
             await processContactExport(parsed.data.exportJobId, env);
             break;
+          case "segment_contact_reconcile":
+            await reconcileContactSegmentMemberships(
+              createDatabase(env.DB),
+              parsed.data.workspaceId,
+              parsed.data.contactId,
+            );
+            break;
+          case "segment_full_refresh":
+            await refreshSegmentMemberships(
+              createDatabase(env.DB),
+              parsed.data.workspaceId,
+              parsed.data.segmentId,
+              parsed.data.filterVersion,
+            );
+            break;
         }
       } else if (isQueue(batch.queue, "delivery")) {
         const parsed = deliveryQueueMessageSchema.safeParse(message.body);
@@ -107,6 +127,18 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
         message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
       }
     }
+  }
+}
+
+async function enqueueSegmentCorrections(env: RuntimeEnv): Promise<void> {
+  const definitions = await listDynamicSegmentsForCorrection(createDatabase(env.DB));
+  if (definitions.length === 0) return;
+  for (let index = 0; index < definitions.length; index += 100) {
+    await env.JOBS_QUEUE.sendBatch(
+      definitions.slice(index, index + 100).map((definition) => ({
+        body: { kind: "segment_full_refresh" as const, ...definition },
+      })),
+    );
   }
 }
 

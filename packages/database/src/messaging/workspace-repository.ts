@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import {
   emailDocumentV2Schema,
@@ -66,6 +66,15 @@ function toEmailTemplate(row: {
 
 /** Admin-facing queries for email templates and message variables. */
 export class MessagingRepository extends WorkspaceRepository {
+  public async getEmailTemplatesByIds(ids: string[]): Promise<EmailTemplate[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.database.orm
+      .select(emailTemplateSelection)
+      .from(emailTemplates)
+      .where(and(this.inWorkspace(emailTemplates), inArray(emailTemplates.id, ids)));
+    return rows.map(toEmailTemplate);
+  }
+
   public async getEmailTemplate(id: string): Promise<EmailTemplate | null> {
     const [row] = await this.database.orm
       .select(emailTemplateSelection)

@@ -47,10 +47,15 @@ export class ContactResourceRepository extends WorkspaceRepository {
           id: segments.id,
           name: segments.name,
           slug: segments.slug,
+          description: segments.description,
           kind: segments.kind,
           filterAst: segments.filterAst,
+          membershipSource: segments.membershipSource,
+          filterVersion: segments.filterVersion,
           memberCount: segments.memberCount,
           evaluatedAt: segments.evaluatedAt,
+          evaluationStatus: segments.evaluationStatus,
+          evaluationError: segments.evaluationError,
         })
         .from(segments)
         .where(eq(segments.workspaceId, workspaceId))

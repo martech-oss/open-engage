@@ -46,12 +46,24 @@ describe("segment condition schema", () => {
     "enforces the declared operator set for $field",
     (definition) => {
       for (const operator of segmentOperatorValues) {
+        const unary = operator === "exists" || operator === "not_exists";
+        const relation = definition.valueType === "relation" && definition.field !== "event";
+        const comparableValue = definition.valueType === "number" ? 10 : "2026-08-09T00:00:00Z";
+        const value = relation
+          ? "resource"
+          : definition.field === "event" || unary
+            ? null
+            : operator === "in"
+              ? [comparableValue]
+              : definition.valueType === "date" || definition.valueType === "number"
+                ? comparableValue
+                : "value";
         const result = segmentConditionSchema.safeParse({
           kind: "condition",
           field: definition.field,
           ...(definition.keyRequirement === "required" ? { key: "example.key" } : {}),
           operator,
-          value: 10,
+          value,
         });
 
         expect(result.success, `${definition.field}:${operator}`).toBe(
@@ -104,5 +116,41 @@ describe("segment condition schema", () => {
     expect(missingKey.success).toBe(false);
     expect(blankKey.success).toBe(false);
     expect(valid.success).toBe(true);
+  });
+
+  it("enforces field-specific values", () => {
+    expect(
+      segmentConditionSchema.safeParse({
+        kind: "condition",
+        field: "score",
+        operator: "gte",
+        value: "10",
+      }).success,
+    ).toBe(false);
+    expect(
+      segmentConditionSchema.safeParse({
+        kind: "condition",
+        field: "created_at",
+        operator: "gte",
+        value: "tomorrow",
+      }).success,
+    ).toBe(false);
+    expect(
+      segmentConditionSchema.safeParse({
+        kind: "condition",
+        field: "email",
+        operator: "in",
+        value: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      segmentConditionSchema.safeParse({
+        kind: "condition",
+        field: "custom_field",
+        key: "bad[0]",
+        operator: "exists",
+        value: null,
+      }).success,
+    ).toBe(false);
   });
 });

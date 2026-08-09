@@ -33,7 +33,7 @@ function AutomationRoute() {
       id={id}
       initialDraft={draft}
       options={{
-        templates: templates.filter((template) => template.sendable),
+        templates,
         forms,
         segments,
       }}
