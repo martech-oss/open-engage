@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -33,7 +34,10 @@ export const projects = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [index("projects_workspace_updated_idx").on(table.workspaceId, table.updatedAt)],
+  (table) => [
+    index("projects_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
+    uniqueIndex("projects_workspace_id_unique").on(table.workspaceId, table.id),
+  ],
 );
 
 export const projectBriefs = sqliteTable(
@@ -48,6 +52,7 @@ export const projectBriefs = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     status: text().default("draft").notNull(),
     revision: integer().default(1).notNull(),
+    rowVersion: integer("row_version").default(1).notNull(),
     ownerUserId: text("owner_user_id")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),
@@ -73,6 +78,7 @@ export const projectBriefs = sqliteTable(
       table.reviewAt,
     ),
     index("project_briefs_workspace_owner_idx").on(table.workspaceId, table.ownerUserId),
+    uniqueIndex("project_briefs_workspace_project_unique").on(table.workspaceId, table.projectId),
     check(
       "project_briefs_status_check",
       sql`${table.status} IN ('draft', 'pending_approval', 'approved', 'completed')`,
@@ -82,10 +88,57 @@ export const projectBriefs = sqliteTable(
       sql`${table.primaryMotion} IN ('acquisition', 'onboarding', 'engagement', 'retention', 'reactivation', 'measurement')`,
     ),
     check("project_briefs_revision_check", sql`${table.revision} >= 1`),
+    check("project_briefs_row_version_check", sql`${table.rowVersion} >= 1`),
+    check("project_briefs_definition_json_check", sql`json_valid(${table.definition})`),
     check(
       "project_briefs_distinct_reviewers_check",
       sql`${table.ownerUserId} != ${table.approverUserId}`,
     ),
+    foreignKey({
+      columns: [table.workspaceId, table.projectId],
+      foreignColumns: [projects.workspaceId, projects.id],
+      name: "project_briefs_workspace_project_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const projectBriefVersions = sqliteTable(
+  "project_brief_versions",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    revision: integer().notNull(),
+    name: text().notNull(),
+    description: text().default("").notNull(),
+    color: text().notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    approverUserId: text("approver_user_id").notNull(),
+    primaryMotion: text("primary_motion").notNull(),
+    reviewAt: text("review_at").notNull(),
+    definition: text().notNull(),
+    approvedByUserId: text("approved_by_user_id").notNull(),
+    approvedAt: text("approved_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.workspaceId, table.projectId, table.revision],
+      name: "project_brief_versions_workspace_project_revision_pk",
+    }),
+    index("project_brief_versions_workspace_project_idx").on(
+      table.workspaceId,
+      table.projectId,
+      table.revision,
+    ),
+    check("project_brief_versions_revision_check", sql`${table.revision} >= 1`),
+    check("project_brief_versions_definition_json_check", sql`json_valid(${table.definition})`),
+    foreignKey({
+      columns: [table.workspaceId, table.projectId],
+      foreignColumns: [projects.workspaceId, projects.id],
+      name: "project_brief_versions_workspace_project_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -117,6 +170,12 @@ export const projectBriefReviews = sqliteTable(
       "project_brief_reviews_decision_check",
       sql`${table.decision} IN ('approved', 'rejected')`,
     ),
+    check("project_brief_reviews_revision_check", sql`${table.revision} >= 1`),
+    foreignKey({
+      columns: [table.workspaceId, table.projectId],
+      foreignColumns: [projectBriefs.workspaceId, projectBriefs.projectId],
+      name: "project_brief_reviews_workspace_project_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -146,6 +205,15 @@ export const projectItems = sqliteTable(
       "project_items_resource_type_check",
       sql`${table.resourceType} IN ('automation', 'email', 'form', 'page', 'segment')`,
     ),
+    check(
+      "project_items_brief_revision_check",
+      sql`${table.briefRevision} IS NULL OR ${table.briefRevision} >= 1`,
+    ),
+    foreignKey({
+      columns: [table.workspaceId, table.projectId],
+      foreignColumns: [projects.workspaceId, projects.id],
+      name: "project_items_workspace_project_fk",
+    }).onDelete("cascade"),
   ],
 );
 

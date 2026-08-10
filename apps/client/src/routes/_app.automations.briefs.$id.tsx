@@ -18,5 +18,9 @@ export const Route = createFileRoute("/_app/automations/briefs/$id")({
 });
 
 function BriefRoute() {
-  return <ProjectBriefDetailPage id={Route.useParams().id} />;
+  return <ProjectBriefRouteContent id={Route.useParams().id} />;
+}
+
+export function ProjectBriefRouteContent({ id }: { id: string }) {
+  return <ProjectBriefDetailPage key={id} id={id} />;
 }

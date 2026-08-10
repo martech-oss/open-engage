@@ -16,7 +16,7 @@ export function FormInput({
 }: Omit<ComponentProps<typeof Input>, "id"> & {
   label: string;
   description?: string;
-  error?: string;
+  error?: string | undefined;
   id?: string;
   name: string;
 }): ReactNode {
@@ -48,7 +48,7 @@ export function FormTextarea({
 }: Omit<ComponentProps<typeof Textarea>, "id"> & {
   label: string;
   description?: string;
-  error?: string;
+  error?: string | undefined;
   id?: string;
   name: string;
 }): ReactNode {
@@ -81,7 +81,7 @@ export function FormNativeSelect({
 }: Omit<ComponentProps<typeof NativeSelect>, "id"> & {
   label: string;
   description?: string;
-  error?: string;
+  error?: string | undefined;
   id?: string;
   name: string;
   children: ReactNode;

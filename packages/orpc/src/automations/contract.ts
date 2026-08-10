@@ -12,15 +12,10 @@ import {
   generateAutomationInputSchema,
   generateEmailSequenceInputSchema,
 } from "@openengage/core/automations";
+import { projectBriefReferenceSchema } from "@openengage/core/projects";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import { authedErrors, briefContextErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
-
-const briefContextErrors = {
-  BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
-  BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },
-  BRIEF_REVISION_CONFLICT: { status: 409, message: "施策ブリーフのrevisionが一致しません" },
-} as const;
 
 export const automationsContract = {
   list: oc
@@ -30,12 +25,7 @@ export const automationsContract = {
   create: oc
     .route({ method: "POST", path: "/automations", successStatus: 201 })
     .errors({ ...authedErrors, ...briefContextErrors })
-    .input(
-      automationDefinitionSchema.extend({
-        projectId: z.string().min(1).optional(),
-        briefRevision: z.number().int().positive().optional(),
-      }),
-    )
+    .input(automationDefinitionSchema.and(projectBriefReferenceSchema))
     .output(z.object({ id: z.string(), draftVersionId: z.string() })),
   generate: oc
     .route({ method: "POST", path: "/automations/generate" })

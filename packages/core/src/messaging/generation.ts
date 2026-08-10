@@ -1,5 +1,6 @@
 import * as z from "zod";
 
+import { marketingCapabilitySnapshotSchema } from "../projects/schema.js";
 import { emailBrandProfileSchema } from "./brand.js";
 import { emailDocumentV2Schema } from "./content.js";
 
@@ -45,30 +46,33 @@ export const emailGenerationResultSchema = z.object({
 });
 export type EmailGenerationResult = z.infer<typeof emailGenerationResultSchema>;
 
-export const emailGenerationAgentInitialDataSchema = z.object({
-  request: generateEmailInputSchema,
-  brand: emailBrandProfileSchema,
-  variables: z
-    .array(
-      z.object({
-        key: z.string().min(1).max(191),
-        name: z.string().min(1).max(191),
-        description: z.string().max(500),
-      }),
-    )
-    .max(1_000),
-  publicImages: z
-    .array(
-      z.object({
-        id: z.string().min(1).max(191),
-        name: z.string().min(1).max(191),
-        altText: z.string().max(500),
-        width: z.number().int().positive().nullable(),
-        height: z.number().int().positive().nullable(),
-      }),
-    )
-    .max(1_000),
-});
+export const emailGenerationAgentInitialDataSchema = z
+  .object({
+    request: generateEmailInputSchema,
+    capabilities: marketingCapabilitySnapshotSchema,
+    brand: emailBrandProfileSchema,
+    variables: z
+      .array(
+        z.object({
+          key: z.string().min(1).max(191),
+          name: z.string().min(1).max(191),
+          description: z.string().max(500),
+        }),
+      )
+      .max(1_000),
+    publicImages: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(191),
+          name: z.string().min(1).max(191),
+          altText: z.string().max(500),
+          width: z.number().int().positive().nullable(),
+          height: z.number().int().positive().nullable(),
+        }),
+      )
+      .max(1_000),
+  })
+  .strict();
 export type EmailGenerationAgentInitialData = z.infer<typeof emailGenerationAgentInitialDataSchema>;
 
 export const generateEmailImageInputSchema = z.object({

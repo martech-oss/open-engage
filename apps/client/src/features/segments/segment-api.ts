@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
+import { invalidateProjectBriefQueries } from "@/lib/project-brief-cache";
 import type { SegmentFilter } from "@openengage/core/segments";
 
 export function segmentsQueryOptions() {
@@ -23,7 +24,12 @@ export function useCreateSegment() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.segments.create.mutationOptions(),
-    onSuccess: () => invalidateSegmentsList(queryClient),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        invalidateSegmentsList(queryClient),
+        ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
+      ]);
+    },
   });
 }
 

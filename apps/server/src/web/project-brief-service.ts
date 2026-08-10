@@ -1,20 +1,26 @@
 import type {
+  ApprovedMarketingBriefContext,
   ProjectBriefDetail,
-  ProjectBriefMutation,
+  ProjectBriefDraftInput,
   ProjectBriefSummary,
   ProjectMemberOption,
   ProjectResourceType,
 } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
-  ProjectBriefRepository,
+  ProjectBriefCommandRepository,
+  ProjectBriefQueryRepository,
+  ProjectResourceLinkRepository,
   type OpenEngageDatabase,
-  writeAuditLog,
+  type ProjectBriefCommandOutcome,
 } from "@openengage/database";
+
+import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
 
 export type ProjectBriefServiceFailure =
   | "not_found"
   | "invalid_state"
+  | "write_conflict"
   | "revision_conflict"
   | "invalid_member"
   | "forbidden_actor"
@@ -27,11 +33,15 @@ export class ProjectBriefServiceError extends Error {
   }
 }
 
+interface ExpectedRowVersion {
+  expectedRowVersion?: number | undefined;
+}
+
 export async function listProjectBriefs(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<ProjectBriefSummary[]> {
-  return new ProjectBriefRepository(database, workspace).listBriefs();
+  return new ProjectBriefQueryRepository(database, workspace).listBriefs();
 }
 
 export async function getProjectBrief(
@@ -39,7 +49,10 @@ export async function getProjectBrief(
   workspace: WorkspaceContext,
   id: string,
 ): Promise<ProjectBriefDetail> {
-  const detail = await new ProjectBriefRepository(database, workspace).getBrief(id);
+  const detail = await new ProjectBriefQueryRepository(database, workspace).getBrief(
+    id,
+    loadMarketingCapabilitySnapshot(),
+  );
   if (!detail) fail("not_found");
   return detail;
 }
@@ -48,81 +61,103 @@ export async function projectBriefMembers(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<ProjectMemberOption[]> {
-  return new ProjectBriefRepository(database, workspace).eligibleMembers();
+  return new ProjectBriefQueryRepository(database, workspace).eligibleMembers();
 }
 
 export async function approvedProjectBriefContext(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   reference: { projectId?: string | undefined; briefRevision?: number | undefined },
-): Promise<
-  | {
-      projectId: string;
-      revision: number;
-      name: string;
-      primaryMotion: ProjectBriefDetail["project"]["primaryMotion"];
-      definition: ProjectBriefDetail["definition"];
-    }
-  | undefined
-> {
+): Promise<ApprovedMarketingBriefContext | undefined> {
   const { projectId, briefRevision } = reference;
   if (projectId === undefined && briefRevision === undefined) return undefined;
   if (!projectId || briefRevision === undefined) fail("revision_conflict");
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, projectId);
+  const repository = new ProjectBriefQueryRepository(database, workspace);
+  const context = await repository.getApprovedContext(projectId, briefRevision);
+  if (context) return context;
+
+  const record = await repository.findRecord(projectId);
+  if (!record) fail("not_found");
   requireOwnerOrAdmin(workspace, record.ownerUserId);
   if (record.status !== "approved") fail("invalid_state");
   if (record.revision !== briefRevision) fail("revision_conflict");
-  const detail = await repository.getBrief(projectId);
-  if (!detail) fail("not_found");
-  return {
-    projectId,
-    revision: record.revision,
-    name: detail.project.name,
-    primaryMotion: record.primaryMotion,
-    definition: detail.definition,
-  };
+  // An approved revision must always have an immutable snapshot. Missing data
+  // is a conflict instead of silently trusting the mutable current row.
+  fail("write_conflict");
 }
 
 export async function createProjectBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  input: ProjectBriefMutation,
+  input: ProjectBriefDraftInput,
 ): Promise<{ id: string }> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  await validateMembers(repository, input);
-  const result = await repository.createBrief(input);
-  await audit(database, workspace, "project.brief.create", result.id);
-  return result;
+  const result = await new ProjectBriefCommandRepository(database, workspace).createBrief(input);
+  if (result.kind === "invalid_member") fail("invalid_member");
+  if (result.kind === "forbidden_actor") fail("forbidden_actor");
+  return { id: result.id };
 }
 
 export async function updateProjectBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
-  input: ProjectBriefMutation,
+  input: ProjectBriefDraftInput & ExpectedRowVersion,
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, id);
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, id);
   if (record.ownerUserId !== workspace.userId) fail("forbidden_actor");
-  await validateMembers(repository, input);
-  const outcome = await repository.updateBrief(id, input);
-  if (outcome.kind === "not_found") fail("not_found");
-  if (outcome.kind === "invalid_status") fail("invalid_state");
-  if (outcome.kind !== "done") fail("invalid_member");
-  await audit(database, workspace, "project.brief.update", id);
+  if (record.status !== "draft") fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  requireDone(
+    await new ProjectBriefCommandRepository(database, workspace).updateBrief(id, {
+      ...input,
+      expectedRowVersion,
+    }),
+    expectedRowVersion,
+  );
 }
 
 export async function submitProjectBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
+  input: ExpectedRowVersion = {},
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, id);
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, id);
   if (record.ownerUserId !== workspace.userId) fail("forbidden_actor");
-  if (record.status !== "draft" || !(await repository.setPending(id))) fail("invalid_state");
-  await audit(database, workspace, "project.brief.submit", id, { revision: record.revision });
+  if (record.status !== "draft") fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  requireDone(
+    await new ProjectBriefCommandRepository(database, workspace).submit(id, {
+      expectedRowVersion,
+    }),
+    expectedRowVersion,
+  );
+}
+
+export async function withdrawProjectBrief(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  id: string,
+  reason: string,
+  input: ExpectedRowVersion = {},
+): Promise<void> {
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, id);
+  requireOwnerOrAdmin(workspace, record.ownerUserId);
+  if (record.status !== "pending_approval") fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  requireDone(
+    await new ProjectBriefCommandRepository(database, workspace).withdraw(id, {
+      reason,
+      expectedRowVersion,
+    }),
+    expectedRowVersion,
+  );
 }
 
 export async function reviewProjectBrief(
@@ -131,121 +166,166 @@ export async function reviewProjectBrief(
   id: string,
   decision: "approved" | "rejected",
   comment: string,
+  input: ExpectedRowVersion = {},
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, id);
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, id);
   if (record.approverUserId !== workspace.userId) fail("forbidden_actor");
-  if (
-    record.status !== "pending_approval" ||
-    !(await repository.review(id, { decision, comment }))
-  ) {
-    fail("invalid_state");
-  }
-  await audit(database, workspace, `project.brief.${decision}`, id, {
-    revision: record.revision,
-    comment,
-  });
+  if (record.status !== "pending_approval") fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  requireDone(
+    await new ProjectBriefCommandRepository(database, workspace).review(id, {
+      decision,
+      comment,
+      expectedRowVersion,
+    }),
+    expectedRowVersion,
+  );
 }
 
 export async function reopenProjectBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
+  input: ExpectedRowVersion = {},
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, id);
-  requireOwnerOrAdmin(workspace, record.ownerUserId);
-  if (!(await repository.reopen(id))) fail("invalid_state");
-  await audit(database, workspace, "project.brief.reopen", id, {
-    previousRevision: record.revision,
-    revision: record.revision + 1,
-  });
+  await ownerTransition(
+    database,
+    workspace,
+    id,
+    ["approved", "completed"],
+    input,
+    (command, expectedRowVersion) => command.reopen(id, { expectedRowVersion }),
+  );
 }
 
 export async function completeProjectBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
+  input: ExpectedRowVersion = {},
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, id);
-  requireOwnerOrAdmin(workspace, record.ownerUserId);
-  if (!(await repository.complete(id))) fail("invalid_state");
-  await audit(database, workspace, "project.brief.complete", id, { revision: record.revision });
+  await ownerTransition(
+    database,
+    workspace,
+    id,
+    ["approved"],
+    input,
+    (command, expectedRowVersion) => command.complete(id, { expectedRowVersion }),
+  );
 }
 
 export async function archiveProjectBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
+  input: ExpectedRowVersion = {},
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  await requireRecord(repository, id);
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, id);
   if (!isAdmin(workspace)) fail("forbidden_actor");
-  if (!(await repository.archive(id))) fail("not_found");
-  await audit(database, workspace, "project.brief.archive", id);
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  requireDone(
+    await new ProjectBriefCommandRepository(database, workspace).archive(id, {
+      expectedRowVersion,
+    }),
+    expectedRowVersion,
+  );
 }
 
 export async function addProjectBriefItem(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  input: { id: string; resourceType: ProjectResourceType; resourceId: string },
+  input: {
+    id: string;
+    resourceType: ProjectResourceType;
+    resourceId: string;
+    expectedRowVersion?: number | undefined;
+  },
 ): Promise<{ added: boolean }> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, input.id);
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, input.id);
   requireOwnerOrAdmin(workspace, record.ownerUserId);
-  const outcome = await repository.addApprovedItem({
+  if (record.status !== "approved") fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  const outcome = await new ProjectResourceLinkRepository(database, workspace).addApproved({
     projectId: input.id,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
+    expectedRowVersion,
   });
-  if (outcome.kind === "brief_not_approved") fail("invalid_state");
   if (outcome.kind === "resource_not_found") fail("resource_not_found");
-  if (outcome.kind === "project_not_found") fail("not_found");
-  if (outcome.added) {
-    await audit(database, workspace, "project.item.add", input.id, {
-      resourceType: input.resourceType,
-      resourceId: input.resourceId,
-      briefRevision: record.revision,
-    });
-  }
-  return { added: outcome.added };
+  if (outcome.kind === "conflict") fail("write_conflict");
+  return { added: outcome.changed };
 }
 
 export async function removeProjectBriefItem(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  input: { id: string; resourceType: ProjectResourceType; resourceId: string },
+  input: {
+    id: string;
+    resourceType: ProjectResourceType;
+    resourceId: string;
+    expectedRowVersion?: number | undefined;
+  },
 ): Promise<void> {
-  const repository = new ProjectBriefRepository(database, workspace);
-  const record = await requireRecord(repository, input.id);
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, input.id);
   requireOwnerOrAdmin(workspace, record.ownerUserId);
-  await repository.removeItem({
+  if (record.status !== "approved") fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  const outcome = await new ProjectResourceLinkRepository(database, workspace).removeApproved({
     projectId: input.id,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
+    expectedRowVersion,
   });
-  await audit(database, workspace, "project.item.remove", input.id, {
-    resourceType: input.resourceType,
-    resourceId: input.resourceId,
-  });
+  if (outcome.kind === "conflict") fail("write_conflict");
+  if (outcome.kind === "resource_not_found") fail("resource_not_found");
 }
 
-async function validateMembers(
-  repository: ProjectBriefRepository,
-  input: Pick<ProjectBriefMutation, "ownerUserId" | "approverUserId">,
+async function ownerTransition(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  id: string,
+  allowedStatuses: string[],
+  input: ExpectedRowVersion,
+  run: (
+    command: ProjectBriefCommandRepository,
+    expectedRowVersion: number,
+  ) => Promise<ProjectBriefCommandOutcome>,
 ): Promise<void> {
-  if (input.ownerUserId === input.approverUserId) fail("invalid_member");
-  const memberIds = new Set((await repository.eligibleMembers()).map((member) => member.id));
-  if (!memberIds.has(input.ownerUserId) || !memberIds.has(input.approverUserId)) {
-    fail("invalid_member");
-  }
+  const query = new ProjectBriefQueryRepository(database, workspace);
+  const record = await requireRecord(query, id);
+  requireOwnerOrAdmin(workspace, record.ownerUserId);
+  if (!allowedStatuses.includes(record.status)) fail("invalid_state");
+  requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
+  const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
+  requireDone(
+    await run(new ProjectBriefCommandRepository(database, workspace), expectedRowVersion),
+    expectedRowVersion,
+  );
 }
 
-async function requireRecord(repository: ProjectBriefRepository, id: string) {
+async function requireRecord(repository: ProjectBriefQueryRepository, id: string) {
   const record = await repository.findRecord(id);
   if (!record) fail("not_found");
   return record;
+}
+
+function requireExpectedVersion(actual: number, expected?: number): void {
+  if (expected !== undefined && actual !== expected) fail("write_conflict");
+}
+
+function requireDone(outcome: ProjectBriefCommandOutcome, expected?: number): void {
+  if (outcome.kind === "done") return;
+  if (outcome.kind === "invalid_member") fail("invalid_member");
+  if (outcome.kind === "forbidden_actor") fail("forbidden_actor");
+  fail(expected === undefined ? "invalid_state" : "write_conflict");
 }
 
 function requireOwnerOrAdmin(workspace: WorkspaceContext, ownerUserId: string): void {
@@ -254,21 +334,6 @@ function requireOwnerOrAdmin(workspace: WorkspaceContext, ownerUserId: string): 
 
 function isAdmin(workspace: WorkspaceContext): boolean {
   return workspace.role === "admin" || workspace.role === "owner";
-}
-
-async function audit(
-  database: OpenEngageDatabase,
-  workspace: WorkspaceContext,
-  action: string,
-  resourceId: string,
-  metadata?: Record<string, unknown>,
-): Promise<void> {
-  await writeAuditLog(database, workspace, {
-    action,
-    resourceType: "project",
-    resourceId,
-    ...(metadata ? { metadata } : {}),
-  });
 }
 
 function fail(kind: ProjectBriefServiceFailure): never {

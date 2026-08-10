@@ -1,19 +1,19 @@
-import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
-
+import { validateMarketingBriefGenerationResult } from "@openengage/core/agents";
 import {
   marketingBriefGenerationResultSchema,
   type GenerateMarketingBriefInput,
   type MarketingBriefGenerationResult,
 } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { type OpenEngageDatabase, uuidv7 } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database";
 
+import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
+import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
 import { loadAutomationResourceContext } from "../automations/resource-validation";
 import type { RuntimeEnv } from "../env";
 import { loadSegmentCatalog } from "../segments/validation-service";
 
 const GENERATION_TIMEOUT_MS = 60_000;
-const PROPOSAL_PART_NAME = "proposal";
 
 export type MarketingBriefGenerationFailure = "failed" | "timeout" | "unavailable";
 
@@ -37,56 +37,34 @@ export async function generateMarketingBrief(
     loadAutomationResourceContext(database, workspace),
     loadSegmentCatalog(database, workspace),
   ]);
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timeout", "AbortError")),
-    GENERATION_TIMEOUT_MS,
-  );
-  const conversation = createFlueClient({
-    url: `https://agent.internal/internal/marketing-automation-designer/${uuidv7()}`,
-    fetch: (request, init) => env.AGENT_APP.fetch(new Request(request, init)),
-  });
+  const initialData = {
+    request: input,
+    now: new Date().toISOString(),
+    catalog: resources.catalog,
+    segmentCatalog,
+    capabilities: loadMarketingCapabilitySnapshot(),
+  };
   try {
-    const admission = await conversation.send({
-      message: { kind: "user", body: input.prompt },
-      initialData: {
-        request: input,
-        now: new Date().toISOString(),
-        catalog: resources.catalog,
-        segmentCatalog,
-        capabilities: {
-          marketingEmailDelivery: false,
-          emailOpenTracking: false,
-          emailClickTracking: false,
-          ga4Integration: false,
-        },
-      },
-      uid: null,
-      signal: controller.signal,
+    const result = await requestAgentProposal({
+      env,
+      agent: "marketing-automation-designer",
+      prompt: input.prompt,
+      initialData,
+      schema: marketingBriefGenerationResultSchema,
+      timeoutMs: GENERATION_TIMEOUT_MS,
     });
-    const reply = await conversation.read(admission, { signal: controller.signal });
-    const proposal = reply.data[PROPOSAL_PART_NAME]?.at(-1);
-    const parsed = marketingBriefGenerationResultSchema.safeParse(proposal);
-    if (!parsed.success) throw new MarketingBriefGenerationError("failed", { cause: parsed.error });
-    return parsed.data;
+    const issues = validateMarketingBriefGenerationResult(result, input, segmentCatalog);
+    if (issues.length > 0) {
+      throw new MarketingBriefGenerationError("failed", {
+        cause: new Error(issues.join("; ")),
+      });
+    }
+    return result;
   } catch (error) {
     if (error instanceof MarketingBriefGenerationError) throw error;
-    if (controller.signal.aborted || isAbortError(error)) {
-      await conversation.abort().catch(() => undefined);
-      throw new MarketingBriefGenerationError("timeout", { cause: error });
+    if (error instanceof AgentProposalError) {
+      throw new MarketingBriefGenerationError(error.kind, { cause: error });
     }
-    if (error instanceof FlueApiError) {
-      throw new MarketingBriefGenerationError("unavailable", { cause: error });
-    }
-    if (error instanceof FlueExecutionError) {
-      throw new MarketingBriefGenerationError("failed", { cause: error });
-    }
-    throw new MarketingBriefGenerationError("unavailable", { cause: error });
-  } finally {
-    clearTimeout(timeout);
+    throw error;
   }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./agents": "./src/agents/schema.ts",
+    "./agents": "./src/agents/index.ts",
     "./assets": "./src/assets/index.ts",
     "./automations": "./src/automations/index.ts",
     "./consent": "./src/consent/index.ts",

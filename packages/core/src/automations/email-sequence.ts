@@ -6,6 +6,11 @@ import {
   emailHrefSchema,
   emailPurposeSchema,
 } from "../messaging/index.js";
+import {
+  approvedMarketingBriefContextSchema,
+  marketingCapabilitySnapshotSchema,
+  projectBriefReferenceSchema,
+} from "../projects/schema.js";
 import { validateAutomation, type AutomationValidationIssue } from "./automation.js";
 import { automationGenerationCatalogSchema, automationResourceKindSchema } from "./generation.js";
 import { automationDefinitionSchema, emailSequenceTypeSchema } from "./schema.js";
@@ -147,19 +152,19 @@ export type EmailSequenceProposal = z.infer<typeof emailSequenceProposalSchema>;
 
 const generationRequestBaseSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
-  projectId: z.string().min(1).optional(),
-  briefRevision: z.number().int().positive().optional(),
   continuation: emailSequenceContinuationSchema.optional(),
   resolutions: z.array(emailSequenceResolutionSchema).max(100).optional(),
 });
 
-export const generateEmailSequenceInputSchema = z.discriminatedUnion("mode", [
-  generationRequestBaseSchema.extend({ mode: z.literal("create") }),
-  generationRequestBaseSchema.extend({
-    mode: z.literal("refine"),
-    currentProposal: emailSequenceProposalSchema,
-  }),
-]);
+export const generateEmailSequenceInputSchema = projectBriefReferenceSchema.and(
+  z.discriminatedUnion("mode", [
+    generationRequestBaseSchema.extend({ mode: z.literal("create") }),
+    generationRequestBaseSchema.extend({
+      mode: z.literal("refine"),
+      currentProposal: emailSequenceProposalSchema,
+    }),
+  ]),
+);
 export type GenerateEmailSequenceInput = z.infer<typeof generateEmailSequenceInputSchema>;
 
 const needsInputBaseSchema = z.object({
@@ -203,10 +208,9 @@ export const emailSequenceGenerationResultSchema = z.discriminatedUnion("status"
 ]);
 export type EmailSequenceGenerationResult = z.infer<typeof emailSequenceGenerationResultSchema>;
 
-export const applyEmailSequenceInputSchema = emailSequenceProposalSchema.extend({
-  projectId: z.string().min(1).optional(),
-  briefRevision: z.number().int().positive().optional(),
-});
+export const applyEmailSequenceInputSchema = emailSequenceProposalSchema.and(
+  projectBriefReferenceSchema,
+);
 export const applyEmailSequenceResultSchema = z.object({
   automationId: z.string(),
   draftVersionId: z.string(),
@@ -321,34 +325,37 @@ export function validateEmailSequenceProposal(
   return issues;
 }
 
-export const emailSequenceDesignerInitialDataSchema = z.object({
-  request: generateEmailSequenceInputSchema,
-  trustedBrief: z.unknown().optional(),
-  catalog: automationGenerationCatalogSchema,
-  brand: emailBrandProfileSchema,
-  variables: z
-    .array(
-      z.object({
-        key: z.string().min(1).max(191),
-        name: z.string().min(1).max(191),
-        description: z.string().max(500),
-      }),
-    )
-    .max(1_000),
-  publicImages: z
-    .array(
-      z.object({
-        id: z.string().min(1).max(191),
-        name: z.string().min(1).max(191),
-        altText: z.string().max(500),
-        width: z.number().int().positive().nullable(),
-        height: z.number().int().positive().nullable(),
-      }),
-    )
-    .max(1_000),
-  reserved: z.object({
-    proposalId: z.string().min(1),
-    automationId: z.string().min(1),
-    templateIds: z.array(z.string().min(1)).length(8),
-  }),
-});
+export const emailSequenceDesignerInitialDataSchema = z
+  .object({
+    request: generateEmailSequenceInputSchema,
+    trustedBrief: approvedMarketingBriefContextSchema.optional(),
+    capabilities: marketingCapabilitySnapshotSchema,
+    catalog: automationGenerationCatalogSchema,
+    brand: emailBrandProfileSchema,
+    variables: z
+      .array(
+        z.object({
+          key: z.string().min(1).max(191),
+          name: z.string().min(1).max(191),
+          description: z.string().max(500),
+        }),
+      )
+      .max(1_000),
+    publicImages: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(191),
+          name: z.string().min(1).max(191),
+          altText: z.string().max(500),
+          width: z.number().int().positive().nullable(),
+          height: z.number().int().positive().nullable(),
+        }),
+      )
+      .max(1_000),
+    reserved: z.object({
+      proposalId: z.string().min(1),
+      automationId: z.string().min(1),
+      templateIds: z.array(z.string().min(1)).length(8),
+    }),
+  })
+  .strict();

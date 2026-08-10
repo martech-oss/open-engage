@@ -2,11 +2,9 @@ import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type {
-  ProjectBriefDetail,
-  ProjectBriefMutation,
-  ProjectBriefStatus,
-} from "@openengage/core/projects";
+import type { ProjectBriefDetail, ProjectBriefStatus } from "@openengage/core/projects";
+
+import { formDraftFromInput, type ProjectBriefFormDraft } from "./project-brief-form";
 
 export function BriefStatus({ status }: { status: ProjectBriefStatus }): ReactNode {
   return (
@@ -53,8 +51,8 @@ export function BriefSection({
   );
 }
 
-export function mutationFromDetail(detail: ProjectBriefDetail): ProjectBriefMutation {
-  return {
+export function mutationFromDetail(detail: ProjectBriefDetail): ProjectBriefFormDraft {
+  return formDraftFromInput({
     name: detail.project.name,
     description: detail.project.description,
     color: detail.project.color,
@@ -63,7 +61,7 @@ export function mutationFromDetail(detail: ProjectBriefDetail): ProjectBriefMuta
     primaryMotion: detail.project.primaryMotion,
     reviewAt: detail.project.reviewAt,
     definition: detail.definition,
-  };
+  });
 }
 
 export function baselineLabel(

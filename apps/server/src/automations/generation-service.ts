@@ -1,5 +1,3 @@
-import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
-
 import {
   automationGenerationAgentResultSchema,
   type AutomationGenerationAgentResult,
@@ -10,9 +8,12 @@ import {
   type GenerateAutomationInput,
   validateAutomation,
 } from "@openengage/core/automations";
+import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase, uuidv7 } from "@openengage/database";
 
+import { loadMarketingAgentContext } from "../agents/marketing-context";
+import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 import { normalizeGeneratedAutomation } from "./generation-normalizer";
 import {
@@ -22,7 +23,6 @@ import {
 } from "./resource-validation";
 
 const GENERATION_TIMEOUT_MS = 60_000;
-const PROPOSAL_PART_NAME = "proposal";
 
 export type AutomationGenerationFailure = "failed" | "timeout" | "unavailable";
 
@@ -41,7 +41,7 @@ export async function generateAutomation(
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: GenerateAutomationInput,
-  trustedBrief?: unknown,
+  trustedBrief?: ApprovedMarketingBriefContext,
 ): Promise<AutomationGenerationResult> {
   const resources = await loadAutomationResourceContext(database, workspace);
   const unresolved = unresolvedContinuation(input, resources.catalog);
@@ -84,48 +84,22 @@ async function requestAutomationProposal(
   env: RuntimeEnv,
   request: GenerateAutomationInput,
   catalog: AutomationGenerationCatalog,
-  trustedBrief?: unknown,
+  trustedBrief?: ApprovedMarketingBriefContext,
 ): Promise<AutomationGenerationAgentResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timeout", "AbortError")),
-    GENERATION_TIMEOUT_MS,
-  );
-  const conversation = createFlueClient({
-    url: `https://agent.internal/internal/automation-designer/${uuidv7()}`,
-    fetch: (input, init) => env.AGENT_APP.fetch(new Request(input, init)),
-  });
-
   try {
-    const admission = await conversation.send({
-      message: { kind: "user", body: request.prompt },
-      initialData: { request, catalog, ...(trustedBrief ? { trustedBrief } : {}) },
-      uid: null,
-      signal: controller.signal,
+    return await requestAgentProposal({
+      env,
+      agent: "automation-designer",
+      prompt: request.prompt,
+      initialData: { request, catalog, ...loadMarketingAgentContext(trustedBrief) },
+      schema: automationGenerationAgentResultSchema,
+      timeoutMs: GENERATION_TIMEOUT_MS,
     });
-    const reply = await conversation.read(admission, { signal: controller.signal });
-    const proposalParts = reply.data[PROPOSAL_PART_NAME] ?? [];
-    const proposal = proposalParts.at(-1);
-    const parsed = automationGenerationAgentResultSchema.safeParse(proposal);
-    if (!parsed.success) {
-      throw new AutomationGenerationError("failed", { cause: parsed.error });
-    }
-    return parsed.data;
   } catch (error) {
-    if (error instanceof AutomationGenerationError) throw error;
-    if (controller.signal.aborted || isAbortError(error)) {
-      await conversation.abort().catch(() => undefined);
-      throw new AutomationGenerationError("timeout", { cause: error });
+    if (error instanceof AgentProposalError) {
+      throw new AutomationGenerationError(error.kind, { cause: error });
     }
-    if (error instanceof FlueApiError) {
-      throw new AutomationGenerationError("unavailable", { cause: error });
-    }
-    if (error instanceof FlueExecutionError) {
-      throw new AutomationGenerationError("failed", { cause: error });
-    }
-    throw new AutomationGenerationError("unavailable", { cause: error });
-  } finally {
-    clearTimeout(timeout);
+    throw error;
   }
 }
 
@@ -174,8 +148,4 @@ function assertUniqueRequests(requests: AutomationResourceRequest[]): void {
     }
     ids.add(request.requestId);
   }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }

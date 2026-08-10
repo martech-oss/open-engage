@@ -1,22 +1,16 @@
-import { SegmentRepository, writeAuditLog } from "@openengage/database";
+import {
+  ProjectBriefLinkConflictError,
+  SegmentRepository,
+  writeAuditLog,
+} from "@openengage/database";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import {
-  approvedProjectBriefContext,
-  ProjectBriefServiceError,
-} from "../web/project-brief-service";
+import { resolveApprovedProjectBriefContext } from "../web/project-brief-context";
 import { SegmentGenerationError, generateSegment } from "./generation-service";
 import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
 import { loadSegmentCatalog, validateSegmentFilter } from "./validation-service";
-
-interface BriefContextErrors {
-  BRIEF_NOT_FOUND: () => Error;
-  BRIEF_NOT_APPROVED: () => Error;
-  BRIEF_REVISION_CONFLICT: () => Error;
-  FORBIDDEN: () => Error;
-}
 
 export const listSegmentsProcedure = authed.segments.list.handler(async ({ context }) => {
   return listSegments(context.database, context.workspace);
@@ -48,7 +42,7 @@ export const createSegmentProcedure = authed.segments.create.handler(
       );
       if (!validation.valid) throw errors.INVALID_SEGMENT_FILTER();
     }
-    const trustedBrief = await resolveBriefContext(
+    const trustedBrief = await resolveApprovedProjectBriefContext(
       context.database,
       context.workspace,
       input,
@@ -73,7 +67,11 @@ export const createSegmentProcedure = authed.segments.create.handler(
           : {}),
       });
     } catch (error) {
-      throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (error instanceof ProjectBriefLinkConflictError) {
+        throw errors.BRIEF_REVISION_CONFLICT();
+      }
+      if (isSegmentSlugConflict(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      throw error;
     }
     if (input.kind === "dynamic") {
       await refreshSegmentMemberships(
@@ -83,24 +81,12 @@ export const createSegmentProcedure = authed.segments.create.handler(
         1,
       );
     }
-    context.executionContext.waitUntil(
-      writeAuditLog(context.database, context.workspace, {
-        action: "segment.create",
-        resourceType: "segment",
-        resourceId: created.id,
-      }),
-    );
-    if (trustedBrief) {
+    if (!trustedBrief) {
       context.executionContext.waitUntil(
         writeAuditLog(context.database, context.workspace, {
-          action: "project.item.add",
-          resourceType: "project",
-          resourceId: trustedBrief.projectId,
-          metadata: {
-            resourceType: "segment",
-            resourceId: created.id,
-            briefRevision: trustedBrief.revision,
-          },
+          action: "segment.create",
+          resourceType: "segment",
+          resourceId: created.id,
         }),
       );
     }
@@ -135,7 +121,8 @@ export const updateSegmentProcedure = authed.segments.update.handler(
         ...(filter ? { filter } : {}),
       });
     } catch (error) {
-      throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isSegmentSlugConflict(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      throw error;
     }
     if (!updated) throw errors.SEGMENT_NOT_FOUND();
     if (input.kind === "dynamic") {
@@ -168,7 +155,7 @@ export const generateSegmentProcedure = authed.segments.generate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      const trustedBrief = await resolveBriefContext(
+      const trustedBrief = await resolveApprovedProjectBriefContext(
         context.database,
         context.workspace,
         input,
@@ -194,23 +181,6 @@ export const generateSegmentProcedure = authed.segments.generate.handler(
     }
   },
 );
-
-async function resolveBriefContext(
-  database: Parameters<typeof approvedProjectBriefContext>[0],
-  workspace: Parameters<typeof approvedProjectBriefContext>[1],
-  reference: { projectId?: string | undefined; briefRevision?: number | undefined },
-  errors: BriefContextErrors,
-) {
-  try {
-    return await approvedProjectBriefContext(database, workspace, reference);
-  } catch (error) {
-    if (!(error instanceof ProjectBriefServiceError)) throw error;
-    if (error.kind === "not_found") throw errors.BRIEF_NOT_FOUND();
-    if (error.kind === "revision_conflict") throw errors.BRIEF_REVISION_CONFLICT();
-    if (error.kind === "forbidden_actor") throw errors.FORBIDDEN();
-    throw errors.BRIEF_NOT_APPROVED();
-  }
-}
 
 export const refreshSegmentProcedure = authed.segments.refresh.handler(
   async ({ context, input, errors }) => {
@@ -260,3 +230,9 @@ export const segmentProcedures = {
   refresh: refreshSegmentProcedure,
   preview: previewSegmentProcedure,
 };
+
+/** Only the workspace/slug unique key is a user-facing name conflict. */
+function isSegmentSlugConflict(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /unique constraint failed:\s*segments\.workspace_id,\s*segments\.slug/i.test(message);
+}

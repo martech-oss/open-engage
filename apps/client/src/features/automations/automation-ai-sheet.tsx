@@ -25,47 +25,65 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  createAiProposalWorkflowKey,
+  useAiProposalWorkflow,
+} from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import type {
   AutomationDefinition,
   AutomationGenerationResult,
   AutomationResourceResolution,
 } from "@openengage/core/automations";
+import type { ProjectBriefReference } from "@openengage/core/projects";
 
 import { useGenerateAutomation } from "./automation-api";
 import { nodeLabel, nodeTypeLabel } from "./automation-labels";
 
 const OMIT_VALUE = "__omit__";
 
+export type AutomationAiSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  mode: "create" | "refine";
+  currentDefinition?: AutomationDefinition;
+  entityId?: string;
+  onApply: (definition: AutomationDefinition) => Promise<void>;
+} & ProjectBriefReference;
+
 export function AutomationAiSheet({
   open,
   onOpenChange,
   mode,
   currentDefinition,
-  projectId,
-  briefRevision,
+  entityId,
   onApply,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  mode: "create" | "refine";
-  currentDefinition?: AutomationDefinition;
-  projectId?: string;
-  briefRevision?: number;
-  onApply: (definition: AutomationDefinition) => Promise<void>;
-}): ReactNode {
+  ...briefReference
+}: AutomationAiSheetProps): ReactNode {
   const generate = useGenerateAutomation();
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<AutomationGenerationResult | null>(null);
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [applying, setApplying] = useState(false);
+  const workflow = useAiProposalWorkflow({
+    open,
+    workflowKey: createAiProposalWorkflowKey({
+      resource: "automation",
+      mode,
+      entityId,
+      projectId: briefReference.projectId,
+      briefRevision: briefReference.briefRevision,
+    }),
+    onReset: clearState,
+  });
   const resourceReady =
     result?.status !== "needs_input" ||
     result.resources.every((request) => Boolean(selections[request.requestId]));
 
   async function submitGeneration(): Promise<void> {
     if (!prompt.trim()) return;
+    const token = workflow.beginRequest();
     setError("");
     try {
       const continuation = result?.status === "needs_input" ? result.continuation : undefined;
@@ -78,7 +96,7 @@ export function AutomationAiSheet({
               prompt,
               continuation,
               resolutions,
-              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+              ...briefReference,
             }
           : {
               mode,
@@ -86,18 +104,22 @@ export function AutomationAiSheet({
               currentDefinition: requireCurrentDefinition(currentDefinition),
               continuation,
               resolutions,
-              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+              ...briefReference,
             },
       );
-      setResult(next);
-      setSelections({});
+      workflow.acceptResponse(token, () => {
+        setResult(next);
+        setSelections({});
+      });
     } catch (cause) {
-      setError(getErrorMessage(cause, "AIによる提案を生成できませんでした"));
+      if (workflow.isCurrentResponse(token)) {
+        setError(getErrorMessage(cause, "AIによる提案を生成できませんでした"));
+      }
     }
   }
 
   async function applyProposal(): Promise<void> {
-    if (result?.status !== "ready") return;
+    if (result?.status !== "ready" || !workflow.canApply) return;
     setApplying(true);
     setError("");
     try {
@@ -109,10 +131,16 @@ export function AutomationAiSheet({
     }
   }
 
-  function restart(): void {
+  function clearState(): void {
+    setPrompt("");
     setResult(null);
     setSelections({});
     setError("");
+    setApplying(false);
+  }
+
+  function restart(): void {
+    workflow.reset();
   }
 
   return (
@@ -179,7 +207,12 @@ export function AutomationAiSheet({
             </Button>
           ) : null}
           {result?.status === "ready" ? (
-            <LoadingButton busy={applying} busyLabel="適用中…" onClick={() => void applyProposal()}>
+            <LoadingButton
+              busy={applying}
+              busyLabel="適用中…"
+              disabled={!workflow.canApply}
+              onClick={() => void applyProposal()}
+            >
               <Sparkles data-icon="inline-start" />
               {mode === "create" ? "この内容で下書きを作成" : "キャンバスに適用"}
             </LoadingButton>

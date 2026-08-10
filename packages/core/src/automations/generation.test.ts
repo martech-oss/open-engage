@@ -37,6 +37,24 @@ describe("automation generation schemas", () => {
     ).toBe(false);
   });
 
+  it("requires projectId and briefRevision together", () => {
+    expect(
+      generateAutomationInputSchema.safeParse({
+        mode: "create",
+        prompt: "登録後にメール",
+        projectId: "project-id",
+      }).success,
+    ).toBe(false);
+    expect(
+      generateAutomationInputSchema.safeParse({
+        mode: "create",
+        prompt: "登録後にメール",
+        projectId: "project-id",
+        briefRevision: 2,
+      }).success,
+    ).toBe(true);
+  });
+
   it("parses ready and needs-input results", () => {
     expect(
       automationGenerationResultSchema.parse({

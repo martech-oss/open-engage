@@ -43,4 +43,19 @@ describe("automationBuilderReducer", () => {
     expect(state.definition.nodes).toEqual([]);
     expect(state.selectedNodeId).toBeNull();
   });
+
+  it("resets the graph and selection when the route entity changes", () => {
+    const next = {
+      ...definition,
+      name: "Another automation",
+      nodes: [{ ...definition.nodes[0]!, id: "another-source" }],
+    };
+    const state = automationBuilderReducer(
+      { definition, selectedNodeId: "source" },
+      { type: "reset_for_entity", definition: next },
+    );
+
+    expect(state.definition.name).toBe("Another automation");
+    expect(state.selectedNodeId).toBe("another-source");
+  });
 });

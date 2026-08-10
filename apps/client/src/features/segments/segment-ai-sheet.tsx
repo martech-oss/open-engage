@@ -18,7 +18,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  createAiProposalWorkflowKey,
+  useAiProposalWorkflow,
+} from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
+import type { ProjectBriefReference } from "@openengage/core/projects";
 import type {
   SegmentDefinition,
   SegmentGenerationResult,
@@ -27,35 +32,48 @@ import type {
 
 import { useGenerateSegment } from "./segment-api";
 
+export type SegmentAiSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  mode: "create" | "refine";
+  currentDefinition?: SegmentDefinition;
+  entityId?: string;
+  onApply: (definition: SegmentDefinition) => Promise<void>;
+} & ProjectBriefReference;
+
 export function SegmentAiSheet({
   open,
   onOpenChange,
   mode,
   currentDefinition,
-  projectId,
-  briefRevision,
+  entityId,
   onApply,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  mode: "create" | "refine";
-  currentDefinition?: SegmentDefinition;
-  projectId?: string;
-  briefRevision?: number;
-  onApply: (definition: SegmentDefinition) => Promise<void>;
-}): ReactNode {
+  ...briefReference
+}: SegmentAiSheetProps): ReactNode {
   const generate = useGenerateSegment();
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<SegmentGenerationResult | null>(null);
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [applying, setApplying] = useState(false);
+  const workflow = useAiProposalWorkflow({
+    open,
+    workflowKey: createAiProposalWorkflowKey({
+      resource: "segment",
+      mode,
+      entityId,
+      projectId: briefReference.projectId,
+      briefRevision: briefReference.briefRevision,
+    }),
+    onReset: clearState,
+  });
   const resourcesReady =
     result?.status !== "needs_input" ||
     result.resources.every((request) => Boolean(selections[request.requestId]));
 
   async function submit(): Promise<void> {
     if (!prompt.trim()) return;
+    const token = workflow.beginRequest();
     setError("");
     try {
       const continuation = result?.status === "needs_input" ? result.continuation : undefined;
@@ -73,7 +91,7 @@ export function SegmentAiSheet({
               prompt,
               continuation,
               resolutions,
-              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+              ...briefReference,
             }
           : {
               mode,
@@ -81,18 +99,22 @@ export function SegmentAiSheet({
               currentDefinition: requireDefinition(currentDefinition),
               continuation,
               resolutions,
-              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+              ...briefReference,
             },
       );
-      setResult(next);
-      setSelections({});
+      workflow.acceptResponse(token, () => {
+        setResult(next);
+        setSelections({});
+      });
     } catch (cause) {
-      setError(getErrorMessage(cause, "AIによるセグメント提案を生成できませんでした"));
+      if (workflow.isCurrentResponse(token)) {
+        setError(getErrorMessage(cause, "AIによるセグメント提案を生成できませんでした"));
+      }
     }
   }
 
   async function apply(): Promise<void> {
-    if (result?.status !== "ready") return;
+    if (result?.status !== "ready" || !workflow.canApply) return;
     setApplying(true);
     setError("");
     try {
@@ -105,10 +127,16 @@ export function SegmentAiSheet({
     }
   }
 
-  function restart(): void {
+  function clearState(): void {
+    setPrompt("");
     setResult(null);
     setSelections({});
     setError("");
+    setApplying(false);
+  }
+
+  function restart(): void {
+    workflow.reset();
   }
 
   return (
@@ -215,7 +243,12 @@ export function SegmentAiSheet({
             </Button>
           ) : null}
           {result?.status === "ready" ? (
-            <LoadingButton busy={applying} busyLabel="適用中…" onClick={() => void apply()}>
+            <LoadingButton
+              busy={applying}
+              busyLabel="適用中…"
+              disabled={!workflow.canApply}
+              onClick={() => void apply()}
+            >
               <Sparkles data-icon="inline-start" />
               この内容で{mode === "create" ? "作成" : "更新"}
             </LoadingButton>

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, sql, type SQL } from "drizzle-orm";
 
 import {
   type CompiledSegment,
@@ -20,7 +20,14 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { projectItems } from "../web/schema";
+import { conditionalAudit } from "../web/project-brief-persistence";
+import {
+  authenticatedProjectActorId,
+  approvedProjectLinkPrecondition,
+  ProjectBriefLinkConflictError,
+  type ApprovedProjectLink,
+} from "../web/project-resource-guard";
+import { projectBriefs, projectItems } from "../web/schema";
 import { segmentMemberships, segments } from "./schema";
 
 const filterAstCodec = defineJsonCodec(segmentFilterSchema, "segments.filter_ast");
@@ -50,11 +57,11 @@ export class SegmentRepository extends WorkspaceRepository {
     kind: "static" | "dynamic";
     filter?: SegmentFilter | undefined;
     membershipSource?: string | null | undefined;
-    projectLink?: { projectId: string; briefRevision: number; addedByUserId: string } | undefined;
+    projectLink?: ApprovedProjectLink | undefined;
   }): Promise<{ id: string; createdAt: string; updatedAt: string }> {
     const id = uuidv7();
     const now = nowIso();
-    const insertSegment = this.database.orm.insert(segments).values({
+    const segmentValues = {
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
@@ -66,22 +73,69 @@ export class SegmentRepository extends WorkspaceRepository {
       evaluationStatus: input.kind === "dynamic" ? "pending" : "ready",
       createdAt: now,
       updatedAt: now,
-    });
+    };
     if (input.projectLink) {
-      await this.database.orm.batch([
-        insertSegment,
-        this.database.orm.insert(projectItems).values({
-          workspaceId: this.context.workspaceId,
-          projectId: input.projectLink.projectId,
-          resourceType: "segment",
-          resourceId: id,
-          briefRevision: input.projectLink.briefRevision,
-          addedByUserId: input.projectLink.addedByUserId,
-          createdAt: now,
-        }),
+      const link = input.projectLink;
+      const precondition = approvedProjectLinkPrecondition(
+        this.database.orm,
+        this.context.workspaceId,
+        authenticatedProjectActorId(this.context),
+        link,
+      );
+      const [created] = await this.database.orm.batch([
+        this.database.orm.insert(segments).select(
+          sql`SELECT
+            ${id}, ${this.context.workspaceId}, ${segmentValues.name}, ${segmentValues.slug},
+            ${segmentValues.description}, ${segmentValues.kind}, ${segmentValues.filterAst},
+            ${segmentValues.membershipSource}, 1, 0, NULL, ${segmentValues.evaluationStatus},
+            NULL, ${now}, ${now}
+          WHERE ${exists(precondition)}`,
+        ),
+        this.database.orm.insert(projectItems).select(
+          sql`SELECT
+            ${this.context.workspaceId}, ${link.projectId}, 'segment', ${id},
+            ${link.briefRevision}, ${link.addedByUserId}, ${now}
+          WHERE ${exists(precondition)}`,
+        ),
+        conditionalAudit(
+          this.database.orm,
+          this.context,
+          link.addedByUserId,
+          { action: "segment.create", resourceType: "segment", resourceId: id },
+          precondition,
+          now,
+        ),
+        conditionalAudit(
+          this.database.orm,
+          this.context,
+          link.addedByUserId,
+          {
+            action: "project.item.add",
+            resourceType: "project",
+            resourceId: link.projectId,
+            metadata: {
+              resourceType: "segment",
+              resourceId: id,
+              briefRevision: link.briefRevision,
+            },
+          },
+          precondition,
+          now,
+        ),
+        this.database.orm
+          .update(projectBriefs)
+          .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
+          .where(
+            and(
+              eq(projectBriefs.workspaceId, this.context.workspaceId),
+              eq(projectBriefs.projectId, link.projectId),
+              exists(precondition),
+            ),
+          ),
       ]);
+      if (created.meta.changes !== 1) throw new ProjectBriefLinkConflictError();
     } else {
-      await insertSegment;
+      await this.database.orm.insert(segments).values(segmentValues);
     }
     return { id, createdAt: now, updatedAt: now };
   }

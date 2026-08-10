@@ -22,3 +22,25 @@ export const forbiddenError = {
 } as const;
 
 export const authedErrors = { ...workspaceErrors, ...forbiddenError } as const;
+
+export const briefContextErrors = {
+  BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
+  BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },
+  BRIEF_REVISION_CONFLICT: { status: 409, message: "施策ブリーフのrevisionが一致しません" },
+} as const;
+
+export const projectBriefNotFoundError = {
+  PROJECT_BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
+} as const;
+
+export const projectBriefStateErrors = {
+  INVALID_BRIEF_STATE: { status: 409, message: "現在の状態ではこの操作を実行できません" },
+  BRIEF_WRITE_CONFLICT: {
+    status: 409,
+    message: "施策ブリーフが更新されています。最新の内容を再読み込みしてください",
+  },
+} as const;
+
+export const projectBriefMemberError = {
+  INVALID_BRIEF_MEMBER: { status: 422, message: "担当者または承認者が無効です" },
+} as const;

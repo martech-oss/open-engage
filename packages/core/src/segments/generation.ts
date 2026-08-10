@@ -1,5 +1,10 @@
 import * as z from "zod";
 
+import {
+  approvedMarketingBriefContextSchema,
+  marketingCapabilitySnapshotSchema,
+  projectBriefReferenceSchema,
+} from "../projects/schema.js";
 import { segmentFilterSchema } from "./schema.js";
 
 export const SEGMENT_RESOURCE_KINDS = [
@@ -87,19 +92,19 @@ export type SegmentResourceResolution = z.infer<typeof segmentResourceResolution
 
 const requestBaseSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
-  projectId: z.string().min(1).optional(),
-  briefRevision: z.number().int().positive().optional(),
   continuation: segmentGenerationContinuationSchema.optional(),
   resolutions: z.array(segmentResourceResolutionSchema).max(100).optional(),
 });
 
-export const generateSegmentInputSchema = z.discriminatedUnion("mode", [
-  requestBaseSchema.extend({ mode: z.literal("create") }),
-  requestBaseSchema.extend({
-    mode: z.literal("refine"),
-    currentDefinition: segmentDefinitionSchema,
-  }),
-]);
+export const generateSegmentInputSchema = projectBriefReferenceSchema.and(
+  z.discriminatedUnion("mode", [
+    requestBaseSchema.extend({ mode: z.literal("create") }),
+    requestBaseSchema.extend({
+      mode: z.literal("refine"),
+      currentDefinition: segmentDefinitionSchema,
+    }),
+  ]),
+);
 export type GenerateSegmentInput = z.infer<typeof generateSegmentInputSchema>;
 
 const generationReadyBase = {
@@ -160,9 +165,12 @@ export const segmentGenerationCatalogSchema = z.object({
 });
 export type SegmentGenerationCatalog = z.infer<typeof segmentGenerationCatalogSchema>;
 
-export const segmentDesignerInitialDataSchema = z.object({
-  request: generateSegmentInputSchema,
-  catalog: segmentGenerationCatalogSchema,
-  trustedBrief: z.unknown().optional(),
-});
+export const segmentDesignerInitialDataSchema = z
+  .object({
+    request: generateSegmentInputSchema,
+    catalog: segmentGenerationCatalogSchema,
+    trustedBrief: approvedMarketingBriefContextSchema.optional(),
+    capabilities: marketingCapabilitySnapshotSchema,
+  })
+  .strict();
 export type SegmentDesignerInitialData = z.infer<typeof segmentDesignerInitialDataSchema>;

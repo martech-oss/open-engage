@@ -7,7 +7,7 @@ import {
   formOptionsQueryOptions,
   segmentOptionsQueryOptions,
 } from "@/features/automations/automation-api";
-import { AutomationBuilder } from "@/features/automations/automation-pages";
+import { AutomationBuilder } from "@/features/automations/automation-editor-page";
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 
 export const Route = createFileRoute("/_app/automations/$id")({
@@ -30,6 +30,7 @@ function AutomationRoute() {
   const { data: segments } = useSuspenseQuery(segmentOptionsQueryOptions());
   return (
     <AutomationBuilder
+      key={id}
       id={id}
       initialDraft={draft}
       options={{

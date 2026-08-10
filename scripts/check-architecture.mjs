@@ -9,6 +9,18 @@ const largeFileAllowlist = [
   "packages/database/src/deals/repository.ts",
 ];
 
+// These files are intentionally split by domain responsibility. Their lower
+// limits prevent the former all-in-one project brief schema/contract from
+// gradually growing back below the repository-wide 600-line ceiling.
+const focusedFileLineLimits = new Map([
+  ["packages/core/src/projects/definition.ts", 200],
+  ["packages/core/src/projects/dto.ts", 200],
+  ["packages/core/src/projects/generation.ts", 100],
+  ["packages/core/src/projects/workflow.ts", 220],
+  ["packages/orpc/src/projects/contract.ts", 250],
+]);
+const projectBriefFileLineLimit = 550;
+
 // Canonical strings from packages/orpc/src/shared/errors.ts. Keep in sync by
 // hand - this script has no import access to that module's runtime values.
 const sharedErrorMessages = [
@@ -17,6 +29,12 @@ const sharedErrorMessages = [
   "利用可能なワークスペースがありません",
   "許可されていないOriginです",
   "この操作を行う権限がありません",
+  "施策ブリーフが見つかりません",
+  "承認済みの施策ブリーフが必要です",
+  "施策ブリーフのrevisionが一致しません",
+  "現在の状態ではこの操作を実行できません",
+  "施策ブリーフが更新されています。最新の内容を再読み込みしてください",
+  "担当者または承認者が無効です",
 ];
 
 // apps/server/src should read/write through packages/database repositories.
@@ -55,6 +73,7 @@ for (const file of files) {
   const source = await readFile(file, "utf8");
   const imports = [
     ...source.matchAll(/(?:import|export)\s+(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g),
+    ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
   ].map((match) => match[1]);
   const workspacePath = relative(root, file);
 
@@ -66,6 +85,19 @@ for (const file of files) {
     imports.includes("@openengage/orpc")
   ) {
     violations.push(`${workspacePath}: lower-level module must not import @openengage/orpc`);
+  }
+  if (
+    workspacePath.startsWith("packages/core/src/projects/") &&
+    imports.some((value) =>
+      /^(?:\.\.\/(?:automations|segments)(?:\/|$)|@openengage\/core\/(?:automations|segments)(?:\/|$))/.test(
+        value,
+      ),
+    )
+  ) {
+    violations.push(
+      `${workspacePath}: projects domain must not depend on Segment or Automation catalogs; ` +
+        `compose cross-domain context in packages/core/src/agents instead`,
+    );
   }
   if (
     workspacePath.startsWith("apps/client/src/") &&
@@ -146,6 +178,22 @@ for (const file of files) {
     violations.push(
       `${workspacePath}: over 600 lines - split it, or add it to largeFileAllowlist in this ` +
         `script if it's a vendored/generated file`,
+    );
+  }
+  const focusedLimit = focusedFileLineLimits.get(workspacePath);
+  if (focusedLimit && source.split("\n").length > focusedLimit) {
+    violations.push(
+      `${workspacePath}: over focused ${focusedLimit}-line project brief ratchet - split by ` +
+        `responsibility instead of growing the hotspot`,
+    );
+  }
+  if (
+    workspacePath.includes("project-brief") &&
+    source.split("\n").length > projectBriefFileLineLimit
+  ) {
+    violations.push(
+      `${workspacePath}: over ${projectBriefFileLineLimit}-line project brief feature ratchet - ` +
+        `keep the refactored command, query, resource, form, and view responsibilities split`,
     );
   }
 }

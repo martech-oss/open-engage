@@ -5,22 +5,27 @@ import {
   generateMarketingBriefInputSchema,
   marketingBriefGenerationResultSchema,
   projectBriefDetailSchema,
-  projectBriefMutationSchema,
+  projectBriefDraftInputSchema,
   projectBriefSummarySchema,
   projectMemberOptionSchema,
   projectResourceTypeSchema,
   projectRowSchema,
 } from "@openengage/core/projects";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import {
+  authedErrors,
+  projectBriefMemberError,
+  projectBriefNotFoundError,
+  projectBriefStateErrors,
+  workspaceErrors,
+} from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
 
-const briefNotFound = {
-  PROJECT_BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
+const expectedRowVersionInput = {
+  expectedRowVersion: z.number().int().positive().optional(),
 } as const;
-const briefConflict = {
-  INVALID_BRIEF_STATE: { status: 409, message: "現在の状態ではこの操作を実行できません" },
-} as const;
+
+const briefIdInput = idInput.extend(expectedRowVersionInput);
 
 export const projectsContract = {
   list: oc
@@ -46,6 +51,10 @@ export const projectsContract = {
     .errors({
       ...authedErrors,
       PROJECT_NOT_FOUND: { status: 404, message: "Projectが見つかりません" },
+      PROJECT_BRIEF_MANAGED: {
+        status: 409,
+        message: "施策ブリーフ管理中のProjectにはこの経路でリンクできません",
+      },
     })
     .input(
       z.object({
@@ -65,26 +74,28 @@ export const projectsContract = {
     .output(z.object({ members: z.array(projectMemberOptionSchema) })),
   briefGet: oc
     .route({ method: "GET", path: "/projects/{id}/brief" })
-    .errors({ ...workspaceErrors, ...briefNotFound })
+    .errors({ ...workspaceErrors, ...projectBriefNotFoundError })
     .input(idInput)
     .output(projectBriefDetailSchema),
   briefCreate: oc
     .route({ method: "POST", path: "/projects/briefs", successStatus: 201 })
     .errors({
       ...authedErrors,
-      INVALID_BRIEF_MEMBER: { status: 422, message: "担当者または承認者が無効です" },
+      ...projectBriefMemberError,
     })
-    .input(projectBriefMutationSchema)
+    .input(projectBriefDraftInputSchema)
     .output(z.object({ id: z.string() })),
   briefUpdate: oc
     .route({ method: "PATCH", path: "/projects/{id}/brief" })
     .errors({
       ...authedErrors,
-      ...briefNotFound,
-      ...briefConflict,
-      INVALID_BRIEF_MEMBER: { status: 422, message: "担当者または承認者が無効です" },
+      ...projectBriefNotFoundError,
+      ...projectBriefStateErrors,
+      ...projectBriefMemberError,
     })
-    .input(projectBriefMutationSchema.extend({ id: z.string().min(1) }))
+    .input(
+      projectBriefDraftInputSchema.extend({ id: z.string().min(1), ...expectedRowVersionInput }),
+    )
     .output(ackSchema),
   briefGenerate: oc
     .route({ method: "POST", path: "/projects/briefs/generate" })
@@ -101,56 +112,72 @@ export const projectsContract = {
     .output(marketingBriefGenerationResultSchema),
   briefSubmit: oc
     .route({ method: "POST", path: "/projects/{id}/brief/submit" })
-    .errors({ ...authedErrors, ...briefNotFound, ...briefConflict })
-    .input(idInput)
+    .errors({
+      ...authedErrors,
+      ...projectBriefNotFoundError,
+      ...projectBriefStateErrors,
+      ...projectBriefMemberError,
+    })
+    .input(briefIdInput)
     .output(ackSchema),
   briefApprove: oc
     .route({ method: "POST", path: "/projects/{id}/brief/approve" })
-    .errors({ ...authedErrors, ...briefNotFound, ...briefConflict })
-    .input(idInput.extend({ comment: z.string().trim().max(2_000).default("") }))
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
+    .input(briefIdInput.extend({ comment: z.string().trim().max(2_000).default("") }))
     .output(ackSchema),
   briefReject: oc
     .route({ method: "POST", path: "/projects/{id}/brief/reject" })
-    .errors({ ...authedErrors, ...briefNotFound, ...briefConflict })
-    .input(idInput.extend({ comment: z.string().trim().min(1).max(2_000) }))
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
+    .input(briefIdInput.extend({ comment: z.string().trim().min(1).max(2_000) }))
+    .output(ackSchema),
+  briefWithdraw: oc
+    .route({ method: "POST", path: "/projects/{id}/brief/withdraw" })
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
+    .input(
+      briefIdInput.extend({
+        reason: z.string().trim().min(1).max(2_000),
+      }),
+    )
     .output(ackSchema),
   briefReopen: oc
     .route({ method: "POST", path: "/projects/{id}/brief/reopen" })
-    .errors({ ...authedErrors, ...briefNotFound, ...briefConflict })
-    .input(idInput)
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
+    .input(briefIdInput)
     .output(ackSchema),
   briefComplete: oc
     .route({ method: "POST", path: "/projects/{id}/brief/complete" })
-    .errors({ ...authedErrors, ...briefNotFound, ...briefConflict })
-    .input(idInput)
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
+    .input(briefIdInput)
     .output(ackSchema),
   briefArchive: oc
     .route({ method: "POST", path: "/projects/{id}/brief/archive" })
-    .errors({ ...authedErrors, ...briefNotFound })
-    .input(idInput)
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
+    .input(briefIdInput)
     .output(ackSchema),
   briefAddItem: oc
     .route({ method: "POST", path: "/projects/{id}/brief/items" })
     .errors({
       ...authedErrors,
-      ...briefNotFound,
-      ...briefConflict,
+      ...projectBriefNotFoundError,
+      ...projectBriefStateErrors,
       PROJECT_RESOURCE_NOT_FOUND: { status: 404, message: "リンク対象が見つかりません" },
     })
     .input(
       idInput.extend({
         resourceType: projectResourceTypeSchema,
         resourceId: z.string().min(1),
+        ...expectedRowVersionInput,
       }),
     )
     .output(z.object({ added: z.boolean() })),
   briefRemoveItem: oc
     .route({ method: "DELETE", path: "/projects/{id}/brief/items/{resourceType}/{resourceId}" })
-    .errors({ ...authedErrors, ...briefNotFound })
+    .errors({ ...authedErrors, ...projectBriefNotFoundError, ...projectBriefStateErrors })
     .input(
       idInput.extend({
         resourceType: projectResourceTypeSchema,
         resourceId: z.string().min(1),
+        ...expectedRowVersionInput,
       }),
     )
     .output(ackSchema),

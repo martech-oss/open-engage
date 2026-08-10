@@ -34,6 +34,7 @@ interface AutomationBuilderState {
 type AutomationBuilderAction =
   | { type: "replace_definition"; definition: AutomationDefinition }
   | { type: "select_node"; nodeId: string | null }
+  | { type: "reset_for_entity"; definition: AutomationDefinition }
   | { type: "replace_and_select"; definition: AutomationDefinition; nodeId: string | null };
 
 export function automationBuilderReducer(
@@ -45,6 +46,11 @@ export function automationBuilderReducer(
       return { ...state, definition: action.definition };
     case "select_node":
       return { ...state, selectedNodeId: action.nodeId };
+    case "reset_for_entity":
+      return {
+        definition: action.definition,
+        selectedNodeId: action.definition.nodes[0]?.id ?? null,
+      };
     case "replace_and_select":
       return { definition: action.definition, selectedNodeId: action.nodeId };
   }

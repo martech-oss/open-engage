@@ -1,5 +1,10 @@
 import * as z from "zod";
 
+import {
+  approvedMarketingBriefContextSchema,
+  marketingCapabilitySnapshotSchema,
+  projectBriefReferenceSchema,
+} from "../projects/schema.js";
 import { automationDefinitionSchema } from "./schema.js";
 
 export const AUTOMATION_RESOURCE_KINDS = [
@@ -54,19 +59,19 @@ export type AutomationResourceResolution = z.infer<typeof automationResourceReso
 
 const generationRequestBaseSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
-  projectId: z.string().min(1).optional(),
-  briefRevision: z.number().int().positive().optional(),
   continuation: automationGenerationContinuationSchema.optional(),
   resolutions: z.array(automationResourceResolutionSchema).max(100).optional(),
 });
 
-export const generateAutomationInputSchema = z.discriminatedUnion("mode", [
-  generationRequestBaseSchema.extend({ mode: z.literal("create") }),
-  generationRequestBaseSchema.extend({
-    mode: z.literal("refine"),
-    currentDefinition: automationDefinitionSchema,
-  }),
-]);
+export const generateAutomationInputSchema = projectBriefReferenceSchema.and(
+  z.discriminatedUnion("mode", [
+    generationRequestBaseSchema.extend({ mode: z.literal("create") }),
+    generationRequestBaseSchema.extend({
+      mode: z.literal("refine"),
+      currentDefinition: automationDefinitionSchema,
+    }),
+  ]),
+);
 export type GenerateAutomationInput = z.infer<typeof generateAutomationInputSchema>;
 
 const automationGenerationReadySchema = z.object({
@@ -118,9 +123,12 @@ export const automationGenerationCatalogSchema = z.object({
 });
 export type AutomationGenerationCatalog = z.infer<typeof automationGenerationCatalogSchema>;
 
-export const automationDesignerInitialDataSchema = z.object({
-  request: generateAutomationInputSchema,
-  catalog: automationGenerationCatalogSchema,
-  trustedBrief: z.unknown().optional(),
-});
+export const automationDesignerInitialDataSchema = z
+  .object({
+    request: generateAutomationInputSchema,
+    catalog: automationGenerationCatalogSchema,
+    trustedBrief: approvedMarketingBriefContextSchema.optional(),
+    capabilities: marketingCapabilitySnapshotSchema,
+  })
+  .strict();
 export type AutomationDesignerInitialData = z.infer<typeof automationDesignerInitialDataSchema>;

@@ -20,6 +20,7 @@ import {
   reviewProjectBrief,
   submitProjectBrief,
   updateProjectBrief,
+  withdrawProjectBrief,
 } from "./project-brief-service";
 import { addProjectItem, createProject, listProjects } from "./project-service";
 
@@ -43,6 +44,7 @@ export const addProjectItemProcedure = authed.projects.addItem.handler(
       resourceId: input.resourceId,
     });
     if (outcome.kind === "project_not_found") throw errors.PROJECT_NOT_FOUND();
+    if (outcome.kind === "brief_managed") throw errors.PROJECT_BRIEF_MANAGED();
     return { added: outcome.added };
   },
 );
@@ -81,9 +83,12 @@ export const createProjectBriefProcedure = authed.projects.briefCreate.handler(
 export const updateProjectBriefProcedure = authed.projects.briefUpdate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const { id, ...brief } = input;
+    const { id, expectedRowVersion, ...brief } = input;
     try {
-      await updateProjectBrief(context.database, context.workspace, id, brief);
+      await updateProjectBrief(context.database, context.workspace, id, {
+        ...brief,
+        ...(expectedRowVersion === undefined ? {} : { expectedRowVersion }),
+      });
       return ack;
     } catch (error) {
       rethrowBrief(error, errors);
@@ -120,7 +125,7 @@ export const submitProjectBriefProcedure = authed.projects.briefSubmit.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await submitProjectBrief(context.database, context.workspace, input.id);
+      await submitProjectBrief(context.database, context.workspace, input.id, input);
       return ack;
     } catch (error) {
       rethrowBrief(error, errors);
@@ -138,6 +143,7 @@ export const approveProjectBriefProcedure = authed.projects.briefApprove.handler
         input.id,
         "approved",
         input.comment,
+        input,
       );
       return ack;
     } catch (error) {
@@ -156,6 +162,25 @@ export const rejectProjectBriefProcedure = authed.projects.briefReject.handler(
         input.id,
         "rejected",
         input.comment,
+        input,
+      );
+      return ack;
+    } catch (error) {
+      rethrowBrief(error, errors);
+    }
+  },
+);
+
+export const withdrawProjectBriefProcedure = authed.projects.briefWithdraw.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    try {
+      await withdrawProjectBrief(
+        context.database,
+        context.workspace,
+        input.id,
+        input.reason,
+        input,
       );
       return ack;
     } catch (error) {
@@ -168,7 +193,7 @@ export const reopenProjectBriefProcedure = authed.projects.briefReopen.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await reopenProjectBrief(context.database, context.workspace, input.id);
+      await reopenProjectBrief(context.database, context.workspace, input.id, input);
       return ack;
     } catch (error) {
       rethrowBrief(error, errors);
@@ -180,7 +205,7 @@ export const completeProjectBriefProcedure = authed.projects.briefComplete.handl
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await completeProjectBrief(context.database, context.workspace, input.id);
+      await completeProjectBrief(context.database, context.workspace, input.id, input);
       return ack;
     } catch (error) {
       rethrowBrief(error, errors);
@@ -192,7 +217,7 @@ export const archiveProjectBriefProcedure = authed.projects.briefArchive.handler
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     try {
-      await archiveProjectBrief(context.database, context.workspace, input.id);
+      await archiveProjectBrief(context.database, context.workspace, input.id, input);
       return ack;
     } catch (error) {
       rethrowBrief(error, errors);
@@ -236,6 +261,7 @@ export const projectProcedures = {
   briefSubmit: submitProjectBriefProcedure,
   briefApprove: approveProjectBriefProcedure,
   briefReject: rejectProjectBriefProcedure,
+  briefWithdraw: withdrawProjectBriefProcedure,
   briefReopen: reopenProjectBriefProcedure,
   briefComplete: completeProjectBriefProcedure,
   briefArchive: archiveProjectBriefProcedure,
@@ -247,24 +273,40 @@ interface BriefErrors {
   FORBIDDEN?: () => Error;
   PROJECT_BRIEF_NOT_FOUND?: () => Error;
   INVALID_BRIEF_STATE?: () => Error;
+  BRIEF_WRITE_CONFLICT?: () => Error;
   INVALID_BRIEF_MEMBER?: () => Error;
   PROJECT_RESOURCE_NOT_FOUND?: () => Error;
 }
 
 function rethrowBrief(error: unknown, errors: BriefErrors): never {
   if (!(error instanceof ProjectBriefServiceError)) throw error;
-  if (error.kind === "not_found" && errors.PROJECT_BRIEF_NOT_FOUND) {
-    throw errors.PROJECT_BRIEF_NOT_FOUND();
+  const kind = error.kind;
+  switch (kind) {
+    case "not_found":
+      if (errors.PROJECT_BRIEF_NOT_FOUND) throw errors.PROJECT_BRIEF_NOT_FOUND();
+      break;
+    case "invalid_state":
+    case "revision_conflict":
+      if (errors.INVALID_BRIEF_STATE) throw errors.INVALID_BRIEF_STATE();
+      break;
+    case "write_conflict":
+      if (errors.BRIEF_WRITE_CONFLICT) throw errors.BRIEF_WRITE_CONFLICT();
+      break;
+    case "invalid_member":
+      if (errors.INVALID_BRIEF_MEMBER) throw errors.INVALID_BRIEF_MEMBER();
+      break;
+    case "resource_not_found":
+      if (errors.PROJECT_RESOURCE_NOT_FOUND) throw errors.PROJECT_RESOURCE_NOT_FOUND();
+      break;
+    case "forbidden_actor":
+      if (errors.FORBIDDEN) throw errors.FORBIDDEN();
+      break;
+    default:
+      assertNever(kind);
   }
-  if (error.kind === "invalid_state" && errors.INVALID_BRIEF_STATE) {
-    throw errors.INVALID_BRIEF_STATE();
-  }
-  if (error.kind === "invalid_member" && errors.INVALID_BRIEF_MEMBER) {
-    throw errors.INVALID_BRIEF_MEMBER();
-  }
-  if (error.kind === "resource_not_found" && errors.PROJECT_RESOURCE_NOT_FOUND) {
-    throw errors.PROJECT_RESOURCE_NOT_FOUND();
-  }
-  if (errors.FORBIDDEN) throw errors.FORBIDDEN();
   throw error;
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled project brief failure: ${String(value)}`);
 }

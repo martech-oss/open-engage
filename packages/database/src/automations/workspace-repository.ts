@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
   automationDefinitionSchema,
@@ -12,7 +12,14 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { projectItems } from "../web/schema";
+import { conditionalAudit } from "../web/project-brief-persistence";
+import {
+  authenticatedProjectActorId,
+  approvedProjectLinkPrecondition,
+  ProjectBriefLinkConflictError,
+  type ApprovedProjectLink,
+} from "../web/project-resource-guard";
+import { projectBriefs, projectItems } from "../web/schema";
 import {
   automationEnrollments,
   automationJobs,
@@ -114,13 +121,13 @@ export class AutomationRepository extends WorkspaceRepository {
     description: string;
     timezone: string;
     graph: AutomationDefinition;
-    projectLink?: { projectId: string; briefRevision: number; addedByUserId: string } | undefined;
+    projectLink?: ApprovedProjectLink | undefined;
   }): Promise<{ id: string; draftVersionId: string }> {
     const id = uuidv7();
     const draftVersionId = uuidv7();
     const now = nowIso();
     const orm = this.database.orm;
-    const insertAutomation = orm.insert(automations).values({
+    const automationValues = {
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
@@ -129,8 +136,8 @@ export class AutomationRepository extends WorkspaceRepository {
       draftVersionId,
       createdAt: now,
       updatedAt: now,
-    });
-    const insertVersion = orm.insert(automationVersions).values({
+    } as const;
+    const versionValues = {
       id: draftVersionId,
       workspaceId: this.context.workspaceId,
       automationId: id,
@@ -139,23 +146,76 @@ export class AutomationRepository extends WorkspaceRepository {
       timezone: input.timezone,
       graph: graphCodec.encode(input.graph),
       createdAt: now,
-    });
+    } as const;
     if (input.projectLink) {
-      await orm.batch([
-        insertAutomation,
-        insertVersion,
-        orm.insert(projectItems).values({
-          workspaceId: this.context.workspaceId,
-          projectId: input.projectLink.projectId,
-          resourceType: "automation",
-          resourceId: id,
-          briefRevision: input.projectLink.briefRevision,
-          addedByUserId: input.projectLink.addedByUserId,
-          createdAt: now,
-        }),
+      const link = input.projectLink;
+      const precondition = approvedProjectLinkPrecondition(
+        orm,
+        this.context.workspaceId,
+        authenticatedProjectActorId(this.context),
+        link,
+      );
+      const [created] = await orm.batch([
+        orm.insert(automations).select(
+          sql`SELECT
+            ${id}, ${this.context.workspaceId}, ${input.name}, ${input.description}, 'draft',
+            ${draftVersionId}, NULL, ${now}, ${now}
+          WHERE ${exists(precondition)}`,
+        ),
+        orm.insert(automationVersions).select(
+          sql`SELECT
+            ${draftVersionId}, ${this.context.workspaceId}, ${id}, 1, 'draft',
+            ${input.timezone}, ${versionValues.graph}, NULL, ${now}
+          WHERE ${exists(precondition)}`,
+        ),
+        orm.insert(projectItems).select(
+          sql`SELECT
+            ${this.context.workspaceId}, ${link.projectId}, 'automation', ${id},
+            ${link.briefRevision}, ${link.addedByUserId}, ${now}
+          WHERE ${exists(precondition)}`,
+        ),
+        conditionalAudit(
+          orm,
+          this.context,
+          link.addedByUserId,
+          { action: "automation.create", resourceType: "automation", resourceId: id },
+          precondition,
+          now,
+        ),
+        conditionalAudit(
+          orm,
+          this.context,
+          link.addedByUserId,
+          {
+            action: "project.item.add",
+            resourceType: "project",
+            resourceId: link.projectId,
+            metadata: {
+              resourceType: "automation",
+              resourceId: id,
+              briefRevision: link.briefRevision,
+            },
+          },
+          precondition,
+          now,
+        ),
+        orm
+          .update(projectBriefs)
+          .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
+          .where(
+            and(
+              eq(projectBriefs.workspaceId, this.context.workspaceId),
+              eq(projectBriefs.projectId, link.projectId),
+              exists(precondition),
+            ),
+          ),
       ]);
+      if (created.meta.changes !== 1) throw new ProjectBriefLinkConflictError();
     } else {
-      await orm.batch([insertAutomation, insertVersion]);
+      await orm.batch([
+        orm.insert(automations).values(automationValues),
+        orm.insert(automationVersions).values(versionValues),
+      ]);
     }
     return { id, draftVersionId };
   }

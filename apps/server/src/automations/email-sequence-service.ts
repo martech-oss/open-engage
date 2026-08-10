@@ -1,5 +1,3 @@
-import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
-
 import {
   AUTOMATION_RESOURCE_KINDS,
   type AutomationGenerationCatalog,
@@ -13,17 +11,19 @@ import {
   type GenerateEmailSequenceInput,
   validateEmailSequenceProposal,
 } from "@openengage/core/automations";
+import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   EmailDesignRepository,
   EmailSequenceDraftConflictError,
   EmailSequenceDraftRepository,
-  isConstraintError,
   MessagingRepository,
   type OpenEngageDatabase,
   uuidv7,
 } from "@openengage/database";
 
+import { loadMarketingAgentContext } from "../agents/marketing-context";
+import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 import { collectEmailAssetIds } from "../messaging/email-template-service";
 import {
@@ -34,7 +34,6 @@ import {
 
 const GENERATION_TIMEOUT_MS = 90_000;
 const MAX_PROPOSAL_BYTES = 512 * 1_024;
-const PROPOSAL_PART_NAME = "proposal";
 const MESSAGE_VARIABLE_PATTERN = /\{\{\s*message\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g;
 
 export type EmailSequenceFailure = "failed" | "timeout" | "unavailable" | "conflict";
@@ -54,7 +53,7 @@ export async function generateEmailSequence(
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: GenerateEmailSequenceInput,
-  trustedBrief?: unknown,
+  trustedBrief?: ApprovedMarketingBriefContext,
 ): Promise<EmailSequenceGenerationResult> {
   const context = await loadSequenceContext(database, workspace);
   const unresolved = unresolvedContinuation(input, context.automation.catalog);
@@ -62,7 +61,7 @@ export async function generateEmailSequence(
   const reserved = reservedIds(input);
   const result = await requestSequenceProposal(env, {
     request: input,
-    ...(trustedBrief ? { trustedBrief } : {}),
+    ...loadMarketingAgentContext(trustedBrief),
     catalog: context.automation.catalog,
     brand: context.brand,
     variables: context.variables,
@@ -91,10 +90,11 @@ export async function applyEmailSequence(
 ) {
   const context = await loadSequenceContext(database, workspace);
   validateReadyProposal(proposal, null, context);
+  const repository = new EmailSequenceDraftRepository(database, workspace);
   try {
-    return await new EmailSequenceDraftRepository(database, workspace).apply(proposal, projectLink);
+    return await repository.applyWithOutcome(proposal, projectLink);
   } catch (cause) {
-    if (cause instanceof EmailSequenceDraftConflictError || isConstraintError(cause)) {
+    if (cause instanceof EmailSequenceDraftConflictError) {
       throw new EmailSequenceError("conflict", { cause });
     }
     throw cause;
@@ -186,7 +186,7 @@ async function requestSequenceProposal(
   env: RuntimeEnv,
   initialData: {
     request: GenerateEmailSequenceInput;
-    trustedBrief?: unknown;
+    trustedBrief?: ApprovedMarketingBriefContext;
     catalog: AutomationGenerationCatalog;
     brand: SequenceContext["brand"];
     variables: SequenceContext["variables"];
@@ -194,42 +194,20 @@ async function requestSequenceProposal(
     reserved: ReturnType<typeof reservedIds>;
   },
 ) {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timeout", "AbortError")),
-    GENERATION_TIMEOUT_MS,
-  );
-  const conversation = createFlueClient({
-    url: `https://agent.internal/internal/email-sequence-designer/${uuidv7()}`,
-    fetch: (request, init) => env.AGENT_APP.fetch(new Request(request, init)),
-  });
   try {
-    const admission = await conversation.send({
-      message: { kind: "user", body: initialData.request.prompt },
+    return await requestAgentProposal({
+      env,
+      agent: "email-sequence-designer",
+      prompt: initialData.request.prompt,
       initialData,
-      uid: null,
-      signal: controller.signal,
+      schema: emailSequenceAgentResultSchema,
+      timeoutMs: GENERATION_TIMEOUT_MS,
     });
-    const reply = await conversation.read(admission, { signal: controller.signal });
-    const proposal = (reply.data[PROPOSAL_PART_NAME] ?? []).at(-1);
-    const parsed = emailSequenceAgentResultSchema.safeParse(proposal);
-    if (!parsed.success) throw new EmailSequenceError("failed", { cause: parsed.error });
-    return parsed.data;
   } catch (error) {
-    if (error instanceof EmailSequenceError) throw error;
-    if (controller.signal.aborted || isAbortError(error)) {
-      await conversation.abort().catch(() => undefined);
-      throw new EmailSequenceError("timeout", { cause: error });
+    if (error instanceof AgentProposalError) {
+      throw new EmailSequenceError(error.kind, { cause: error });
     }
-    if (error instanceof FlueApiError) {
-      throw new EmailSequenceError("unavailable", { cause: error });
-    }
-    if (error instanceof FlueExecutionError) {
-      throw new EmailSequenceError("failed", { cause: error });
-    }
-    throw new EmailSequenceError("unavailable", { cause: error });
-  } finally {
-    clearTimeout(timeout);
+    throw error;
   }
 }
 
@@ -286,8 +264,4 @@ function isResourceKind(value: string): value is AutomationResourceKind {
 
 function fail(message: string): never {
   throw new EmailSequenceError("failed", { cause: new Error(message) });
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }

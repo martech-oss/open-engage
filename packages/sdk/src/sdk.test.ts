@@ -1,8 +1,39 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { createOpenEngageClient } from "./index";
+import {
+  createOpenEngageClient,
+  type MarketingCapabilitySnapshot,
+  type OpenEngageClient,
+  type ProjectBriefAllowedActions,
+  type ProjectBriefDraftInput,
+  type ProjectBriefMutation,
+  type ProjectBriefReference,
+} from "./index";
+
+function exerciseProjectBriefContract(client: OpenEngageClient): void {
+  void client.projects.briefWithdraw({
+    id: "project-id",
+    reason: "The owner needs to revise the brief",
+    expectedRowVersion: 2,
+  });
+  void client.projects.briefSubmit({ id: "project-id", expectedRowVersion: 2 });
+}
+
+void exerciseProjectBriefContract;
 
 describe("createOpenEngageClient", () => {
+  it("exports the public project brief types without breaking the legacy alias", () => {
+    expectTypeOf<ProjectBriefDraftInput>().toEqualTypeOf<ProjectBriefMutation>();
+    expectTypeOf<ProjectBriefReference>().toMatchTypeOf<
+      | { projectId: string; briefRevision: number }
+      | { projectId?: undefined; briefRevision?: undefined }
+    >();
+    expectTypeOf<ProjectBriefAllowedActions["withdraw"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<MarketingCapabilitySnapshot["ga4Integration"]["state"]>().toEqualTypeOf<
+      "unavailable" | "available" | "configured"
+    >();
+  });
+
   it("sends a workspace-scoped bearer token to /api/v1", async () => {
     let authorization = "";
     let url = "";

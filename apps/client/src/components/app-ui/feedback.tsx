@@ -82,7 +82,7 @@ export function LoadingButton({
   busyLabel?: string;
 }): ReactNode {
   return (
-    <Button aria-busy={busy} disabled={busy || disabled} {...props}>
+    <Button aria-busy={busy} aria-live="polite" disabled={busy || disabled} {...props}>
       {busy ? <Spinner data-icon="inline-start" /> : null}
       {busy ? (busyLabel ?? "処理中…") : children}
     </Button>

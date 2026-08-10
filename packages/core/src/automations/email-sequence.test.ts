@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyEmailSequenceInputSchema,
   capabilityForSequence,
   emailSequenceProposalSchema,
+  generateEmailSequenceInputSchema,
   validateEmailSequenceProposal,
 } from "./email-sequence.js";
+
+const briefReferenceCases = [
+  ["without a brief reference", {}, true],
+  ["with a complete brief reference", { projectId: "project-id", briefRevision: 2 }, true],
+  ["with only projectId", { projectId: "project-id" }, false],
+  ["with only briefRevision", { briefRevision: 2 }, false],
+] as const;
 
 const document = {
   schemaVersion: 2 as const,
@@ -154,5 +163,26 @@ describe("email sequence proposal", () => {
     expect(capabilityForSequence([{ purpose: "transactional" }, { purpose: "marketing" }])).toBe(
       "delivery-capability-blocked",
     );
+  });
+
+  describe("project brief reference", () => {
+    it.each(briefReferenceCases)("validates %s when generating", (_label, reference, expected) => {
+      expect(
+        generateEmailSequenceInputSchema.safeParse({
+          mode: "create",
+          prompt: "Create an onboarding email sequence",
+          ...reference,
+        }).success,
+      ).toBe(expected);
+    });
+
+    it.each(briefReferenceCases)("validates %s when applying", (_label, reference, expected) => {
+      expect(
+        applyEmailSequenceInputSchema.safeParse({
+          ...proposal(),
+          ...reference,
+        }).success,
+      ).toBe(expected);
+    });
   });
 });

@@ -1,5 +1,4 @@
-import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
-
+import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
 import {
   segmentGenerationAgentResultSchema,
   type GenerateSegmentInput,
@@ -9,14 +8,15 @@ import {
   type SegmentResourceRequest,
 } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { type OpenEngageDatabase, uuidv7 } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database";
 
+import { loadMarketingAgentContext } from "../agents/marketing-context";
+import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 import { previewSegment } from "./list-service";
 import { loadSegmentCatalog, optionsForKind, validateSegmentFilter } from "./validation-service";
 
 const GENERATION_TIMEOUT_MS = 60_000;
-const PROPOSAL_PART_NAME = "proposal";
 
 export type SegmentGenerationFailure = "failed" | "timeout" | "unavailable";
 
@@ -35,7 +35,7 @@ export async function generateSegment(
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: GenerateSegmentInput,
-  trustedBrief?: unknown,
+  trustedBrief?: ApprovedMarketingBriefContext,
 ): Promise<SegmentGenerationResult> {
   const catalog = await loadSegmentCatalog(database, workspace);
   const unresolved = unresolvedContinuation(input, catalog);
@@ -77,44 +77,22 @@ async function requestSegmentProposal(
   env: RuntimeEnv,
   request: GenerateSegmentInput,
   catalog: SegmentGenerationCatalog,
-  trustedBrief?: unknown,
+  trustedBrief?: ApprovedMarketingBriefContext,
 ) {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timeout", "AbortError")),
-    GENERATION_TIMEOUT_MS,
-  );
-  const conversation = createFlueClient({
-    url: `https://agent.internal/internal/segment-designer/${uuidv7()}`,
-    fetch: (input, init) => env.AGENT_APP.fetch(new Request(input, init)),
-  });
   try {
-    const admission = await conversation.send({
-      message: { kind: "user", body: request.prompt },
-      initialData: { request, catalog, ...(trustedBrief ? { trustedBrief } : {}) },
-      uid: null,
-      signal: controller.signal,
+    return await requestAgentProposal({
+      env,
+      agent: "segment-designer",
+      prompt: request.prompt,
+      initialData: { request, catalog, ...loadMarketingAgentContext(trustedBrief) },
+      schema: segmentGenerationAgentResultSchema,
+      timeoutMs: GENERATION_TIMEOUT_MS,
     });
-    const reply = await conversation.read(admission, { signal: controller.signal });
-    const proposal = reply.data[PROPOSAL_PART_NAME]?.at(-1);
-    const parsed = segmentGenerationAgentResultSchema.safeParse(proposal);
-    if (!parsed.success) throw new SegmentGenerationError("failed", { cause: parsed.error });
-    return parsed.data;
   } catch (error) {
-    if (error instanceof SegmentGenerationError) throw error;
-    if (controller.signal.aborted || isAbortError(error)) {
-      await conversation.abort().catch(() => undefined);
-      throw new SegmentGenerationError("timeout", { cause: error });
+    if (error instanceof AgentProposalError) {
+      throw new SegmentGenerationError(error.kind, { cause: error });
     }
-    if (error instanceof FlueApiError) {
-      throw new SegmentGenerationError("unavailable", { cause: error });
-    }
-    if (error instanceof FlueExecutionError) {
-      throw new SegmentGenerationError("failed", { cause: error });
-    }
-    throw new SegmentGenerationError("unavailable", { cause: error });
-  } finally {
-    clearTimeout(timeout);
+    throw error;
   }
 }
 
@@ -161,8 +139,4 @@ function assertUniqueRequests(requests: SegmentResourceRequest[]): void {
     }
     ids.add(request.requestId);
   }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }

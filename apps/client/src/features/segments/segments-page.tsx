@@ -1,7 +1,7 @@
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Pencil, Plus, RefreshCw, Shapes, Sparkles, Users } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { lazy, type FormEvent, type ReactNode, Suspense, useEffect, useState } from "react";
 
 import {
   FormDialog,
@@ -31,7 +31,6 @@ import type {
   SegmentRow,
 } from "@openengage/core/segments";
 
-import { SegmentAiSheet } from "./segment-ai-sheet";
 import {
   segmentOptionsQueryOptions,
   segmentsQueryOptions,
@@ -41,6 +40,10 @@ import {
   useUpdateSegment,
 } from "./segment-api";
 import { defaultSegmentFilter, SegmentBuilder } from "./segment-builder";
+
+const SegmentAiSheet = lazy(async () => ({
+  default: (await import("./segment-ai-sheet")).SegmentAiSheet,
+}));
 
 export type { SegmentRow };
 
@@ -181,16 +184,21 @@ export function SegmentsPage(): ReactNode {
         initial={editing}
         catalog={catalog}
       />
-      <SegmentAiSheet
-        open={aiOpen}
-        onOpenChange={(open) => {
-          setAiOpen(open);
-          if (!open) setEditing(null);
-        }}
-        mode={editing ? "refine" : "create"}
-        {...(editing ? { currentDefinition: toDefinition(editing) } : {})}
-        onApply={applyAiDefinition}
-      />
+      <Suspense fallback={null}>
+        {aiOpen ? (
+          <SegmentAiSheet
+            open
+            onOpenChange={(open) => {
+              setAiOpen(open);
+              if (!open) setEditing(null);
+            }}
+            mode={editing ? "refine" : "create"}
+            entityId={editing?.id ?? "new-segment"}
+            {...(editing ? { currentDefinition: toDefinition(editing) } : {})}
+            onApply={applyAiDefinition}
+          />
+        ) : null}
+      </Suspense>
     </PageLayout>
   );
 }

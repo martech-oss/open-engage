@@ -1,5 +1,3 @@
-import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
-
 import {
   emailGenerationResultSchema,
   type EmailBlockV2,
@@ -12,13 +10,13 @@ import {
   EmailDesignRepository,
   MessagingRepository,
   type OpenEngageDatabase,
-  uuidv7,
 } from "@openengage/database";
 
+import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
+import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 
 const GENERATION_TIMEOUT_MS = 60_000;
-const PROPOSAL_PART_NAME = "proposal";
 
 export type EmailGenerationFailure = "failed" | "timeout" | "unavailable";
 
@@ -46,6 +44,7 @@ export async function generateEmail(
   ]);
   const proposal = await requestEmailProposal(env, {
     request: input,
+    capabilities: loadMarketingCapabilitySnapshot(),
     brand,
     variables: variables.map(({ key, name, description }) => ({ key, name, description })),
     publicImages,
@@ -58,48 +57,26 @@ async function requestEmailProposal(
   env: RuntimeEnv,
   initialData: {
     request: GenerateEmailInput;
+    capabilities: ReturnType<typeof loadMarketingCapabilitySnapshot>;
     brand: Awaited<ReturnType<EmailDesignRepository["getBrandProfile"]>>;
     variables: Array<{ key: string; name: string; description: string }>;
     publicImages: Awaited<ReturnType<EmailDesignRepository["listAiImageCatalog"]>>;
   },
 ): Promise<EmailGenerationResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timeout", "AbortError")),
-    GENERATION_TIMEOUT_MS,
-  );
-  const conversation = createFlueClient({
-    url: `https://agent.internal/internal/email-designer/${uuidv7()}`,
-    fetch: (input, init) => env.AGENT_APP.fetch(new Request(input, init)),
-  });
-
   try {
-    const admission = await conversation.send({
-      message: { kind: "user", body: initialData.request.prompt },
+    return await requestAgentProposal({
+      env,
+      agent: "email-designer",
+      prompt: initialData.request.prompt,
       initialData,
-      uid: null,
-      signal: controller.signal,
+      schema: emailGenerationResultSchema,
+      timeoutMs: GENERATION_TIMEOUT_MS,
     });
-    const reply = await conversation.read(admission, { signal: controller.signal });
-    const proposal = (reply.data[PROPOSAL_PART_NAME] ?? []).at(-1);
-    const parsed = emailGenerationResultSchema.safeParse(proposal);
-    if (!parsed.success) throw new EmailGenerationError("failed", { cause: parsed.error });
-    return parsed.data;
   } catch (error) {
-    if (error instanceof EmailGenerationError) throw error;
-    if (controller.signal.aborted || isAbortError(error)) {
-      await conversation.abort().catch(() => undefined);
-      throw new EmailGenerationError("timeout", { cause: error });
+    if (error instanceof AgentProposalError) {
+      throw new EmailGenerationError(error.kind, { cause: error });
     }
-    if (error instanceof FlueApiError) {
-      throw new EmailGenerationError("unavailable", { cause: error });
-    }
-    if (error instanceof FlueExecutionError) {
-      throw new EmailGenerationError("failed", { cause: error });
-    }
-    throw new EmailGenerationError("unavailable", { cause: error });
-  } finally {
-    clearTimeout(timeout);
+    throw error;
   }
 }
 
@@ -138,8 +115,4 @@ function isImageBlock(value: unknown): value is Extract<EmailBlockV2, { type: "i
 
 function fail(message: string): never {
   throw new EmailGenerationError("failed", { cause: new Error(message) });
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }

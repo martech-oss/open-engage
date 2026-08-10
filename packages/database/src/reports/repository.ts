@@ -558,7 +558,7 @@ export class ReportsRepository extends DatabaseRepository {
         INNER JOIN ${projects} ON ${projects.id} = ${projectBriefs.projectId} AND ${projects.workspaceId} = ${projectBriefs.workspaceId}
         WHERE ${projectBriefs.workspaceId} = ${workspaceId}
           AND ${projectBriefs.status} = 'approved'
-          AND ${projectBriefs.reviewAt} < datetime('now')
+          AND datetime(${projectBriefs.reviewAt}) < datetime('now')
           AND ${projects.archivedAt} IS NULL
       `,
       sql`

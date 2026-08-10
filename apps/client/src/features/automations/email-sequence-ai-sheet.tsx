@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { usePreviewEmailTemplate } from "@/features/emails/email-api";
+import {
+  createAiProposalWorkflowKey,
+  useAiProposalWorkflow,
+} from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import type {
   ApplyEmailSequenceResult,
@@ -27,25 +31,27 @@ import type {
   EmailSequenceProposal,
   EmailSequenceResolution,
 } from "@openengage/core/automations";
+import type { ProjectBriefReference } from "@openengage/core/projects";
 
 import { useApplyEmailSequence, useGenerateEmailSequence } from "./automation-api";
 import { nodeLabel, nodeTypeLabel } from "./automation-labels";
 
 const OMIT_VALUE = "__omit__";
 
+export type EmailSequenceAiSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onApplied: (result: ApplyEmailSequenceResult) => Promise<void>;
+  entityId?: string;
+} & ProjectBriefReference;
+
 export function EmailSequenceAiSheet({
   open,
   onOpenChange,
   onApplied,
-  projectId,
-  briefRevision,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onApplied: (result: ApplyEmailSequenceResult) => Promise<void>;
-  projectId?: string;
-  briefRevision?: number;
-}): ReactNode {
+  entityId,
+  ...briefReference
+}: EmailSequenceAiSheetProps): ReactNode {
   const generate = useGenerateEmailSequence();
   const apply = useApplyEmailSequence();
   const preview = usePreviewEmailTemplate();
@@ -56,6 +62,17 @@ export function EmailSequenceAiSheet({
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [selectedEmailRef, setSelectedEmailRef] = useState("");
   const [error, setError] = useState("");
+  const workflow = useAiProposalWorkflow({
+    open,
+    workflowKey: createAiProposalWorkflowKey({
+      resource: "email-sequence",
+      mode: "create",
+      entityId,
+      projectId: briefReference.projectId,
+      briefRevision: briefReference.briefRevision,
+    }),
+    onReset: clearState,
+  });
 
   const requestsReady =
     result?.status !== "needs_input" ||
@@ -63,6 +80,7 @@ export function EmailSequenceAiSheet({
 
   async function submit(): Promise<void> {
     if (!prompt.trim()) return;
+    const token = workflow.beginRequest();
     setError("");
     setPreviews({});
     try {
@@ -77,21 +95,23 @@ export function EmailSequenceAiSheet({
               currentProposal: proposal,
               continuation,
               resolutions,
-              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+              ...briefReference,
             }
           : {
               mode: "create",
               prompt,
               continuation,
               resolutions,
-              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+              ...briefReference,
             },
       );
-      setResult(next);
-      setValues({});
-      if (next.status !== "ready") return;
-      setProposal(next.proposal);
-      setSelectedEmailRef(next.proposal.emails[0]?.emailRef ?? "");
+      if (next.status !== "ready") {
+        workflow.acceptResponse(token, () => {
+          setResult(next);
+          setValues({});
+        });
+        return;
+      }
       const rendered = await Promise.all(
         next.proposal.emails.map(async (email) => {
           const output = await preview.mutateAsync({
@@ -102,19 +122,27 @@ export function EmailSequenceAiSheet({
           return [email.emailRef, output.html] as const;
         }),
       );
-      setPreviews(Object.fromEntries(rendered));
+      workflow.acceptResponse(token, () => {
+        setResult(next);
+        setValues({});
+        setProposal(next.proposal);
+        setSelectedEmailRef(next.proposal.emails[0]?.emailRef ?? "");
+        setPreviews(Object.fromEntries(rendered));
+      });
     } catch (cause) {
-      setError(getErrorMessage(cause, "AIによるメールシーケンスを生成できませんでした"));
+      if (workflow.isCurrentResponse(token)) {
+        setError(getErrorMessage(cause, "AIによるメールシーケンスを生成できませんでした"));
+      }
     }
   }
 
   async function applyProposal(): Promise<void> {
-    if (!proposal) return;
+    if (!proposal || !workflow.canApply) return;
     setError("");
     try {
       const applied = await apply.mutateAsync({
         ...proposal,
-        ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+        ...briefReference,
       });
       await onApplied(applied);
       onOpenChange(false);
@@ -136,13 +164,18 @@ export function EmailSequenceAiSheet({
     );
   }
 
-  function restart(): void {
+  function clearState(): void {
+    setPrompt("");
     setResult(null);
     setProposal(null);
     setValues({});
     setPreviews({});
     setSelectedEmailRef("");
     setError("");
+  }
+
+  function restart(): void {
+    workflow.reset();
   }
 
   return (
@@ -222,7 +255,9 @@ export function EmailSequenceAiSheet({
                 busy={apply.isPending}
                 busyLabel="下書きを作成中…"
                 disabled={
-                  generate.isPending || Object.keys(previews).length !== proposal.emails.length
+                  generate.isPending ||
+                  !workflow.canApply ||
+                  Object.keys(previews).length !== proposal.emails.length
                 }
                 onClick={() => void applyProposal()}
               >

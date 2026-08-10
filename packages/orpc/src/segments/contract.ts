@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { contactSchema } from "@openengage/core/contacts";
+import { projectBriefReferenceSchema } from "@openengage/core/projects";
 import {
   generateSegmentInputSchema,
   segmentDefinitionSchema,
@@ -12,14 +13,8 @@ import {
   segmentValidationResultSchema,
 } from "@openengage/core/segments";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import { authedErrors, briefContextErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema } from "../shared/schemas";
-
-const briefContextErrors = {
-  BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
-  BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },
-  BRIEF_REVISION_CONFLICT: { status: 409, message: "施策ブリーフのrevisionが一致しません" },
-} as const;
 
 export const segmentsContract = {
   list: oc
@@ -48,16 +43,16 @@ export const segmentsContract = {
       ...briefContextErrors,
     })
     .input(
-      z.object({
-        name: z.string().trim().min(1).max(191),
-        slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-        description: z.string().trim().max(1_000).default(""),
-        kind: z.enum(["static", "dynamic"]),
-        filter: segmentFilterSchema.optional(),
-        membershipSource: z.string().trim().min(1).max(500).nullable().optional(),
-        projectId: z.string().min(1).optional(),
-        briefRevision: z.number().int().positive().optional(),
-      }),
+      z
+        .object({
+          name: z.string().trim().min(1).max(191),
+          slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+          description: z.string().trim().max(1_000).default(""),
+          kind: z.enum(["static", "dynamic"]),
+          filter: segmentFilterSchema.optional(),
+          membershipSource: z.string().trim().min(1).max(500).nullable().optional(),
+        })
+        .and(projectBriefReferenceSchema),
     )
     .output(
       z.object({

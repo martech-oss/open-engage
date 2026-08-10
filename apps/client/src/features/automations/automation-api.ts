@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpcQuery } from "@/lib/orpc";
+import { invalidateProjectBriefQueries } from "@/lib/project-brief-cache";
 
 export function automationsQueryOptions() {
   return orpcQuery.automations.list.queryOptions();
@@ -22,7 +23,12 @@ export function useCreateAutomation() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.automations.create.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
+        ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
+      ]);
+    },
   });
 }
 
@@ -38,10 +44,11 @@ export function useApplyEmailSequence() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.automations.applySequence.mutationOptions(),
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
         queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
+        ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
       ]);
     },
   });

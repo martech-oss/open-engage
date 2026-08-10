@@ -1,19 +1,18 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Plus, Sparkles } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppDialog, ErrorAlert, LoadingButton, PageLayout, SimpleEmpty } from "@/components/app-ui";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAiProposalWorkflow } from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
-import type { ProjectBriefMutation, ProjectBriefStatus } from "@openengage/core/projects";
 
 import {
   projectBriefOptionsQueryOptions,
@@ -21,9 +20,23 @@ import {
   useCreateProjectBrief,
   useGenerateProjectBrief,
 } from "./project-brief-api";
-import { emptyBrief, ProjectBriefForm } from "./project-brief-form";
+import { BriefStatus } from "./project-brief-detail-components";
+import {
+  emptyBrief,
+  formDraftFromInput,
+  mergeAiProposalPreservingEdits,
+  ProjectBriefForm,
+  type ProjectBriefFieldErrors,
+  useProjectBriefDraft,
+  validateProjectBriefDraft,
+} from "./project-brief-form";
+import {
+  isReviewOverdue,
+  matchesProjectBriefSearch,
+  type ProjectBriefSearch,
+} from "./project-brief-list-filters";
 
-export function ProjectBriefsPage(): ReactNode {
+export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): ReactNode {
   const { data: briefs } = useSuspenseQuery(projectBriefsQueryOptions());
   const { data: options } = useSuspenseQuery(projectBriefOptionsQueryOptions());
   const navigate = useNavigate();
@@ -31,48 +44,72 @@ export function ProjectBriefsPage(): ReactNode {
   const generate = useGenerateProjectBrief();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const [draft, setDraft] = useState<ProjectBriefMutation>(emptyBrief());
+  const { draft, setDraft, resetDraft } = useProjectBriefDraft(emptyBrief());
+  const [fieldErrors, setFieldErrors] = useState<ProjectBriefFieldErrors>({});
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("all");
-  const [motion, setMotion] = useState("all");
-  const [owner, setOwner] = useState("all");
-  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [createSession, setCreateSession] = useState(0);
+  const proposalWorkflow = useAiProposalWorkflow({
+    open,
+    workflowKey: `project-brief:create:${createSession}`,
+    onReset: resetCreateState,
+  });
   const filtered = useMemo(
-    () =>
-      briefs.filter(
-        (brief) =>
-          (status === "all" || brief.status === status) &&
-          (motion === "all" || brief.primaryMotion === motion) &&
-          (owner === "all" || brief.ownerUserId === owner) &&
-          (!overdueOnly ||
-            (brief.status === "approved" && new Date(brief.reviewAt).getTime() < Date.now())),
-      ),
-    [briefs, motion, overdueOnly, owner, status],
+    () => briefs.filter((brief) => matchesProjectBriefSearch(brief, search)),
+    [briefs, search],
   );
+
+  function setSearch(patch: Partial<ProjectBriefSearch>): void {
+    void navigate({
+      to: "/automations/briefs",
+      search: { ...search, ...patch },
+      replace: true,
+    });
+  }
 
   async function generateProposal(): Promise<void> {
     if (!prompt.trim()) return;
+    const token = proposalWorkflow.beginRequest();
+    const before = draft;
     setError("");
     try {
       const result = await generate.mutateAsync({ mode: "create", prompt });
-      setDraft({
-        ...draft,
+      const proposed = formDraftFromInput({
         ...result.proposal,
-        ownerUserId: draft.ownerUserId || options.members[0]?.id || "",
-        approverUserId: draft.approverUserId || options.members[1]?.id || "",
+        ownerUserId: before.ownerUserId || options.members[0]?.id || "",
+        approverUserId: before.approverUserId || options.members[1]?.id || "",
       });
-      if (result.capabilityGaps.length) {
-        toast.warning(`${result.capabilityGaps.length}件の未提供機能があります`);
-      }
+      proposalWorkflow.acceptResponse(token, () => {
+        setDraft((current) => mergeAiProposalPreservingEdits(current, before, proposed));
+        if (result.capabilityGaps.length) {
+          toast.warning(`${result.capabilityGaps.length}件の未提供機能があります`);
+        }
+      });
     } catch (cause) {
-      setError(getErrorMessage(cause, "AI提案を生成できませんでした"));
+      if (proposalWorkflow.isCurrentResponse(token)) {
+        setError(getErrorMessage(cause, "AI提案を生成できませんでした"));
+      }
     }
   }
 
-  async function save(): Promise<void> {
+  function resetCreateState(): void {
+    setPrompt("");
+    resetDraft(emptyBrief());
+    setFieldErrors({});
     setError("");
+  }
+
+  async function save(event?: FormEvent<HTMLFormElement>): Promise<void> {
+    event?.preventDefault();
+    setError("");
+    const validation = validateProjectBriefDraft(draft);
+    if (!validation.success) {
+      setFieldErrors(validation.errors);
+      setError("入力内容を確認してください");
+      return;
+    }
+    setFieldErrors({});
     try {
-      const result = await create.mutateAsync(draft);
+      const result = await create.mutateAsync(validation.data);
       setOpen(false);
       await navigate({ to: "/automations/briefs/$id", params: { id: result.id } });
     } catch (cause) {
@@ -84,7 +121,13 @@ export function ProjectBriefsPage(): ReactNode {
     <PageLayout
       title="施策ブリーフ"
       action={
-        <Button onClick={() => setOpen(true)}>
+        <Button
+          onClick={() => {
+            setCreateSession((session) => session + 1);
+            resetCreateState();
+            setOpen(true);
+          }}
+        >
           <Plus data-icon="inline-start" />
           施策を作成
         </Button>
@@ -96,8 +139,8 @@ export function ProjectBriefsPage(): ReactNode {
       <div className="grid gap-3 rounded-lg border p-4 md:grid-cols-4">
         <FilterSelect
           label="状態"
-          value={status}
-          onChange={setStatus}
+          value={search.status}
+          onChange={(status) => setSearch({ status: status as ProjectBriefSearch["status"] })}
           options={[
             ["all", "すべて"],
             ["draft", "下書き"],
@@ -108,8 +151,8 @@ export function ProjectBriefsPage(): ReactNode {
         />
         <FilterSelect
           label="モーション"
-          value={motion}
-          onChange={setMotion}
+          value={search.motion}
+          onChange={(motion) => setSearch({ motion: motion as ProjectBriefSearch["motion"] })}
           options={[
             ["all", "すべて"],
             ["acquisition", "獲得"],
@@ -122,8 +165,8 @@ export function ProjectBriefsPage(): ReactNode {
         />
         <FilterSelect
           label="担当者"
-          value={owner}
-          onChange={setOwner}
+          value={search.owner}
+          onChange={(owner) => setSearch({ owner })}
           options={[
             ["all", "すべて"],
             ...options.members.map((member) => [member.id, member.name] as [string, string]),
@@ -132,8 +175,8 @@ export function ProjectBriefsPage(): ReactNode {
         <label className="flex items-end gap-2 pb-2 text-sm">
           <input
             type="checkbox"
-            checked={overdueOnly}
-            onChange={(event) => setOverdueOnly(event.target.checked)}
+            checked={search.overdue}
+            onChange={(event) => setSearch({ overdue: event.target.checked })}
           />
           レビュー期限超過のみ
         </label>
@@ -150,13 +193,7 @@ export function ProjectBriefsPage(): ReactNode {
               <p className="text-muted-foreground">
                 担当 {brief.ownerName} · 承認 {brief.approverName}
               </p>
-              <p
-                className={
-                  new Date(brief.reviewAt).getTime() < Date.now() && brief.status === "approved"
-                    ? "text-destructive"
-                    : "text-muted-foreground"
-                }
-              >
+              <p className={isReviewOverdue(brief) ? "text-destructive" : "text-muted-foreground"}>
                 レビュー {formatDateTime(brief.reviewAt)}
               </p>
             </CardContent>
@@ -180,12 +217,17 @@ export function ProjectBriefsPage(): ReactNode {
       ) : null}
       <AppDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) {
+            resetCreateState();
+          }
+        }}
         title="施策ブリーフを作成"
         description="AI提案から始めるか、各項目を直接入力します。"
         className="max-h-[92vh] overflow-y-auto sm:max-w-4xl"
       >
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={(event) => void save(event)}>
           <Field>
             <FieldLabel htmlFor="brief-prompt">AIへの依頼</FieldLabel>
             <Textarea
@@ -199,18 +241,24 @@ export function ProjectBriefsPage(): ReactNode {
               busy={generate.isPending}
               disabled={!prompt.trim()}
               variant="outline"
+              type="button"
               onClick={() => void generateProposal()}
             >
               <Sparkles data-icon="inline-start" />
               提案を生成
             </LoadingButton>
           </Field>
-          <ProjectBriefForm value={draft} members={options.members} onChange={setDraft} />
+          <ProjectBriefForm
+            value={draft}
+            members={options.members}
+            errors={fieldErrors}
+            onChange={setDraft}
+          />
           {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-          <LoadingButton className="w-full" busy={create.isPending} onClick={() => void save()}>
+          <LoadingButton className="w-full" type="submit" busy={create.isPending}>
             下書きを作成
           </LoadingButton>
-        </div>
+        </form>
       </AppDialog>
     </PageLayout>
   );
@@ -238,26 +286,5 @@ function FilterSelect({
         ))}
       </NativeSelect>
     </Field>
-  );
-}
-
-function BriefStatus({ status }: { status: ProjectBriefStatus }): ReactNode {
-  return (
-    <Badge
-      variant={
-        status === "approved" ? "default" : status === "pending_approval" ? "secondary" : "outline"
-      }
-    >
-      {
-        (
-          {
-            draft: "下書き",
-            pending_approval: "承認待ち",
-            approved: "承認済み",
-            completed: "終了",
-          } as const
-        )[status]
-      }
-    </Badge>
   );
 }

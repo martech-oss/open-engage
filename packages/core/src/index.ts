@@ -1,4 +1,4 @@
-export * from "./agents/schema.js";
+export * from "./agents/index.js";
 export * from "./assets/dto.js";
 export * from "./assets/schema.js";
 export * from "./automations/automation.js";

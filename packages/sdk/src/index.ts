@@ -46,14 +46,26 @@ export type { DeadLetterRow } from "@openengage/core/platform";
 export type { SegmentRow } from "@openengage/core/segments";
 export type { SubscriptionTopicRow } from "@openengage/core/consent";
 export type {
+  ApprovedMarketingBriefContext,
   MarketingAutomationBriefDefinition,
   MarketingBriefGenerationResult,
+  MarketingCapability,
+  MarketingCapabilitySnapshot,
+  MarketingCapabilityState,
   MarketingMotion,
+  ProjectBriefAllowedActions,
   ProjectBriefDetail,
+  ProjectBriefDocument,
+  ProjectBriefDocumentV1,
+  ProjectBriefDraftInput,
   ProjectBriefAuditEvent,
+  ProjectBriefMutation,
+  ProjectBriefReference,
   ProjectBriefReview,
   ProjectBriefStatus,
+  ProjectBriefSummary,
   ProjectLinkedResource,
+  ProjectResourceAvailability,
   ProjectRow,
 } from "@openengage/core/projects";
 export type { WebhookEndpointRow } from "@openengage/core/workspaces";
