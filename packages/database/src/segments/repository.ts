@@ -20,6 +20,7 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { projectItems } from "../web/schema";
 import { segmentMemberships, segments } from "./schema";
 
 const filterAstCodec = defineJsonCodec(segmentFilterSchema, "segments.filter_ast");
@@ -49,10 +50,11 @@ export class SegmentRepository extends WorkspaceRepository {
     kind: "static" | "dynamic";
     filter?: SegmentFilter | undefined;
     membershipSource?: string | null | undefined;
+    projectLink?: { projectId: string; briefRevision: number; addedByUserId: string } | undefined;
   }): Promise<{ id: string; createdAt: string; updatedAt: string }> {
     const id = uuidv7();
     const now = nowIso();
-    await this.database.orm.insert(segments).values({
+    const insertSegment = this.database.orm.insert(segments).values({
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
@@ -65,6 +67,22 @@ export class SegmentRepository extends WorkspaceRepository {
       createdAt: now,
       updatedAt: now,
     });
+    if (input.projectLink) {
+      await this.database.orm.batch([
+        insertSegment,
+        this.database.orm.insert(projectItems).values({
+          workspaceId: this.context.workspaceId,
+          projectId: input.projectLink.projectId,
+          resourceType: "segment",
+          resourceId: id,
+          briefRevision: input.projectLink.briefRevision,
+          addedByUserId: input.projectLink.addedByUserId,
+          createdAt: now,
+        }),
+      ]);
+    } else {
+      await insertSegment;
+    }
     return { id, createdAt: now, updatedAt: now };
   }
 

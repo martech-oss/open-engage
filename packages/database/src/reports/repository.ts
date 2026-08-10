@@ -10,7 +10,7 @@ import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema"
 import { segmentMemberships, segments } from "../segments/schema";
 import { nowIso } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
-import { formSubmissions, forms, siteMessages } from "../web/schema";
+import { formSubmissions, forms, projectBriefs, projects, siteMessages } from "../web/schema";
 
 /**
  * Every report query in this repository is composed with drizzle's `sql`
@@ -120,6 +120,7 @@ export interface SiteSummaryData {
 export interface DashboardSummaryData {
   contacts: ReportRow;
   automations: ReportRow;
+  briefs: ReportRow;
   deliveries: ReportRow;
   events: ReportRow[];
 }
@@ -542,14 +543,23 @@ export class ReportsRepository extends DatabaseRepository {
     };
   }
 
-  /** Feeds the `dashboard.get` procedure - 4 independent queries run concurrently. */
+  /** Feeds the `dashboard.get` procedure - independent read queries run concurrently. */
   public async dashboardSummary(workspaceId: string): Promise<DashboardSummaryData> {
-    const [contactRows, automationRows, deliveryRows, eventRows] = await this.runBatch(
+    const [contactRows, automationRows, briefRows, deliveryRows, eventRows] = await this.runBatch(
       sql`
         SELECT COUNT(*) AS count FROM ${contacts} WHERE ${contacts.workspaceId} = ${workspaceId} AND ${contacts.status} = 'active'
       `,
       sql`
         SELECT COUNT(*) AS count FROM ${automations} WHERE ${automations.workspaceId} = ${workspaceId} AND ${automations.status} = 'active'
+      `,
+      sql`
+        SELECT COUNT(*) AS overdue_reviews
+        FROM ${projectBriefs}
+        INNER JOIN ${projects} ON ${projects.id} = ${projectBriefs.projectId} AND ${projects.workspaceId} = ${projectBriefs.workspaceId}
+        WHERE ${projectBriefs.workspaceId} = ${workspaceId}
+          AND ${projectBriefs.status} = 'approved'
+          AND ${projectBriefs.reviewAt} < datetime('now')
+          AND ${projects.archivedAt} IS NULL
       `,
       sql`
         SELECT COUNT(*) AS sent,
@@ -565,6 +575,7 @@ export class ReportsRepository extends DatabaseRepository {
     return {
       contacts: contactRows[0] ?? {},
       automations: automationRows[0] ?? {},
+      briefs: briefRows[0] ?? {},
       deliveries: deliveryRows[0] ?? {},
       events: eventRows,
     };

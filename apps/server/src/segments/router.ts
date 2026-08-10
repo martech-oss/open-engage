@@ -2,10 +2,21 @@ import { SegmentRepository, writeAuditLog } from "@openengage/database";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import {
+  approvedProjectBriefContext,
+  ProjectBriefServiceError,
+} from "../web/project-brief-service";
 import { SegmentGenerationError, generateSegment } from "./generation-service";
 import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
 import { loadSegmentCatalog, validateSegmentFilter } from "./validation-service";
+
+interface BriefContextErrors {
+  BRIEF_NOT_FOUND: () => Error;
+  BRIEF_NOT_APPROVED: () => Error;
+  BRIEF_REVISION_CONFLICT: () => Error;
+  FORBIDDEN: () => Error;
+}
 
 export const listSegmentsProcedure = authed.segments.list.handler(async ({ context }) => {
   return listSegments(context.database, context.workspace);
@@ -37,13 +48,29 @@ export const createSegmentProcedure = authed.segments.create.handler(
       );
       if (!validation.valid) throw errors.INVALID_SEGMENT_FILTER();
     }
+    const trustedBrief = await resolveBriefContext(
+      context.database,
+      context.workspace,
+      input,
+      errors,
+    );
+    const { projectId: _projectId, briefRevision: _briefRevision, ...segmentInput } = input;
     const repository = new SegmentRepository(context.database, context.workspace);
     let created: Awaited<ReturnType<typeof repository.createSegment>>;
     try {
       created = await repository.createSegment({
-        ...input,
+        ...segmentInput,
         membershipSource:
           input.kind === "static" ? (input.membershipSource ?? "Manual selection") : null,
+        ...(trustedBrief
+          ? {
+              projectLink: {
+                projectId: trustedBrief.projectId,
+                briefRevision: trustedBrief.revision,
+                addedByUserId: context.workspace.userId,
+              },
+            }
+          : {}),
       });
     } catch (error) {
       throw errors.SEGMENT_CONFLICT({ cause: error });
@@ -63,6 +90,20 @@ export const createSegmentProcedure = authed.segments.create.handler(
         resourceId: created.id,
       }),
     );
+    if (trustedBrief) {
+      context.executionContext.waitUntil(
+        writeAuditLog(context.database, context.workspace, {
+          action: "project.item.add",
+          resourceType: "project",
+          resourceId: trustedBrief.projectId,
+          metadata: {
+            resourceType: "segment",
+            resourceId: created.id,
+            briefRevision: trustedBrief.revision,
+          },
+        }),
+      );
+    }
     return {
       id: created.id,
       name: input.name,
@@ -127,7 +168,19 @@ export const generateSegmentProcedure = authed.segments.generate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      return await generateSegment(context.database, context.workspace, context.env, input);
+      const trustedBrief = await resolveBriefContext(
+        context.database,
+        context.workspace,
+        input,
+        errors,
+      );
+      return await generateSegment(
+        context.database,
+        context.workspace,
+        context.env,
+        input,
+        trustedBrief,
+      );
     } catch (error) {
       if (!(error instanceof SegmentGenerationError)) throw error;
       switch (error.kind) {
@@ -141,6 +194,23 @@ export const generateSegmentProcedure = authed.segments.generate.handler(
     }
   },
 );
+
+async function resolveBriefContext(
+  database: Parameters<typeof approvedProjectBriefContext>[0],
+  workspace: Parameters<typeof approvedProjectBriefContext>[1],
+  reference: { projectId?: string | undefined; briefRevision?: number | undefined },
+  errors: BriefContextErrors,
+) {
+  try {
+    return await approvedProjectBriefContext(database, workspace, reference);
+  } catch (error) {
+    if (!(error instanceof ProjectBriefServiceError)) throw error;
+    if (error.kind === "not_found") throw errors.BRIEF_NOT_FOUND();
+    if (error.kind === "revision_conflict") throw errors.BRIEF_REVISION_CONFLICT();
+    if (error.kind === "forbidden_actor") throw errors.FORBIDDEN();
+    throw errors.BRIEF_NOT_APPROVED();
+  }
+}
 
 export const refreshSegmentProcedure = authed.segments.refresh.handler(
   async ({ context, input, errors }) => {

@@ -12,6 +12,7 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { projectItems } from "../web/schema";
 import {
   automationEnrollments,
   automationJobs,
@@ -113,33 +114,49 @@ export class AutomationRepository extends WorkspaceRepository {
     description: string;
     timezone: string;
     graph: AutomationDefinition;
+    projectLink?: { projectId: string; briefRevision: number; addedByUserId: string } | undefined;
   }): Promise<{ id: string; draftVersionId: string }> {
     const id = uuidv7();
     const draftVersionId = uuidv7();
     const now = nowIso();
     const orm = this.database.orm;
-    await orm.batch([
-      orm.insert(automations).values({
-        id,
-        workspaceId: this.context.workspaceId,
-        name: input.name,
-        description: input.description,
-        status: "draft",
-        draftVersionId,
-        createdAt: now,
-        updatedAt: now,
-      }),
-      orm.insert(automationVersions).values({
-        id: draftVersionId,
-        workspaceId: this.context.workspaceId,
-        automationId: id,
-        version: 1,
-        status: "draft",
-        timezone: input.timezone,
-        graph: graphCodec.encode(input.graph),
-        createdAt: now,
-      }),
-    ]);
+    const insertAutomation = orm.insert(automations).values({
+      id,
+      workspaceId: this.context.workspaceId,
+      name: input.name,
+      description: input.description,
+      status: "draft",
+      draftVersionId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const insertVersion = orm.insert(automationVersions).values({
+      id: draftVersionId,
+      workspaceId: this.context.workspaceId,
+      automationId: id,
+      version: 1,
+      status: "draft",
+      timezone: input.timezone,
+      graph: graphCodec.encode(input.graph),
+      createdAt: now,
+    });
+    if (input.projectLink) {
+      await orm.batch([
+        insertAutomation,
+        insertVersion,
+        orm.insert(projectItems).values({
+          workspaceId: this.context.workspaceId,
+          projectId: input.projectLink.projectId,
+          resourceType: "automation",
+          resourceId: id,
+          briefRevision: input.projectLink.briefRevision,
+          addedByUserId: input.projectLink.addedByUserId,
+          createdAt: now,
+        }),
+      ]);
+    } else {
+      await orm.batch([insertAutomation, insertVersion]);
+    }
     return { id, draftVersionId };
   }
 

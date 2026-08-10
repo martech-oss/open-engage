@@ -4,6 +4,10 @@ import { AutomationRepository, uuidv7, writeAuditLog } from "@openengage/databas
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import {
+  approvedProjectBriefContext,
+  ProjectBriefServiceError,
+} from "../web/project-brief-service";
 import { getAutomationAnalytics } from "./analytics-service";
 import {
   applyEmailSequence,
@@ -17,6 +21,13 @@ import { getAutomationPublishability } from "./publishability-service";
 import { loadAutomationResourceContext, validateAutomationResources } from "./resource-validation";
 import { automationTrigger } from "./triggers";
 
+interface BriefContextErrors {
+  BRIEF_NOT_FOUND: () => Error;
+  BRIEF_NOT_APPROVED: () => Error;
+  BRIEF_REVISION_CONFLICT: () => Error;
+  FORBIDDEN: () => Error;
+}
+
 export const listAutomationsProcedure = authed.automations.list.handler(async ({ context }) => {
   return listAutomations(context.database, context.workspace.workspaceId);
 });
@@ -24,13 +35,43 @@ export const listAutomationsProcedure = authed.automations.list.handler(async ({
 export const createAutomationProcedure = authed.automations.create.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    const trustedBrief = await resolveBriefContext(
+      context.database,
+      context.workspace,
+      input,
+      errors,
+    );
+    const { projectId: _projectId, briefRevision: _briefRevision, ...definition } = input;
     const repository = new AutomationRepository(context.database, context.workspace);
     const created = await repository.createAutomation({
-      name: input.name,
-      description: input.description,
-      timezone: input.timezone,
-      graph: input,
+      name: definition.name,
+      description: definition.description,
+      timezone: definition.timezone,
+      graph: definition,
+      ...(trustedBrief
+        ? {
+            projectLink: {
+              projectId: trustedBrief.projectId,
+              briefRevision: trustedBrief.revision,
+              addedByUserId: context.workspace.userId,
+            },
+          }
+        : {}),
     });
+    if (trustedBrief) {
+      context.executionContext.waitUntil(
+        writeAuditLog(context.database, context.workspace, {
+          action: "project.item.add",
+          resourceType: "project",
+          resourceId: trustedBrief.projectId,
+          metadata: {
+            resourceType: "automation",
+            resourceId: created.id,
+            briefRevision: trustedBrief.revision,
+          },
+        }),
+      );
+    }
     return { id: created.id, draftVersionId: created.draftVersionId };
   },
 );
@@ -39,7 +80,19 @@ export const generateAutomationProcedure = authed.automations.generate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      return await generateAutomation(context.database, context.workspace, context.env, input);
+      const trustedBrief = await resolveBriefContext(
+        context.database,
+        context.workspace,
+        input,
+        errors,
+      );
+      return await generateAutomation(
+        context.database,
+        context.workspace,
+        context.env,
+        input,
+        trustedBrief,
+      );
     } catch (error) {
       if (!(error instanceof AutomationGenerationError)) throw error;
       switch (error.kind) {
@@ -58,7 +111,19 @@ export const generateEmailSequenceProcedure = authed.automations.generateSequenc
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      return await generateEmailSequence(context.database, context.workspace, context.env, input);
+      const trustedBrief = await resolveBriefContext(
+        context.database,
+        context.workspace,
+        input,
+        errors,
+      );
+      return await generateEmailSequence(
+        context.database,
+        context.workspace,
+        context.env,
+        input,
+        trustedBrief,
+      );
     } catch (error) {
       if (!(error instanceof EmailSequenceError)) throw error;
       switch (error.kind) {
@@ -78,7 +143,25 @@ export const applyEmailSequenceProcedure = authed.automations.applySequence.hand
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      const result = await applyEmailSequence(context.database, context.workspace, input);
+      const trustedBrief = await resolveBriefContext(
+        context.database,
+        context.workspace,
+        input,
+        errors,
+      );
+      const { projectId: _projectId, briefRevision: _briefRevision, ...proposal } = input;
+      const result = await applyEmailSequence(
+        context.database,
+        context.workspace,
+        proposal,
+        trustedBrief
+          ? {
+              projectId: trustedBrief.projectId,
+              briefRevision: trustedBrief.revision,
+              addedByUserId: context.workspace.userId,
+            }
+          : undefined,
+      );
       context.executionContext.waitUntil(
         writeAuditLog(context.database, context.workspace, {
           action: "email_sequence.create",
@@ -86,6 +169,21 @@ export const applyEmailSequenceProcedure = authed.automations.applySequence.hand
           resourceId: result.automationId,
         }),
       );
+      if (trustedBrief) {
+        context.executionContext.waitUntil(
+          writeAuditLog(context.database, context.workspace, {
+            action: "project.item.add",
+            resourceType: "project",
+            resourceId: trustedBrief.projectId,
+            metadata: {
+              resourceTypes: ["automation", "email"],
+              automationId: result.automationId,
+              templateIds: result.templates.map((template) => template.templateId),
+              briefRevision: trustedBrief.revision,
+            },
+          }),
+        );
+      }
       return result;
     } catch (error) {
       if (!(error instanceof EmailSequenceError)) throw error;
@@ -94,6 +192,23 @@ export const applyEmailSequenceProcedure = authed.automations.applySequence.hand
     }
   },
 );
+
+async function resolveBriefContext(
+  database: Parameters<typeof approvedProjectBriefContext>[0],
+  workspace: Parameters<typeof approvedProjectBriefContext>[1],
+  reference: { projectId?: string | undefined; briefRevision?: number | undefined },
+  errors: BriefContextErrors,
+) {
+  try {
+    return await approvedProjectBriefContext(database, workspace, reference);
+  } catch (error) {
+    if (!(error instanceof ProjectBriefServiceError)) throw error;
+    if (error.kind === "not_found") throw errors.BRIEF_NOT_FOUND();
+    if (error.kind === "revision_conflict") throw errors.BRIEF_REVISION_CONFLICT();
+    if (error.kind === "forbidden_actor") throw errors.FORBIDDEN();
+    throw errors.BRIEF_NOT_APPROVED();
+  }
+}
 
 export const getAutomationDraftProcedure = authed.automations.getDraft.handler(
   async ({ context, input, errors }) => {

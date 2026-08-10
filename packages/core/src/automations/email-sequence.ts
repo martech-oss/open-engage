@@ -147,6 +147,8 @@ export type EmailSequenceProposal = z.infer<typeof emailSequenceProposalSchema>;
 
 const generationRequestBaseSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
+  projectId: z.string().min(1).optional(),
+  briefRevision: z.number().int().positive().optional(),
   continuation: emailSequenceContinuationSchema.optional(),
   resolutions: z.array(emailSequenceResolutionSchema).max(100).optional(),
 });
@@ -201,7 +203,10 @@ export const emailSequenceGenerationResultSchema = z.discriminatedUnion("status"
 ]);
 export type EmailSequenceGenerationResult = z.infer<typeof emailSequenceGenerationResultSchema>;
 
-export const applyEmailSequenceInputSchema = emailSequenceProposalSchema;
+export const applyEmailSequenceInputSchema = emailSequenceProposalSchema.extend({
+  projectId: z.string().min(1).optional(),
+  briefRevision: z.number().int().positive().optional(),
+});
 export const applyEmailSequenceResultSchema = z.object({
   automationId: z.string(),
   draftVersionId: z.string(),
@@ -318,6 +323,7 @@ export function validateEmailSequenceProposal(
 
 export const emailSequenceDesignerInitialDataSchema = z.object({
   request: generateEmailSequenceInputSchema,
+  trustedBrief: z.unknown().optional(),
   catalog: automationGenerationCatalogSchema,
   brand: emailBrandProfileSchema,
   variables: z

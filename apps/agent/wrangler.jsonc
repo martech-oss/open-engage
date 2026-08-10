@@ -17,6 +17,7 @@
     { "tag": "v3", "new_sqlite_classes": ["FlueEmailDesignerAgent"] },
     { "tag": "v4", "new_sqlite_classes": ["FlueSegmentDesignerAgent"] },
     { "tag": "v5", "new_sqlite_classes": ["FlueEmailSequenceDesignerAgent"] },
+    { "tag": "v6", "new_sqlite_classes": ["FlueMarketingAutomationDesignerAgent"] },
   ],
   "env": {
     "bootstrap": {

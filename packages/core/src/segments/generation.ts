@@ -87,6 +87,8 @@ export type SegmentResourceResolution = z.infer<typeof segmentResourceResolution
 
 const requestBaseSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
+  projectId: z.string().min(1).optional(),
+  briefRevision: z.number().int().positive().optional(),
   continuation: segmentGenerationContinuationSchema.optional(),
   resolutions: z.array(segmentResourceResolutionSchema).max(100).optional(),
 });
@@ -161,5 +163,6 @@ export type SegmentGenerationCatalog = z.infer<typeof segmentGenerationCatalogSc
 export const segmentDesignerInitialDataSchema = z.object({
   request: generateSegmentInputSchema,
   catalog: segmentGenerationCatalogSchema,
+  trustedBrief: z.unknown().optional(),
 });
 export type SegmentDesignerInitialData = z.infer<typeof segmentDesignerInitialDataSchema>;

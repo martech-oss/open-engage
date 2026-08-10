@@ -42,7 +42,15 @@ export const navigationSections: readonly NavSection[] = [
       { to: "/contacts/tags", label: "タグ" },
     ]),
   },
-  { to: "/automations", label: "オートメーション", icon: Spline, tabs: [] },
+  {
+    to: "/automations",
+    label: "オートメーション",
+    icon: Spline,
+    tabs: linkOptions([
+      { to: "/automations/briefs", label: "施策ブリーフ" },
+      { to: "/automations", label: "フロー" },
+    ]),
+  },
   {
     to: "/emails",
     label: "メール",

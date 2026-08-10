@@ -32,12 +32,16 @@ export function SegmentAiSheet({
   onOpenChange,
   mode,
   currentDefinition,
+  projectId,
+  briefRevision,
   onApply,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "refine";
   currentDefinition?: SegmentDefinition;
+  projectId?: string;
+  briefRevision?: number;
   onApply: (definition: SegmentDefinition) => Promise<void>;
 }): ReactNode {
   const generate = useGenerateSegment();
@@ -64,13 +68,20 @@ export function SegmentAiSheet({
           : undefined;
       const next = await generate.mutateAsync(
         mode === "create"
-          ? { mode, prompt, continuation, resolutions }
+          ? {
+              mode,
+              prompt,
+              continuation,
+              resolutions,
+              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+            }
           : {
               mode,
               prompt,
               currentDefinition: requireDefinition(currentDefinition),
               continuation,
               resolutions,
+              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
             },
       );
       setResult(next);

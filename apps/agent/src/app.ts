@@ -5,6 +5,7 @@ import { AutomationDesigner } from "./agents/automation-designer.ts";
 import { EmailDesigner } from "./agents/email-designer.ts";
 import { EmailSequenceDesigner } from "./agents/email-sequence-designer.ts";
 import { Hello } from "./agents/hello.ts";
+import { MarketingAutomationDesigner } from "./agents/marketing-automation-designer.ts";
 import { SegmentDesigner } from "./agents/segment-designer.ts";
 
 const app = new Hono();
@@ -19,6 +20,10 @@ app.route("/api/agents/hello", createAgentRouter(Hello));
 app.route("/internal/automation-designer", createAgentRouter(AutomationDesigner));
 app.route("/internal/email-designer", createAgentRouter(EmailDesigner));
 app.route("/internal/email-sequence-designer", createAgentRouter(EmailSequenceDesigner));
+app.route(
+  "/internal/marketing-automation-designer",
+  createAgentRouter(MarketingAutomationDesigner),
+);
 app.route("/internal/segment-designer", createAgentRouter(SegmentDesigner));
 
 export default app;

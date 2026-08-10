@@ -16,6 +16,12 @@ import {
 import { authedErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
 
+const briefContextErrors = {
+  BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
+  BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },
+  BRIEF_REVISION_CONFLICT: { status: 409, message: "施策ブリーフのrevisionが一致しません" },
+} as const;
+
 export const automationsContract = {
   list: oc
     .route({ method: "GET", path: "/automations" })
@@ -23,8 +29,13 @@ export const automationsContract = {
     .output(z.array(automationRowSchema)),
   create: oc
     .route({ method: "POST", path: "/automations", successStatus: 201 })
-    .errors(authedErrors)
-    .input(automationDefinitionSchema)
+    .errors({ ...authedErrors, ...briefContextErrors })
+    .input(
+      automationDefinitionSchema.extend({
+        projectId: z.string().min(1).optional(),
+        briefRevision: z.number().int().positive().optional(),
+      }),
+    )
     .output(z.object({ id: z.string(), draftVersionId: z.string() })),
   generate: oc
     .route({ method: "POST", path: "/automations/generate" })
@@ -33,6 +44,7 @@ export const automationsContract = {
       AI_GENERATION_FAILED: { status: 502, message: "AIが有効なフローを生成できませんでした" },
       AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
       AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...briefContextErrors,
     })
     .input(generateAutomationInputSchema)
     .output(automationGenerationResultSchema),
@@ -43,6 +55,7 @@ export const automationsContract = {
       AI_GENERATION_FAILED: { status: 502, message: "AIが有効なシーケンスを生成できませんでした" },
       AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
       AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...briefContextErrors,
     })
     .input(generateEmailSequenceInputSchema)
     .output(emailSequenceGenerationResultSchema),
@@ -52,6 +65,7 @@ export const automationsContract = {
       ...authedErrors,
       INVALID_SEQUENCE: { status: 422, message: "シーケンス提案を適用できません" },
       SEQUENCE_CONFLICT: { status: 409, message: "シーケンスのIDが競合しています" },
+      ...briefContextErrors,
     })
     .input(applyEmailSequenceInputSchema)
     .output(applyEmailSequenceResultSchema),

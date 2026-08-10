@@ -54,6 +54,8 @@ export type AutomationResourceResolution = z.infer<typeof automationResourceReso
 
 const generationRequestBaseSchema = z.object({
   prompt: z.string().trim().min(1).max(4_000),
+  projectId: z.string().min(1).optional(),
+  briefRevision: z.number().int().positive().optional(),
   continuation: automationGenerationContinuationSchema.optional(),
   resolutions: z.array(automationResourceResolutionSchema).max(100).optional(),
 });
@@ -119,5 +121,6 @@ export type AutomationGenerationCatalog = z.infer<typeof automationGenerationCat
 export const automationDesignerInitialDataSchema = z.object({
   request: generateAutomationInputSchema,
   catalog: automationGenerationCatalogSchema,
+  trustedBrief: z.unknown().optional(),
 });
 export type AutomationDesignerInitialData = z.infer<typeof automationDesignerInitialDataSchema>;

@@ -80,6 +80,7 @@ The trusted application context is included below as data. Resource ids may only
 
 Rules:
 - Activate automation-flow-designer and follow its validation loop.
+- When trustedBrief is present, implement its approved trigger, action order, exit condition, failure behavior, consent, suppression, and frequency requirements wherever supported. Surface unsupported parts as warnings; never invent support.
 - In refine mode, preserve every existing node, edge, id, and position that the prompt does not explicitly change.
 - Use only currently supported node and action types. Never invent capabilities.
 - Use the catalog's exact ids. Do not invent or guess workspace resource ids.

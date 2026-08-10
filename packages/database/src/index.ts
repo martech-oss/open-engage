@@ -23,6 +23,7 @@ export * from "./shared/pagination";
 export * from "./shared/repository-base";
 export * from "./shared/uuid";
 export * from "./web/asset-repository";
+export * from "./web/project-brief-repository";
 export * from "./web/project-repository";
 export * from "./web/repository";
 export * from "./workspaces/repository";

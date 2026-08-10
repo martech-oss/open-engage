@@ -15,6 +15,12 @@ import {
 import { authedErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema } from "../shared/schemas";
 
+const briefContextErrors = {
+  BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
+  BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },
+  BRIEF_REVISION_CONFLICT: { status: 409, message: "施策ブリーフのrevisionが一致しません" },
+} as const;
+
 export const segmentsContract = {
   list: oc
     .route({ method: "GET", path: "/segments" })
@@ -39,6 +45,7 @@ export const segmentsContract = {
       FILTER_REQUIRED: { status: 422, message: "動的セグメントには条件が必要です" },
       SEGMENT_CONFLICT: { status: 409, message: "同じslugのセグメントが既に存在します" },
       INVALID_SEGMENT_FILTER: { status: 422, message: "セグメント条件が無効です" },
+      ...briefContextErrors,
     })
     .input(
       z.object({
@@ -48,6 +55,8 @@ export const segmentsContract = {
         kind: z.enum(["static", "dynamic"]),
         filter: segmentFilterSchema.optional(),
         membershipSource: z.string().trim().min(1).max(500).nullable().optional(),
+        projectId: z.string().min(1).optional(),
+        briefRevision: z.number().int().positive().optional(),
       }),
     )
     .output(
@@ -82,6 +91,7 @@ export const segmentsContract = {
       AI_GENERATION_FAILED: { status: 502, message: "AIが有効なセグメントを生成できませんでした" },
       AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
       AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...briefContextErrors,
     })
     .input(generateSegmentInputSchema)
     .output(segmentGenerationResultSchema),

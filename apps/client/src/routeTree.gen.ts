@@ -41,6 +41,8 @@ import { Route as AppWebsiteFormsRouteImport } from './routes/_app.website.forms
 import { Route as AppWebsiteMessagesRouteImport } from './routes/_app.website.messages'
 import { Route as AppWebsitePagesRouteImport } from './routes/_app.website.pages'
 import { Route as AppWebsiteTrackingRouteImport } from './routes/_app.website.tracking'
+import { Route as AppAutomationsBriefsIndexRouteImport } from './routes/_app.automations.briefs.index'
+import { Route as AppAutomationsBriefsIdRouteImport } from './routes/_app.automations.briefs.$id'
 import { Route as AppContactsCompaniesIndexRouteImport } from './routes/_app.contacts.companies.index'
 import { Route as AppContactsCompaniesIdRouteImport } from './routes/_app.contacts.companies.$id'
 
@@ -203,6 +205,17 @@ const AppWebsiteTrackingRoute = AppWebsiteTrackingRouteImport.update({
   path: '/tracking',
   getParentRoute: () => AppWebsiteRoute,
 } as any)
+const AppAutomationsBriefsIndexRoute =
+  AppAutomationsBriefsIndexRouteImport.update({
+    id: '/automations/briefs/',
+    path: '/automations/briefs/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppAutomationsBriefsIdRoute = AppAutomationsBriefsIdRouteImport.update({
+  id: '/automations/briefs/$id',
+  path: '/automations/briefs/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppContactsCompaniesIndexRoute =
   AppContactsCompaniesIndexRouteImport.update({
     id: '/',
@@ -247,7 +260,9 @@ export interface FileRoutesByFullPath {
   '/deals/': typeof AppDealsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
   '/website/': typeof AppWebsiteIndexRoute
+  '/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
   '/contacts/companies/$id': typeof AppContactsCompaniesIdRoute
+  '/automations/briefs/': typeof AppAutomationsBriefsIndexRoute
   '/contacts/companies/': typeof AppContactsCompaniesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -277,7 +292,9 @@ export interface FileRoutesByTo {
   '/deals': typeof AppDealsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
   '/website': typeof AppWebsiteIndexRoute
+  '/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
   '/contacts/companies/$id': typeof AppContactsCompaniesIdRoute
+  '/automations/briefs': typeof AppAutomationsBriefsIndexRoute
   '/contacts/companies': typeof AppContactsCompaniesIndexRoute
 }
 export interface FileRoutesById {
@@ -314,7 +331,9 @@ export interface FileRoutesById {
   '/_app/deals/': typeof AppDealsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
   '/_app/website/': typeof AppWebsiteIndexRoute
+  '/_app/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
   '/_app/contacts/companies/$id': typeof AppContactsCompaniesIdRoute
+  '/_app/automations/briefs/': typeof AppAutomationsBriefsIndexRoute
   '/_app/contacts/companies/': typeof AppContactsCompaniesIndexRoute
 }
 export interface FileRouteTypes {
@@ -351,7 +370,9 @@ export interface FileRouteTypes {
     | '/deals/'
     | '/emails/'
     | '/website/'
+    | '/automations/briefs/$id'
     | '/contacts/companies/$id'
+    | '/automations/briefs/'
     | '/contacts/companies/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -381,7 +402,9 @@ export interface FileRouteTypes {
     | '/deals'
     | '/emails'
     | '/website'
+    | '/automations/briefs/$id'
     | '/contacts/companies/$id'
+    | '/automations/briefs'
     | '/contacts/companies'
   id:
     | '__root__'
@@ -417,7 +440,9 @@ export interface FileRouteTypes {
     | '/_app/deals/'
     | '/_app/emails/'
     | '/_app/website/'
+    | '/_app/automations/briefs/$id'
     | '/_app/contacts/companies/$id'
+    | '/_app/automations/briefs/'
     | '/_app/contacts/companies/'
   fileRoutesById: FileRoutesById
 }
@@ -655,6 +680,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWebsiteTrackingRouteImport
       parentRoute: typeof AppWebsiteRoute
     }
+    '/_app/automations/briefs/': {
+      id: '/_app/automations/briefs/'
+      path: '/automations/briefs'
+      fullPath: '/automations/briefs/'
+      preLoaderRoute: typeof AppAutomationsBriefsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/automations/briefs/$id': {
+      id: '/_app/automations/briefs/$id'
+      path: '/automations/briefs/$id'
+      fullPath: '/automations/briefs/$id'
+      preLoaderRoute: typeof AppAutomationsBriefsIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/contacts/companies/': {
       id: '/_app/contacts/companies/'
       path: '/'
@@ -769,6 +808,8 @@ interface AppRouteChildren {
   AppWebsiteRoute: typeof AppWebsiteRouteWithChildren
   AppAutomationsIdRoute: typeof AppAutomationsIdRoute
   AppAutomationsIndexRoute: typeof AppAutomationsIndexRoute
+  AppAutomationsBriefsIdRoute: typeof AppAutomationsBriefsIdRoute
+  AppAutomationsBriefsIndexRoute: typeof AppAutomationsBriefsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -783,6 +824,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppWebsiteRoute: AppWebsiteRouteWithChildren,
   AppAutomationsIdRoute: AppAutomationsIdRoute,
   AppAutomationsIndexRoute: AppAutomationsIndexRoute,
+  AppAutomationsBriefsIdRoute: AppAutomationsBriefsIdRoute,
+  AppAutomationsBriefsIndexRoute: AppAutomationsBriefsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

@@ -12,6 +12,7 @@ import { nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { projectItems } from "../web/schema";
 import { automations, automationVersions } from "./schema";
 
 const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
@@ -26,7 +27,10 @@ export class EmailSequenceDraftConflictError extends Error {
 }
 
 export class EmailSequenceDraftRepository extends WorkspaceRepository {
-  public async apply(proposal: EmailSequenceProposal): Promise<ApplyEmailSequenceResult> {
+  public async apply(
+    proposal: EmailSequenceProposal,
+    projectLink?: { projectId: string; briefRevision: number; addedByUserId: string },
+  ): Promise<ApplyEmailSequenceResult> {
     const existing = await this.readExisting(proposal);
     if (existing) return existing;
 
@@ -34,40 +38,63 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
     const now = nowIso();
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
-    await orm.batch([
-      orm.insert(emailTemplates).values(
-        proposal.emails.map((email) => ({
-          id: email.templateId,
-          workspaceId,
-          name: email.name,
-          purpose: email.purpose,
-          draftSubject: email.selectedSubject,
-          draftContent: contentCodec.encode(email.content),
-          createdAt: now,
-          updatedAt: now,
-        })),
-      ),
-      orm.insert(automations).values({
-        id: proposal.automationId,
+    const insertTemplates = orm.insert(emailTemplates).values(
+      proposal.emails.map((email) => ({
+        id: email.templateId,
         workspaceId,
-        name: proposal.definition.name,
-        description: proposal.definition.description,
-        status: "draft",
-        draftVersionId,
+        name: email.name,
+        purpose: email.purpose,
+        draftSubject: email.selectedSubject,
+        draftContent: contentCodec.encode(email.content),
         createdAt: now,
         updatedAt: now,
-      }),
-      orm.insert(automationVersions).values({
-        id: draftVersionId,
-        workspaceId,
-        automationId: proposal.automationId,
-        version: 1,
-        status: "draft",
-        timezone: proposal.definition.timezone,
-        graph: graphCodec.encode(proposal.definition),
-        createdAt: now,
-      }),
-    ]);
+      })),
+    );
+    const insertAutomation = orm.insert(automations).values({
+      id: proposal.automationId,
+      workspaceId,
+      name: proposal.definition.name,
+      description: proposal.definition.description,
+      status: "draft",
+      draftVersionId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const insertVersion = orm.insert(automationVersions).values({
+      id: draftVersionId,
+      workspaceId,
+      automationId: proposal.automationId,
+      version: 1,
+      status: "draft",
+      timezone: proposal.definition.timezone,
+      graph: graphCodec.encode(proposal.definition),
+      createdAt: now,
+    });
+    if (projectLink) {
+      await orm.batch([
+        insertTemplates,
+        insertAutomation,
+        insertVersion,
+        orm.insert(projectItems).values(
+          [
+            { resourceType: "automation" as const, resourceId: proposal.automationId },
+            ...proposal.emails.map((email) => ({
+              resourceType: "email" as const,
+              resourceId: email.templateId,
+            })),
+          ].map((resource) => ({
+            workspaceId,
+            projectId: projectLink.projectId,
+            briefRevision: projectLink.briefRevision,
+            addedByUserId: projectLink.addedByUserId,
+            createdAt: now,
+            ...resource,
+          })),
+        ),
+      ]);
+    } else {
+      await orm.batch([insertTemplates, insertAutomation, insertVersion]);
+    }
     return resultFor(proposal, draftVersionId);
   }
 

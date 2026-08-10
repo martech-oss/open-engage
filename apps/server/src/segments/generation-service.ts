@@ -35,11 +35,12 @@ export async function generateSegment(
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: GenerateSegmentInput,
+  trustedBrief?: unknown,
 ): Promise<SegmentGenerationResult> {
   const catalog = await loadSegmentCatalog(database, workspace);
   const unresolved = unresolvedContinuation(input, catalog);
   if (unresolved) return unresolved;
-  const proposal = await requestSegmentProposal(env, input, catalog);
+  const proposal = await requestSegmentProposal(env, input, catalog, trustedBrief);
   if (proposal.status === "needs_input") {
     return needsInputResult(
       {
@@ -76,6 +77,7 @@ async function requestSegmentProposal(
   env: RuntimeEnv,
   request: GenerateSegmentInput,
   catalog: SegmentGenerationCatalog,
+  trustedBrief?: unknown,
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -89,7 +91,7 @@ async function requestSegmentProposal(
   try {
     const admission = await conversation.send({
       message: { kind: "user", body: request.prompt },
-      initialData: { request, catalog },
+      initialData: { request, catalog, ...(trustedBrief ? { trustedBrief } : {}) },
       uid: null,
       signal: controller.signal,
     });

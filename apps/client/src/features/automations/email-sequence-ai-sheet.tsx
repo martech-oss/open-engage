@@ -37,10 +37,14 @@ export function EmailSequenceAiSheet({
   open,
   onOpenChange,
   onApplied,
+  projectId,
+  briefRevision,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplied: (result: ApplyEmailSequenceResult) => Promise<void>;
+  projectId?: string;
+  briefRevision?: number;
 }): ReactNode {
   const generate = useGenerateEmailSequence();
   const apply = useApplyEmailSequence();
@@ -67,8 +71,21 @@ export function EmailSequenceAiSheet({
         result?.status === "needs_input" ? buildSequenceResolutions(result, values) : undefined;
       const next = await generate.mutateAsync(
         proposal
-          ? { mode: "refine", prompt, currentProposal: proposal, continuation, resolutions }
-          : { mode: "create", prompt, continuation, resolutions },
+          ? {
+              mode: "refine",
+              prompt,
+              currentProposal: proposal,
+              continuation,
+              resolutions,
+              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+            }
+          : {
+              mode: "create",
+              prompt,
+              continuation,
+              resolutions,
+              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+            },
       );
       setResult(next);
       setValues({});
@@ -95,7 +112,10 @@ export function EmailSequenceAiSheet({
     if (!proposal) return;
     setError("");
     try {
-      const applied = await apply.mutateAsync(proposal);
+      const applied = await apply.mutateAsync({
+        ...proposal,
+        ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+      });
       await onApplied(applied);
       onOpenChange(false);
     } catch (cause) {

@@ -22,6 +22,13 @@
       "when": 1786253446817,
       "tag": "0002_breezy_photon",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786335384212,
+      "tag": "0003_faulty_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

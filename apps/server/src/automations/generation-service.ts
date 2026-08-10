@@ -41,12 +41,13 @@ export async function generateAutomation(
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: GenerateAutomationInput,
+  trustedBrief?: unknown,
 ): Promise<AutomationGenerationResult> {
   const resources = await loadAutomationResourceContext(database, workspace);
   const unresolved = unresolvedContinuation(input, resources.catalog);
   if (unresolved) return unresolved;
 
-  const proposal = await requestAutomationProposal(env, input, resources.catalog);
+  const proposal = await requestAutomationProposal(env, input, resources.catalog, trustedBrief);
   if (proposal.status === "needs_input") {
     return needsInputResult(
       {
@@ -83,6 +84,7 @@ async function requestAutomationProposal(
   env: RuntimeEnv,
   request: GenerateAutomationInput,
   catalog: AutomationGenerationCatalog,
+  trustedBrief?: unknown,
 ): Promise<AutomationGenerationAgentResult> {
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -97,7 +99,7 @@ async function requestAutomationProposal(
   try {
     const admission = await conversation.send({
       message: { kind: "user", body: request.prompt },
-      initialData: { request, catalog },
+      initialData: { request, catalog, ...(trustedBrief ? { trustedBrief } : {}) },
       uid: null,
       signal: controller.signal,
     });

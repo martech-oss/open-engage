@@ -11,6 +11,7 @@ export async function getDashboard(
   return {
     contacts: { count: toFiniteNumber(data.contacts["count"]) },
     automations: { count: toFiniteNumber(data.automations["count"]) },
+    briefs: { overdueReviews: toFiniteNumber(data.briefs["overdue_reviews"]) },
     deliveries: {
       sent: toFiniteNumber(data.deliveries["sent"]),
       delivered: toFiniteNumber(data.deliveries["delivered"]),

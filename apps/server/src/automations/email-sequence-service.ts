@@ -54,6 +54,7 @@ export async function generateEmailSequence(
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: GenerateEmailSequenceInput,
+  trustedBrief?: unknown,
 ): Promise<EmailSequenceGenerationResult> {
   const context = await loadSequenceContext(database, workspace);
   const unresolved = unresolvedContinuation(input, context.automation.catalog);
@@ -61,6 +62,7 @@ export async function generateEmailSequence(
   const reserved = reservedIds(input);
   const result = await requestSequenceProposal(env, {
     request: input,
+    ...(trustedBrief ? { trustedBrief } : {}),
     catalog: context.automation.catalog,
     brand: context.brand,
     variables: context.variables,
@@ -85,11 +87,12 @@ export async function applyEmailSequence(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   proposal: EmailSequenceProposal,
+  projectLink?: { projectId: string; briefRevision: number; addedByUserId: string },
 ) {
   const context = await loadSequenceContext(database, workspace);
   validateReadyProposal(proposal, null, context);
   try {
-    return await new EmailSequenceDraftRepository(database, workspace).apply(proposal);
+    return await new EmailSequenceDraftRepository(database, workspace).apply(proposal, projectLink);
   } catch (cause) {
     if (cause instanceof EmailSequenceDraftConflictError || isConstraintError(cause)) {
       throw new EmailSequenceError("conflict", { cause });
@@ -183,6 +186,7 @@ async function requestSequenceProposal(
   env: RuntimeEnv,
   initialData: {
     request: GenerateEmailSequenceInput;
+    trustedBrief?: unknown;
     catalog: AutomationGenerationCatalog;
     brand: SequenceContext["brand"];
     variables: SequenceContext["variables"];

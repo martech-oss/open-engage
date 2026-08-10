@@ -42,12 +42,16 @@ export function AutomationAiSheet({
   onOpenChange,
   mode,
   currentDefinition,
+  projectId,
+  briefRevision,
   onApply,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "refine";
   currentDefinition?: AutomationDefinition;
+  projectId?: string;
+  briefRevision?: number;
   onApply: (definition: AutomationDefinition) => Promise<void>;
 }): ReactNode {
   const generate = useGenerateAutomation();
@@ -69,13 +73,20 @@ export function AutomationAiSheet({
         result?.status === "needs_input" ? buildResolutions(result, selections) : undefined;
       const next = await generate.mutateAsync(
         mode === "create"
-          ? { mode, prompt, continuation, resolutions }
+          ? {
+              mode,
+              prompt,
+              continuation,
+              resolutions,
+              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
+            }
           : {
               mode,
               prompt,
               currentDefinition: requireCurrentDefinition(currentDefinition),
               continuation,
               resolutions,
+              ...(projectId && briefRevision ? { projectId, briefRevision } : {}),
             },
       );
       setResult(next);

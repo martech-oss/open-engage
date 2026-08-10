@@ -3,6 +3,7 @@ import * as z from "zod";
 export const dashboardSchema = z.object({
   contacts: z.object({ count: z.number().int().nonnegative() }),
   automations: z.object({ count: z.number().int().nonnegative() }),
+  briefs: z.object({ overdueReviews: z.number().int().nonnegative() }),
   deliveries: z.object({
     sent: z.number().int().nonnegative(),
     delivered: z.number().int().nonnegative(),
