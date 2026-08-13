@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type AuthResult = {
+  data: { id: string } | null;
+  error: { message?: string } | null;
+};
+
 const { setActive, create } = vi.hoisted(() => ({
-  setActive: vi.fn(),
-  create: vi.fn(),
+  setActive: vi.fn<(input: { organizationId: string }) => Promise<AuthResult>>(),
+  create: vi.fn<(input: { name: string; slug: string }) => Promise<AuthResult>>(),
 }));
 
 vi.mock("@/auth-client", () => ({
@@ -85,9 +90,13 @@ describe("createAndActivateWorkspace", () => {
 
 describe("reloadAfterWorkspaceChange", () => {
   it("clears cached workspace data before navigating to the dashboard", async () => {
-    const queryClient = { clear: vi.fn() };
-    const router = { invalidate: vi.fn(async () => undefined) };
-    const navigate = vi.fn();
+    const queryClient = { clear: vi.fn<() => void>() };
+    const router = {
+      invalidate: vi
+        .fn<(opts?: { sync?: boolean }) => Promise<void>>()
+        .mockResolvedValue(undefined),
+    };
+    const navigate = vi.fn<(opts: { to: "/dashboard"; replace: true }) => void>();
 
     await reloadAfterWorkspaceChange({ queryClient, router, navigate });
 

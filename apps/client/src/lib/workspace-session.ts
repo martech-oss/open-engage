@@ -26,10 +26,7 @@ export function listedWorkspaces(
       slug: organization.slug,
     });
   }
-  return [
-    { id: current.id, name: current.name, slug: current.slug },
-    ...rest,
-  ];
+  return [{ id: current.id, name: current.name, slug: current.slug }, ...rest];
 }
 
 export async function activateWorkspace(

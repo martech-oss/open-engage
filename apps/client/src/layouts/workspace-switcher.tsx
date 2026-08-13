@@ -119,10 +119,7 @@ export function WorkspaceSwitcher({ workspace }: { workspace: Workspace }): Reac
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem
-                  disabled={switching || busy}
-                  onClick={() => setCreateOpen(true)}
-                >
+                <DropdownMenuItem disabled={switching || busy} onClick={() => setCreateOpen(true)}>
                   <Plus />
                   新しいワークスペース
                 </DropdownMenuItem>
