@@ -133,9 +133,6 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
         </Button>
       }
     >
-      <p className="text-sm text-muted-foreground">
-        対象者・トリガー・フロー・担当・KPIを承認可能な施策として管理します。
-      </p>
       <div className="grid gap-3 rounded-lg border p-4 md:grid-cols-4">
         <FilterSelect
           label="状態"

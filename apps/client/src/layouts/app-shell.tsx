@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { Blocks, ChevronsUpDown, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { authClient } from "@/auth-client";
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/sidebar";
 import { contactOptionsQueryOptions } from "@/features/contacts/contact-api";
 import { activeSection, navigationSections, settingsSection } from "@/layouts/navigation";
+import { WorkspaceSwitcher } from "@/layouts/workspace-switcher";
 import { cn } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
 
@@ -122,33 +123,6 @@ export function AppShell({
         <Outlet />
       </SidebarInset>
     </SidebarProvider>
-  );
-}
-
-function WorkspaceSwitcher({ workspace }: { workspace: Workspace }): ReactNode {
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          render={<Link to="/settings" />}
-          tooltip={workspace.name}
-          className="h-auto gap-2.5 rounded-none px-3 py-3.5"
-        >
-          <div className="flex size-6.5 shrink-0 items-center justify-center rounded-[7px] bg-primary text-primary-foreground">
-            <Blocks className="size-[15px]" />
-          </div>
-          <div className="grid min-w-0 flex-1 text-left">
-            <span className="truncate text-[13px] leading-tight font-bold text-foreground">
-              OpenEngage
-            </span>
-            <span className="truncate text-[10.5px] leading-tight text-muted-foreground">
-              {workspace.slug}
-            </span>
-          </div>
-          <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    </SidebarMenu>
   );
 }
 

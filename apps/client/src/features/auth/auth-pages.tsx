@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
 import { getFormString } from "@/lib/form-data";
-import { slugify } from "@/lib/utils";
+import { createAndActivateWorkspace, reloadAfterWorkspaceChange } from "@/lib/workspace-session";
 
 export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string }): ReactNode {
   const router = useRouter();
@@ -183,23 +183,17 @@ export function WorkspaceSetupPage(): ReactNode {
     const name = getFormString(new FormData(event.currentTarget), "name");
     setBusy(true);
     setError("");
-    const result = await authClient.organization.create({
-      name,
-      slug: slugify(name),
-    });
-    if (result.error) {
-      setError(result.error.message ?? "作成できませんでした");
+    const result = await createAndActivateWorkspace(name);
+    if ("error" in result) {
+      setError(result.error);
       setBusy(false);
       return;
     }
-    if (result.data?.id) {
-      await authClient.organization.setActive({
-        organizationId: result.data.id,
-      });
-    }
-    queryClient.clear();
-    await router.invalidate({ sync: true });
-    await router.navigate({ to: "/dashboard", replace: true });
+    await reloadAfterWorkspaceChange({
+      queryClient,
+      router,
+      navigate: router.navigate,
+    });
   }
 
   return (

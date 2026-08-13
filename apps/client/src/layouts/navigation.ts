@@ -66,7 +66,7 @@ export const navigationSections: readonly NavSection[] = [
     label: "Website",
     icon: Globe,
     tabs: linkOptions([
-      { to: "/website/forms", label: "サインアップフォーム" },
+      { to: "/website/forms", label: "フォーム" },
       { to: "/website/pages", label: "ランディングページ" },
       { to: "/website/assets", label: "アセット" },
       { to: "/website/messages", label: "サイトメッセージ" },

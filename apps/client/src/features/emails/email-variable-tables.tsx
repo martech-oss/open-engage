@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ArchiveConfirm, CopyButton } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Item,
   ItemActions,
@@ -34,7 +34,6 @@ export function VariableReference({ variables }: { variables: MessageVariableRow
     <Card>
       <CardHeader>
         <CardTitle>テンプレート変数</CardTitle>
-        <CardDescription>OpenEngageが送信時に安全に展開します。</CardDescription>
       </CardHeader>
       <CardContent>
         <ItemGroup className="grid gap-3 sm:grid-cols-2">

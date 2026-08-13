@@ -118,10 +118,6 @@ export function AutomationsPage(): ReactNode {
         </div>
       }
     >
-      <div className="max-w-3xl text-sm leading-6 text-muted-foreground">
-        顧客の登録、フォーム送信、購入やカゴ落ちなどの行動をきっかけに、
-        メール送信・待機・条件分岐を自動で実行します。
-      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {automations.map((automation) => (
           <Card key={automation.id} className="transition-shadow hover:shadow-md">

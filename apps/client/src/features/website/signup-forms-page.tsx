@@ -148,7 +148,6 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
       onCreateClick={openCreate}
       summary={<FormSummary items={items} />}
       listTitle="フォーム一覧"
-      listDescription="公開状態、フォーム形式、送信数を確認できます。"
       columns={columns}
       rows={items}
       rowKey={(item) => item.id}

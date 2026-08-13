@@ -34,7 +34,7 @@ export function WebsiteResourceListPage<Row>({
   banner?: ReactNode;
   summary: ReactNode;
   listTitle: string;
-  listDescription: string;
+  listDescription?: string;
   columns: DataTableColumn<Row>[];
   rows: Row[];
   rowKey: (row: Row) => string;
@@ -58,7 +58,7 @@ export function WebsiteResourceListPage<Row>({
       <Card>
         <CardHeader>
           <CardTitle>{listTitle}</CardTitle>
-          <CardDescription>{listDescription}</CardDescription>
+          {listDescription ? <CardDescription>{listDescription}</CardDescription> : null}
         </CardHeader>
         <CardContent className="px-0">
           <DataTable
