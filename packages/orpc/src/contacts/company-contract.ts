@@ -5,6 +5,9 @@ import {
   companyAssignContactInputSchema,
   companyCreateSchema,
   companyDetailSchema,
+  companyEnrichmentCapabilitySchema,
+  companyEnrichmentInputSchema,
+  companyEnrichmentResultSchema,
   companyGetInputSchema,
   companyListInputSchema,
   companyRemoveContactInputSchema,
@@ -30,12 +33,36 @@ const conflict = {
   },
 } as const;
 
+const enrichmentErrors = {
+  COMPANY_ENRICHMENT_FAILED: {
+    status: 422,
+    message: "会社情報を生成できませんでした",
+  },
+  COMPANY_ENRICHMENT_UNAVAILABLE: {
+    status: 503,
+    message: "会社情報の取得機能を利用できません",
+  },
+  COMPANY_ENRICHMENT_TIMEOUT: {
+    status: 504,
+    message: "会社情報の取得がタイムアウトしました",
+  },
+} as const;
+
 export const companiesContract = {
   list: oc
     .route({ method: "GET", path: "/companies" })
     .errors(workspaceErrors)
     .input(companyListInputSchema)
     .output(z.array(companySummarySchema)),
+  enrichmentCapability: oc
+    .route({ method: "GET", path: "/companies/enrichment-capability" })
+    .errors(workspaceErrors)
+    .output(companyEnrichmentCapabilitySchema),
+  enrich: oc
+    .route({ method: "POST", path: "/companies/enrich" })
+    .errors({ ...authedErrors, ...notFound, ...enrichmentErrors })
+    .input(companyEnrichmentInputSchema)
+    .output(companyEnrichmentResultSchema),
   get: oc
     .route({ method: "GET", path: "/companies/{id}" })
     .errors({ ...workspaceErrors, ...notFound })

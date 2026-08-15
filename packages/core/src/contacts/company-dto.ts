@@ -1,16 +1,17 @@
 import * as z from "zod";
 
+export const companyDomainSchema = z
+  .string()
+  .trim()
+  .max(253)
+  .regex(
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i,
+    "domain must be a hostname such as example.com",
+  );
+
 const companyFieldsSchema = z.object({
   name: z.string().trim().min(1).max(191),
-  domain: z
-    .string()
-    .trim()
-    .max(253)
-    .regex(
-      /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i,
-      "domain must be a hostname such as example.com",
-    )
-    .optional(),
+  domain: companyDomainSchema.optional(),
 });
 
 export const companyCreateSchema = companyFieldsSchema;

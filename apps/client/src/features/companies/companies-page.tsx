@@ -7,6 +7,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Sparkles,
   UserMinus,
   UsersRound,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
   companiesQueryOptions,
+  companyEnrichmentCapabilityQueryOptions,
   companyContactOptionsQueryOptions,
   companyQueryOptions,
   useAssignCompanyContact,
@@ -41,11 +43,15 @@ import { contactSurnameFirstName } from "@/features/contacts/contact-bits";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { formatDate } from "@/lib/format";
 
+import { CompanyEnrichmentSheet } from "./company-enrichment-sheet";
 import { AddCompanyContactForm, CompanyForm } from "./company-forms";
 
 export function CompaniesPage({ initialQuery }: { initialQuery: string }): ReactNode {
   const navigate = useNavigate();
   const { data: companies } = useSuspenseQuery(companiesQueryOptions(initialQuery));
+  const { data: enrichmentCapability } = useSuspenseQuery(
+    companyEnrichmentCapabilityQueryOptions(),
+  );
   const [query, setQuery] = useState(initialQuery);
   const [showCreate, setShowCreate] = useState(false);
   const createCompany = useCreateCompany();
@@ -161,6 +167,7 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
         title="会社を作成"
         description="会社名とメールドメインを登録します。"
         submitLabel="作成"
+        enrichmentEnabled={enrichmentCapability.enabled}
         onSubmit={async (values) => {
           const company = await createCompany.mutateAsync(values);
           toast.success("会社を作成しました");
@@ -177,9 +184,13 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
 
 export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNode {
   const { data: company } = useSuspenseQuery(companyQueryOptions(companyId));
+  const { data: enrichmentCapability } = useSuspenseQuery(
+    companyEnrichmentCapabilityQueryOptions(),
+  );
   const { data: contactOptions } = useSuspenseQuery(companyContactOptionsQueryOptions());
   const [showEdit, setShowEdit] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
+  const [showEnrichment, setShowEnrichment] = useState(false);
   const updateCompany = useUpdateCompany();
   const removeContact = useRemoveCompanyContact();
   const assignContact = useAssignCompanyContact();
@@ -258,6 +269,12 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
             <Pencil data-icon="inline-start" />
             編集
           </Button>
+          {enrichmentCapability.enabled ? (
+            <Button variant="outline" onClick={() => setShowEnrichment(true)}>
+              <Sparkles data-icon="inline-start" />
+              会社情報を取得
+            </Button>
+          ) : null}
           <Button onClick={() => setShowAddContact(true)}>
             <Plus data-icon="inline-start" />
             連絡先を追加
@@ -355,6 +372,17 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
           await assignContact.mutateAsync({ id: company.id, ...values });
           toast.success("連絡先を会社へ追加しました");
           setShowAddContact(false);
+        }}
+      />
+      <CompanyEnrichmentSheet
+        open={showEnrichment}
+        onOpenChange={setShowEnrichment}
+        source={{ source: "company", companyId: company.id }}
+        currentName={company.name}
+        currentDomain={company.domain ?? ""}
+        onApply={async (values) => {
+          await updateCompany.mutateAsync({ id: company.id, ...values });
+          toast.success("取得した会社情報を反映しました");
         }}
       />
     </PageLayout>

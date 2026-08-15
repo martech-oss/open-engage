@@ -1,5 +1,6 @@
+import { Sparkles } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   AppDialog,
@@ -9,6 +10,7 @@ import {
   FormNativeSelect,
   FormSelectOption,
 } from "@/components/app-ui";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -22,6 +24,8 @@ import { contactOptionLabel } from "@/features/contacts/contact-bits";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 
+import { CompanyEnrichmentSheet } from "./company-enrichment-sheet";
+
 export function CompanyForm({
   open,
   onOpenChange,
@@ -29,6 +33,7 @@ export function CompanyForm({
   description,
   initialName = "",
   initialDomain = "",
+  enrichmentEnabled = false,
   submitLabel,
   onSubmit,
 }: {
@@ -38,10 +43,21 @@ export function CompanyForm({
   description: string;
   initialName?: string;
   initialDomain?: string;
+  enrichmentEnabled?: boolean;
   submitLabel: string;
   onSubmit: (values: { name: string; domain?: string }) => Promise<void>;
 }): ReactNode {
   const { busy, error, run } = useFormSubmission("会社を保存できませんでした");
+  const [name, setName] = useState(initialName);
+  const [domain, setDomain] = useState(initialDomain);
+  const [showEnrichment, setShowEnrichment] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(initialName);
+    setDomain(initialDomain);
+    setShowEnrichment(false);
+  }, [initialDomain, initialName, open]);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -69,20 +85,52 @@ export function CompanyForm({
       <FormInput
         label="会社名"
         name="name"
-        defaultValue={initialName}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
         placeholder="例：Acme株式会社"
         required
       />
       <FormInput
         label="ドメイン"
         name="domain"
-        defaultValue={initialDomain}
+        value={domain}
+        onChange={(event) => setDomain(event.target.value)}
         placeholder="例：acme.co.jp"
         description="URLではなくメールドメインを入力してください。"
         pattern="(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}"
       />
+      {enrichmentEnabled ? (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!name.trim() && !isCompanyDomain(domain)}
+          onClick={() => setShowEnrichment(true)}
+        >
+          <Sparkles data-icon="inline-start" />
+          会社情報を取得
+        </Button>
+      ) : null}
+      <CompanyEnrichmentSheet
+        open={showEnrichment}
+        onOpenChange={setShowEnrichment}
+        source={
+          isCompanyDomain(domain)
+            ? { source: "domain", domain: domain.trim().toLowerCase() }
+            : { source: "name", name: name.trim() || initialName || "会社" }
+        }
+        currentName={name.trim()}
+        currentDomain={domain.trim().toLowerCase()}
+        onApply={async (values) => {
+          if (values.name) setName(values.name);
+          if (values.domain) setDomain(values.domain);
+        }}
+      />
     </FormDialog>
   );
+}
+
+function isCompanyDomain(value: string): boolean {
+  return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(value.trim());
 }
 
 export function AddCompanyContactForm({

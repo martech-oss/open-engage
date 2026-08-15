@@ -41,7 +41,7 @@ The internal `SegmentDesigner` agent uses the same segment skill with a trusted 
 
 The internal `EmailSequenceDesigner` agent combines the email-sequence, email-template, and automation-flow skills into a validated bundle. The Server Worker owns resource checks and atomic draft creation; the agent never persists or publishes the generated templates or automation.
 
-The agent has a lightweight in-memory sandbox for drafting Markdown. Workspace files are temporary and are not exposed as downloadable artifacts, so the agent always returns the complete result in the conversation. Network access is disabled; provide research, analytics, or source material in the conversation when it should inform an answer.
+The agent has a lightweight in-memory sandbox for drafting Markdown. Workspace files are temporary and are not exposed as downloadable artifacts, so the agent always returns the complete result in the conversation. General agents have no network tools. The private `CompanyEnrichment` agent is the exception: it exposes only bounded, read-only AI Gateway Web Search and official-site inspection tools, with Cloudflare Playwright used as a fallback for JavaScript-rendered pages.
 
 ## Develop
 
@@ -59,6 +59,8 @@ Register the model provider key as a Worker secret, then deploy:
 pnpm exec wrangler secret put ANTHROPIC_API_KEY
 pnpm run deploy
 ```
+
+Company enrichment uses the `AI` and `BROWSER` bindings in `wrangler.jsonc`. It requires Cloudflare AI Gateway Unified Billing credits and Browser Run quota; it does not require an additional browser provider or MCP Worker.
 
 ## Learn more
 

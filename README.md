@@ -18,6 +18,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - React Emailで管理する認証メールと、OpenEngage内で管理・公開するWorkspaceテンプレート
 - React Flowを使ったビジュアルオートメーションビルダー
 - メール文面・間隔・分岐・終了条件をまとめて下書き化するAI Email Sequence Designer
+- AI Gateway Web SearchとBrowser Runで根拠付き候補を作る会社情報エンリッチメント
 - ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
 - Contact・Automation・Email・Deals・Siteを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
@@ -258,9 +259,16 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 - `openengage-email-events`: Email Sendingの6種類の配送イベントを受け取るQueue consumer
 
 `apps/agent/wrangler.jsonc`は`workers_dev: false`の非公開Worker `openengage-agent`を定義します。
+`AI` bindingはFlueの会社情報AgentとAI Gateway Web Search、`BROWSER` bindingは
+JavaScript依存の公式サイトを読むCloudflare Playwrightに使用します。
 Flueは`/api/agents/hello`にmountされます。Better AuthのCookieやAPIキーをAgentへ渡さず、
 Serverがセッション、Workspace membership、会話所有権を検証してから`AGENT_APP`経由で転送します。
 Server→Agentの一方向のみで、AgentからServerへ呼び返すbindingはありません。
+
+会社情報エンリッチメントは初期状態で無効です。Cloudflare AI GatewayのUnified Billing creditsを
+設定したうえで、`apps/server/wrangler.jsonc`の`COMPANY_ENRICHMENT_ENABLED`を`"true"`へ変更して
+ServerとAgentを再デプロイしてください。通常HTMLを先に取得し、Browser RunはJavaScript描画が
+必要なページだけに使用します。提案は自動保存されず、会社名とドメインだけを確認後に反映できます。
 
 ローカル開発ではClient ViteがServerをauxiliary Workerとして起動し、Agent Viteを別プロセスで
 起動します。`openengage-server`と`openengage-agent`は`workers_dev: false`のため公開URLを持ちません。

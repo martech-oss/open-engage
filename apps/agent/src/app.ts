@@ -2,6 +2,7 @@ import { createAgentRouter } from "@flue/runtime/routing";
 import { Hono } from "hono";
 
 import { AutomationDesigner } from "./agents/automation-designer.ts";
+import { CompanyEnrichment } from "./agents/company-enrichment.ts";
 import { EmailDesigner } from "./agents/email-designer.ts";
 import { EmailSequenceDesigner } from "./agents/email-sequence-designer.ts";
 import { Hello } from "./agents/hello.ts";
@@ -18,6 +19,7 @@ const app = new Hono();
 //     -d '{"kind":"user","body":"Tell me a joke."}'
 app.route("/api/agents/hello", createAgentRouter(Hello));
 app.route("/internal/automation-designer", createAgentRouter(AutomationDesigner));
+app.route("/internal/company-enrichment", createAgentRouter(CompanyEnrichment));
 app.route("/internal/email-designer", createAgentRouter(EmailDesigner));
 app.route("/internal/email-sequence-designer", createAgentRouter(EmailSequenceDesigner));
 app.route(

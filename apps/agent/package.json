@@ -13,6 +13,7 @@
     "cf:types": "wrangler types worker-configuration.d.ts --env-interface AgentBindings --config wrangler.jsonc"
   },
   "dependencies": {
+    "@cloudflare/playwright": "^1.3.5",
     "@flue/runtime": "^2.0.1",
     "@openengage/core": "workspace:*",
     "agents": "^0.14.2",

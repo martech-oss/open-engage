@@ -1,7 +1,13 @@
+import { type CompanyEnrichmentAgentRequest } from "@openengage/core/contacts";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import {
+  CompanyEnrichmentError,
+  enrichCompany,
+  isCompanyEnrichmentEnabled,
+} from "./company-enrichment-service";
 import {
   CompanyConflictError,
   assignCompanyContact,
@@ -24,6 +30,45 @@ export const getCompanyProcedure = authed.companies.get.handler(
     const company = await getCompanyDetail(context.database, context.workspace, input.id);
     if (!company) throw errors.COMPANY_NOT_FOUND();
     return company;
+  },
+);
+
+export const companyEnrichmentCapabilityProcedure = authed.companies.enrichmentCapability.handler(
+  ({ context }) => ({
+    enabled: isCompanyEnrichmentEnabled(context.env),
+  }),
+);
+
+export const enrichCompanyProcedure = authed.companies.enrich.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    let request: CompanyEnrichmentAgentRequest;
+    if (input.source === "company") {
+      const company = await getCompanyDetail(context.database, context.workspace, input.companyId);
+      if (!company) throw errors.COMPANY_NOT_FOUND();
+      request = company.domain
+        ? { source: "domain", domain: company.domain.toLowerCase() }
+        : { source: "name", name: company.name };
+    } else {
+      request =
+        input.source === "domain"
+          ? { source: "domain", domain: input.domain.toLowerCase() }
+          : input;
+    }
+
+    try {
+      return await enrichCompany(context.env, request);
+    } catch (error) {
+      if (!(error instanceof CompanyEnrichmentError)) throw error;
+      switch (error.kind) {
+        case "failed":
+          throw errors.COMPANY_ENRICHMENT_FAILED();
+        case "timeout":
+          throw errors.COMPANY_ENRICHMENT_TIMEOUT();
+        case "unavailable":
+          throw errors.COMPANY_ENRICHMENT_UNAVAILABLE();
+      }
+    }
   },
 );
 
@@ -96,6 +141,8 @@ export const removeCompanyContactProcedure = authed.companies.removeContact.hand
 export const companyProcedures = {
   list: listCompaniesProcedure,
   get: getCompanyProcedure,
+  enrichmentCapability: companyEnrichmentCapabilityProcedure,
+  enrich: enrichCompanyProcedure,
   create: createCompanyProcedure,
   update: updateCompanyProcedure,
   assignContact: assignCompanyContactProcedure,

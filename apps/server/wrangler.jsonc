@@ -79,6 +79,7 @@
     "TRANSACTIONAL_FROM_NAME": "OpenEngage",
     "REPLY_DOMAIN": "reply.example.com",
     "RAW_EVENT_RETENTION_DAYS": "90",
+    "COMPANY_ENRICHMENT_ENABLED": "false",
   },
   "observability": {
     "enabled": true,

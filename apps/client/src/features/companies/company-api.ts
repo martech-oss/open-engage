@@ -1,9 +1,21 @@
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
-import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/core/contacts";
+import type {
+  CompanyContactDto,
+  CompanyDetail,
+  CompanyEnrichmentInput,
+  CompanyEnrichmentResult,
+  CompanySummary,
+} from "@openengage/core/contacts";
 
-export type { CompanyContactDto, CompanyDetail, CompanySummary };
+export type {
+  CompanyContactDto,
+  CompanyDetail,
+  CompanyEnrichmentInput,
+  CompanyEnrichmentResult,
+  CompanySummary,
+};
 
 /** A contact offered when attaching one to a company. */
 export interface ContactOption {
@@ -33,6 +45,10 @@ export function companiesQueryOptions(query = "") {
 
 export function companyQueryOptions(companyId: string) {
   return orpcQuery.companies.get.queryOptions({ input: { id: companyId } });
+}
+
+export function companyEnrichmentCapabilityQueryOptions() {
+  return orpcQuery.companies.enrichmentCapability.queryOptions();
 }
 
 /** Active contacts offered when assigning one to a company. */
@@ -84,6 +100,10 @@ export function useUpdateCompany() {
     ...orpcQuery.companies.update.mutationOptions(),
     onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
   });
+}
+
+export function useEnrichCompany() {
+  return useMutation(orpcQuery.companies.enrich.mutationOptions());
 }
 
 export function useAssignCompanyContact() {
