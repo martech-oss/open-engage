@@ -7,12 +7,19 @@ export function statusLabel(status: DealStatus): string {
   return status === "won" ? "獲得" : status === "lost" ? "失注" : "進行中";
 }
 
+export function taskTypeName(type: DealTaskType): string {
+  if (type === "call") return "電話";
+  if (type === "email") return "メール";
+  if (type === "meeting") return "ミーティング";
+  return "タスク";
+}
+
 export function taskTypeLabel(type: DealTaskType): ReactNode {
   if (type === "call") {
     return (
       <>
         <Phone data-icon="inline-start" />
-        電話
+        {taskTypeName(type)}
       </>
     );
   }
@@ -20,7 +27,7 @@ export function taskTypeLabel(type: DealTaskType): ReactNode {
     return (
       <>
         <Mail data-icon="inline-start" />
-        メール
+        {taskTypeName(type)}
       </>
     );
   }
@@ -28,11 +35,11 @@ export function taskTypeLabel(type: DealTaskType): ReactNode {
     return (
       <>
         <UsersRound data-icon="inline-start" />
-        ミーティング
+        {taskTypeName(type)}
       </>
     );
   }
-  return "タスク";
+  return taskTypeName(type);
 }
 
 export function contactLabel(deal: DealSummary): string {

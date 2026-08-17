@@ -160,6 +160,11 @@ export const dealTaskSchema = z.object({
 });
 export type DealTask = z.infer<typeof dealTaskSchema>;
 
+export const dealTaskListItemSchema = dealTaskSchema.extend({
+  dealName: z.string(),
+});
+export type DealTaskListItem = z.infer<typeof dealTaskListItemSchema>;
+
 const dealListSummarySchema = z.object({
   openCount: z.number().int().nonnegative(),
   openValue: z.number(),

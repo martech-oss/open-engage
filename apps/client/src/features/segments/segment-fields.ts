@@ -39,6 +39,14 @@ const segmentOperatorLabels = {
   not_exists: "値がない",
 } as const satisfies Record<SegmentOperator, string>;
 
+export function getSegmentFieldLabel(field: SegmentField): string {
+  return segmentFieldOptions.find((option) => option.field === field)?.label ?? field;
+}
+
+export function getSegmentOperatorLabel(operator: SegmentOperator): string {
+  return segmentOperatorLabels[operator];
+}
+
 export function getSegmentOperatorOptions(
   field: SegmentField,
 ): Array<{ operator: SegmentOperator; label: string }> {

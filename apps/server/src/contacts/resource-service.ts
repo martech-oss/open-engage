@@ -5,6 +5,7 @@ import type {
   ContactProfile,
   ContactScoreAdjust,
   TagCreate,
+  TagUpdate,
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
@@ -107,6 +108,24 @@ export async function createTag(
     throw new ResourceConflictError("tag");
   }
   return { id, slug, name: input.name, color: input.color };
+}
+
+export async function updateTag(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  input: TagUpdate,
+): Promise<{ id: string; name: string; slug: string; color: string } | null> {
+  const slug = resourceSlug(input.name, input.id);
+  try {
+    return await new ContactResourceRepository(database, workspace).updateTag({
+      id: input.id,
+      slug,
+      name: input.name,
+      color: input.color,
+    });
+  } catch {
+    throw new ResourceConflictError("tag");
+  }
 }
 
 export function addContactTag(

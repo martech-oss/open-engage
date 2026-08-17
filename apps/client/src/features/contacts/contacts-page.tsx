@@ -320,6 +320,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
 
         <DataTable
           compact
+          showColumnVisibility
           columns={columns}
           rows={contacts}
           rowKey={(contact) => contact.id}

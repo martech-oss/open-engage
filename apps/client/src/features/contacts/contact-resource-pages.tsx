@@ -7,24 +7,39 @@ import { FormDialog, FormInput, PageLayout } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   contactResourcesQueryOptions,
   createContactTag,
+  updateContactTag,
   type ContactResources,
 } from "@/features/contacts/contact-resource-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 
+type TagRow = ContactResources["tags"][number];
+
 export function ContactTagsPage(): ReactNode {
   const { data: resources } = useSuspenseQuery(contactResourcesQueryOptions());
   const queryClient = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<TagRow | null>(null);
 
-  const columns: DataTableColumn<ContactResources["tags"][number]>[] = [
+  function openCreate(): void {
+    setEditing(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(tag: TagRow): void {
+    setEditing(tag);
+    setFormOpen(true);
+  }
+
+  const columns: DataTableColumn<TagRow>[] = [
     {
       key: "tag",
       header: "タグ",
+      sortValue: (tag) => tag.name.toLocaleLowerCase(),
       cell: (tag) => (
         <Badge variant="outline">
           <span
@@ -41,6 +56,7 @@ export function ContactTagsPage(): ReactNode {
     {
       key: "color",
       header: "カラー",
+      sortValue: (tag) => tag.color.toLocaleLowerCase(),
       cell: (tag) => (
         <span className="font-mono text-xs text-muted-foreground">{tag.color.toUpperCase()}</span>
       ),
@@ -48,11 +64,13 @@ export function ContactTagsPage(): ReactNode {
     {
       key: "slug",
       header: "スラッグ",
+      sortValue: (tag) => tag.slug.toLocaleLowerCase(),
       cell: (tag) => <span className="font-mono text-xs text-muted-foreground">{tag.slug}</span>,
     },
     {
       key: "contactCount",
       header: "連絡先",
+      sortValue: (tag) => Number(tag.contactCount),
       cell: (tag) => <Badge variant="secondary">{Number(tag.contactCount).toLocaleString()}</Badge>,
       headClassName: "px-4 text-right",
       cellClassName: "px-4 text-right",
@@ -63,21 +81,16 @@ export function ContactTagsPage(): ReactNode {
     <PageLayout
       title="タグ"
       action={
-        <Button onClick={() => setShowCreate(true)}>
+        <Button onClick={openCreate}>
           <Plus data-icon="inline-start" />
           タグを作成
         </Button>
       }
     >
-      <Card>
-        <CardHeader className="border-b">
-          <CardTitle>すべてのタグ</CardTitle>
-          <CardAction>
-            <Badge variant="secondary">{resources.tags.length}件</Badge>
-          </CardAction>
-        </CardHeader>
+      <Card className="py-0">
         <CardContent className="px-0">
           <DataTable
+            showColumnVisibility
             columns={columns}
             rows={resources.tags}
             rowKey={(tag) => tag.id}
@@ -85,47 +98,63 @@ export function ContactTagsPage(): ReactNode {
             emptyTitle="タグがまだありません"
             emptyDescription="検索や分類に使う最初のタグを作成しましょう。"
             emptyAction={
-              <Button variant="outline" onClick={() => setShowCreate(true)}>
+              <Button variant="outline" onClick={openCreate}>
                 <Tags data-icon="inline-start" />
                 タグを作成
               </Button>
             }
+            onRowClick={openEdit}
           />
         </CardContent>
       </Card>
-      <CreateTagForm
-        open={showCreate}
-        onOpenChange={setShowCreate}
+      <TagForm
+        key={`${editing?.id ?? "new"}-${formOpen}`}
+        open={formOpen}
+        onOpenChange={(open) => {
+          setFormOpen(open);
+          if (!open) setEditing(null);
+        }}
+        initial={editing}
         onSaved={async () => {
           await queryClient.invalidateQueries({
             queryKey: contactResourcesQueryOptions().queryKey,
           });
-          setShowCreate(false);
+          setFormOpen(false);
+          setEditing(null);
         }}
       />
     </PageLayout>
   );
 }
 
-function CreateTagForm({
+function TagForm({
   open,
   onOpenChange,
+  initial,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initial: TagRow | null;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const { busy, error, run } = useFormSubmission("タグを作成できませんでした");
+  const { busy, error, run } = useFormSubmission(
+    initial ? "タグを更新できませんでした" : "タグを作成できませんでした",
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const name = getFormString(form, "name");
+    const color = getFormString(form, "color");
     await run(async () => {
-      await createContactTag({
-        name: getFormString(form, "name"),
-        color: getFormString(form, "color"),
-      });
+      if (initial) {
+        await updateContactTag({ id: initial.id, name, color });
+        await onSaved();
+        toast.success("タグを更新しました");
+        return;
+      }
+      await createContactTag({ name, color });
       await onSaved();
       toast.success("タグを作成しました");
     });
@@ -135,19 +164,24 @@ function CreateTagForm({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="タグを作成"
-      description="連絡先を識別するラベルとカラーを設定します。"
+      title={initial ? "タグを編集" : "タグを作成"}
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}
-      submitLabel="作成"
+      submitLabel={initial ? "更新" : "作成"}
     >
-      <FormInput label="名前" name="name" placeholder="例：ホットリード" required />
+      <FormInput
+        label="名前"
+        name="name"
+        placeholder="例：ホットリード"
+        defaultValue={initial?.name}
+        required
+      />
       <FormInput
         label="カラー"
         name="color"
         type="color"
-        defaultValue="#64748b"
+        defaultValue={initial?.color ?? "#64748b"}
         description="検索結果やプロフィールでの識別に使用します。"
         required
       />

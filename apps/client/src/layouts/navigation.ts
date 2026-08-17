@@ -73,7 +73,15 @@ export const navigationSections: readonly NavSection[] = [
       { to: "/website/tracking", label: "サイトトラッキング" },
     ]),
   },
-  { to: "/deals", label: "Deals", icon: BriefcaseBusiness, tabs: [] },
+  {
+    to: "/deals",
+    label: "セール",
+    icon: BriefcaseBusiness,
+    tabs: linkOptions([
+      { to: "/deals", label: "Deal" },
+      { to: "/tasks", label: "Task" },
+    ]),
+  },
 ];
 
 export const settingsSection: NavSection = {

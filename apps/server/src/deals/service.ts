@@ -6,6 +6,8 @@ import type {
   DealSummary,
   DealTask,
   DealTaskCreate,
+  DealTaskListItem,
+  DealTaskStatus,
   DealTaskUpdate,
   DealUpdate,
 } from "@openengage/core/deals";
@@ -17,7 +19,7 @@ import {
   type OpenEngageDatabase,
 } from "@openengage/database";
 
-import { serializeDeal, serializeStage, serializeTask } from "./records";
+import { serializeDeal, serializeStage, serializeTask, serializeTaskListItem } from "./records";
 
 /** Deals list needs a pipeline; a missing one is distinct from an empty list. */
 export type DealListOutcome = { kind: "pipeline_not_found" } | { kind: "ok"; data: DealListData };
@@ -101,6 +103,16 @@ export async function listDeals(
       },
     },
   };
+}
+
+export async function listWorkspaceDealTasks(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  status: DealTaskStatus | "all",
+): Promise<DealTaskListItem[]> {
+  const repository = new DealRepository(database, workspace);
+  const rows = await repository.listWorkspaceTasks(status);
+  return rows.map(serializeTaskListItem);
 }
 
 export async function getDealDetail(

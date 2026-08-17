@@ -11,6 +11,7 @@ import type {
   DealSummary,
   DealTask,
   DealTaskCreate,
+  DealTaskListItem,
   DealTaskStatus,
   DealTaskType,
   DealTaskUpdate,
@@ -26,6 +27,7 @@ export type {
   DealSummary,
   DealTask,
   DealTaskCreate,
+  DealTaskListItem,
   DealTaskStatus,
   DealTaskType,
   DealTaskUpdate,
@@ -75,11 +77,41 @@ export function dealDetailQueryOptions(dealId: string) {
   return orpcQuery.deals.get.queryOptions({ input: { id: dealId } });
 }
 
+export type TaskSearch = { status: DealTaskStatus | "all" };
+
+export const taskSearchDefaults: TaskSearch = { status: "open" };
+
+function isTaskStatus(value: unknown): value is TaskSearch["status"] {
+  return value === "open" || value === "completed" || value === "all";
+}
+
+export function parseTaskSearch(search: Record<string, unknown>): TaskSearch {
+  return { status: isTaskStatus(search.status) ? search.status : "open" };
+}
+
+export function tasksQueryOptions(search: TaskSearch) {
+  return orpcQuery.deals.listTasks.queryOptions({ input: { status: search.status } });
+}
+
+function invalidateDealQueries(queryClient: ReturnType<typeof useQueryClient>, dealId?: string) {
+  return Promise.all([
+    ...(dealId
+      ? [
+          queryClient.invalidateQueries({
+            queryKey: orpcQuery.deals.get.key({ input: { id: dealId } }),
+          }),
+        ]
+      : []),
+    queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
+    queryClient.invalidateQueries({ queryKey: orpcQuery.deals.listTasks.key() }),
+  ]);
+}
+
 export function useCreateDeal() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.create.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
+    onSuccess: () => invalidateDealQueries(queryClient),
   });
 }
 
@@ -93,7 +125,7 @@ export function useMoveDeal() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.move.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
+    onSuccess: () => invalidateDealQueries(queryClient),
   });
 }
 
@@ -101,13 +133,7 @@ export function useUpdateDeal() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.update.mutationOptions(),
-    onSuccess: (_data, variables) =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpcQuery.deals.get.key({ input: { id: variables.id } }),
-        }),
-        queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
-      ]),
+    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.id),
   });
 }
 
@@ -115,7 +141,7 @@ export function useArchiveDeal() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.archive.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
+    onSuccess: () => invalidateDealQueries(queryClient),
   });
 }
 
@@ -123,13 +149,7 @@ export function useCreateDealTask() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.createTask.mutationOptions(),
-    onSuccess: (_data, variables) =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpcQuery.deals.get.key({ input: { id: variables.dealId } }),
-        }),
-        queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
-      ]),
+    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
   });
 }
 
@@ -137,13 +157,7 @@ export function useUpdateDealTask() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.updateTask.mutationOptions(),
-    onSuccess: (_data, variables) =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpcQuery.deals.get.key({ input: { id: variables.dealId } }),
-        }),
-        queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
-      ]),
+    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
   });
 }
 
@@ -151,12 +165,6 @@ export function useDeleteDealTask() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.deals.deleteTask.mutationOptions(),
-    onSuccess: (_data, variables) =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpcQuery.deals.get.key({ input: { id: variables.dealId } }),
-        }),
-        queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
-      ]),
+    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
   });
 }

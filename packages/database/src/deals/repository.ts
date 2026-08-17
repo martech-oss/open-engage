@@ -2,11 +2,13 @@ import { and, asc, count, desc, eq, isNull, min, ne, or, sql, type SQL } from "d
 
 import {
   dealSummarySchema,
+  dealTaskListItemSchema,
   dealTaskSchema,
   type DealCreate,
   type DealSummary,
   type DealTask,
   type DealTaskCreate,
+  type DealTaskListItem,
   type DealTaskStatus,
   type DealTaskType,
 } from "@openengage/core/deals";
@@ -38,6 +40,7 @@ const DEFAULT_STAGES = [
 export type DealRow = DealSummary;
 
 export type DealTaskRow = DealTask;
+export type DealTaskListItemRow = DealTaskListItem;
 
 export interface DealListSummaryRow {
   openCount: number;
@@ -387,6 +390,28 @@ export class DealRepository extends WorkspaceRepository {
         desc(dealTasks.createdAt),
       );
     return rows.map((row) => dealTaskSchema.parse(row));
+  }
+
+  /** Open and completed tasks across non-archived deals in this workspace. */
+  public async listWorkspaceTasks(status: DealTaskStatus | "all"): Promise<DealTaskListItemRow[]> {
+    const filters: SQL[] = [this.inWorkspace(dealTasks), isNull(deals.archivedAt)];
+    if (status !== "all") filters.push(eq(dealTasks.status, status));
+    const rows = await this.database.orm
+      .select({ ...this.taskSelection(), dealName: deals.name })
+      .from(dealTasks)
+      .innerJoin(
+        deals,
+        and(eq(deals.workspaceId, dealTasks.workspaceId), eq(deals.id, dealTasks.dealId)),
+      )
+      .leftJoin(user, eq(user.id, dealTasks.assignedUserId))
+      .where(and(...filters))
+      .orderBy(
+        sql`case when ${dealTasks.status} = 'open' then 0 else 1 end`,
+        sql`case when ${dealTasks.dueAt} is null then 1 else 0 end`,
+        asc(dealTasks.dueAt),
+        desc(dealTasks.createdAt),
+      );
+    return rows.map((row) => dealTaskListItemSchema.parse(row));
   }
 
   /** Inserts a deal (caller has already validated its references) and returns the joined row. */

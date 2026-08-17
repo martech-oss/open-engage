@@ -101,6 +101,11 @@ export const tagCreateSchema = z.object({
 });
 export type TagCreate = z.infer<typeof tagCreateSchema>;
 
+export const tagUpdateSchema = tagCreateSchema.extend({
+  id: z.string().min(1),
+});
+export type TagUpdate = z.infer<typeof tagUpdateSchema>;
+
 export const contactBulkActionSchema = z.object({
   contactIds: z.array(z.string().min(1)).min(1).max(100),
   action: z.enum(["archive", "restore", "add_tag", "remove_tag", "add_segment", "remove_segment"]),

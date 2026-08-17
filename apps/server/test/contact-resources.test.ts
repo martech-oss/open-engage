@@ -109,4 +109,33 @@ describe("contact resources over oRPC", () => {
       client.contacts.createTag({ name: "Dup", color: "#64748b" }),
     ).rejects.toMatchObject({ code: "TAG_CONFLICT", status: 409 });
   });
+
+  it("updates a tag name and color", async () => {
+    const client = await seedWorkspace();
+    const tag = await client.contacts.createTag({ name: "VIP", color: "#0f766e" });
+    const updated = await client.contacts.updateTag({
+      id: tag.id,
+      name: "Champion",
+      color: "#7c3aed",
+    });
+    expect(updated).toEqual({
+      id: tag.id,
+      name: "Champion",
+      slug: "champion",
+      color: "#7c3aed",
+    });
+    const options = await client.contacts.options();
+    expect(options.tags).toEqual([
+      { id: tag.id, name: "Champion", slug: "champion", color: "#7c3aed", contactCount: 0 },
+    ]);
+  });
+
+  it("rejects updating a tag to a duplicate name", async () => {
+    const client = await seedWorkspace();
+    await client.contacts.createTag({ name: "Keep", color: "#64748b" });
+    const tag = await client.contacts.createTag({ name: "Rename", color: "#64748b" });
+    await expect(
+      client.contacts.updateTag({ id: tag.id, name: "Keep", color: "#64748b" }),
+    ).rejects.toMatchObject({ code: "TAG_CONFLICT", status: 409 });
+  });
 });

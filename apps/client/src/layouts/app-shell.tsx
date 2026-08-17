@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
@@ -29,7 +29,6 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { contactOptionsQueryOptions } from "@/features/contacts/contact-api";
 import {
   activeSection,
   isNavTabActive,
@@ -42,9 +41,6 @@ import type { Workspace } from "@/lib/workspace";
 
 /** 212px in the design doc — narrow enough that the 13px nav labels set the width. */
 const SIDEBAR_WIDTH = "13.25rem";
-
-/** Saved segments listed under the nav, matching the design's short shortcut list. */
-const SIDEBAR_SEGMENT_LIMIT = 4;
 
 const NAV_ITEM_CLASS = "h-auto rounded-[7px] px-2.5 py-2 text-[13px] font-medium";
 
@@ -119,7 +115,6 @@ export function AppShell({
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
-          <SavedSegments />
         </SidebarContent>
         <SidebarFooter className="gap-0.5 border-t border-sidebar-border p-2">
           <SidebarMenu className="gap-0.5">
@@ -147,39 +142,6 @@ export function AppShell({
         <Outlet />
       </SidebarInset>
     </SidebarProvider>
-  );
-}
-
-/**
- * The design's shortcut list under the nav. Rendered from the segments the
- * contacts filters already load, so it stays absent — rather than showing
- * placeholder rows — until a workspace actually has saved segments.
- */
-function SavedSegments(): ReactNode {
-  const { state } = useSidebar();
-  const { data } = useQuery(contactOptionsQueryOptions());
-  const segments = data?.segments.slice(0, SIDEBAR_SEGMENT_LIMIT) ?? [];
-  if (state === "collapsed" || segments.length === 0) return null;
-
-  return (
-    <div className="mt-3.5 flex flex-col group-data-[collapsible=icon]:hidden">
-      <div className="px-2.5 pb-1.5 font-mono text-[10px] font-medium tracking-[0.1em] text-muted-foreground uppercase">
-        保存したセグメント
-      </div>
-      {segments.map((segment) => (
-        <Link
-          key={segment.id}
-          to="/contacts"
-          search={{ segmentId: segment.id }}
-          className="flex items-center justify-between gap-2 rounded-[7px] px-2.5 py-1 text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        >
-          <span className="truncate">{segment.name}</span>
-          <span className="shrink-0 text-[10.5px] text-muted-foreground tabular-nums">
-            {segment.memberCount.toLocaleString()}
-          </span>
-        </Link>
-      ))}
-    </div>
   );
 }
 

@@ -284,6 +284,25 @@ export class ContactResourceRepository extends WorkspaceRepository {
     });
   }
 
+  public async updateTag(input: {
+    id: string;
+    name: string;
+    slug: string;
+    color: string;
+  }): Promise<{ id: string; name: string; slug: string; color: string } | null> {
+    const existing = await this.database.orm
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(this.inWorkspace(tags), eq(tags.id, input.id)))
+      .get();
+    if (!existing) return null;
+    await this.database.orm
+      .update(tags)
+      .set({ name: input.name, slug: input.slug, color: input.color })
+      .where(and(this.inWorkspace(tags), eq(tags.id, input.id)));
+    return input;
+  }
+
   public async addContactTag(contactId: string, tagId: string): Promise<boolean> {
     return (await this.insertTagMemberships(eq(contacts.id, contactId), tagId)) > 0;
   }

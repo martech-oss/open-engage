@@ -14,6 +14,7 @@ import {
   removeContactTag,
   ResourceConflictError,
   restoreContact,
+  updateTag,
 } from "./resource-service";
 
 export const contactOptionsProcedure = authed.contacts.options.handler(({ context }) =>
@@ -33,6 +34,20 @@ export const createTagProcedure = authed.contacts.createTag.handler(
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
       return await createTag(context.database, context.workspace, input);
+    } catch (error) {
+      if (error instanceof ResourceConflictError) throw errors.TAG_CONFLICT({ cause: error });
+      throw error;
+    }
+  },
+);
+
+export const updateTagProcedure = authed.contacts.updateTag.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    try {
+      const updated = await updateTag(context.database, context.workspace, input);
+      if (!updated) throw errors.TAG_NOT_FOUND();
+      return updated;
     } catch (error) {
       if (error instanceof ResourceConflictError) throw errors.TAG_CONFLICT({ cause: error });
       throw error;
@@ -153,6 +168,7 @@ export const contactResourceProcedures = {
   options: contactOptionsProcedure,
   profile: contactProfileProcedure,
   createTag: createTagProcedure,
+  updateTag: updateTagProcedure,
   assignTag: addTagProcedure,
   removeTag: removeTagProcedure,
   addToSegment: addSegmentProcedure,

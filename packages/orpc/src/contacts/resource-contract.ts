@@ -9,6 +9,7 @@ import {
   contactScoreAdjustSchema,
   tagCreateSchema,
   tagSchema,
+  tagUpdateSchema,
 } from "@openengage/core/contacts";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
@@ -51,6 +52,15 @@ export const contactResourcesContract = {
       TAG_CONFLICT: { status: 409, message: "同名のタグが既に存在します" },
     })
     .input(tagCreateSchema)
+    .output(tagSchema.omit({ contactCount: true })),
+  updateTag: oc
+    .route({ method: "PATCH", path: "/contacts/tags/{id}" })
+    .errors({
+      ...authedErrors,
+      TAG_NOT_FOUND: { status: 404, message: "タグが見つかりません" },
+      TAG_CONFLICT: { status: 409, message: "同名のタグが既に存在します" },
+    })
+    .input(tagUpdateSchema)
     .output(tagSchema.omit({ contactCount: true })),
   assignTag: oc
     .route({ method: "POST", path: "/contacts/{contactId}/tags", successStatus: 201 })

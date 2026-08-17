@@ -72,9 +72,16 @@ describe("Deals CRM", () => {
       assignedUserId: userId,
     });
     expect(task).toMatchObject({ status: "open", type: "call" });
+    await expect(client.deals.listTasks({ status: "open" })).resolves.toEqual([
+      expect.objectContaining({ id: task.id, dealName: "Acme MA導入", status: "open" }),
+    ]);
     await expect(
       client.deals.updateTask({ dealId: created.id, taskId: task.id, status: "completed" }),
     ).resolves.toMatchObject({ status: "completed", completedAt: expect.any(String) });
+    await expect(client.deals.listTasks({ status: "open" })).resolves.toEqual([]);
+    await expect(client.deals.listTasks({ status: "completed" })).resolves.toEqual([
+      expect.objectContaining({ id: task.id, status: "completed" }),
+    ]);
 
     await expect(client.deals.update({ id: created.id, status: "won" })).resolves.toMatchObject({
       status: "won",
@@ -97,6 +104,7 @@ describe("Deals CRM", () => {
       code: "DEAL_NOT_FOUND",
       status: 404,
     });
+    await expect(client.deals.listTasks({ status: "all" })).resolves.toEqual([]);
   });
 
   it("treats `_` in a deal search query as a literal character, not a wildcard", async () => {

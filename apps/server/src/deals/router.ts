@@ -9,6 +9,7 @@ import {
   getDealDetail,
   getDealOptions,
   listDeals,
+  listWorkspaceDealTasks,
   moveDeal,
   updateDeal,
   updateDealTask,
@@ -23,6 +24,10 @@ export const listDealsProcedure = authed.deals.list.handler(async ({ context, in
   if (outcome.kind === "pipeline_not_found") throw errors.DEAL_PIPELINE_NOT_FOUND();
   return outcome.data;
 });
+
+export const listDealTasksProcedure = authed.deals.listTasks.handler(({ context, input }) =>
+  listWorkspaceDealTasks(context.database, context.workspace, input.status),
+);
 
 export const getDealProcedure = authed.deals.get.handler(async ({ context, input, errors }) => {
   const detail = await getDealDetail(context.database, context.workspace, input.id);
@@ -133,6 +138,7 @@ export const deleteDealTaskProcedure = authed.deals.deleteTask.handler(
 export const dealProcedures = {
   options: dealOptionsProcedure,
   list: listDealsProcedure,
+  listTasks: listDealTasksProcedure,
   get: getDealProcedure,
   create: createDealProcedure,
   update: updateDealProcedure,

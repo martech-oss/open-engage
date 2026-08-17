@@ -77,7 +77,7 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
 
   return (
     <PageLayout
-      title="Deals"
+      title="Deal"
       action={
         <Button onClick={() => setShowCreate(true)} disabled={!activePipeline}>
           <Plus data-icon="inline-start" />
@@ -184,7 +184,7 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
       ) : (
         <EmptyState
           title="パイプラインがありません"
-          description="ワークスペースのDeals設定を確認してください。"
+          description="ワークスペースのセール設定を確認してください。"
         />
       )}
 

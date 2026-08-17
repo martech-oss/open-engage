@@ -1,5 +1,5 @@
 import { orpc, orpcQuery } from "@/lib/orpc";
-import type { Tag, TagCreate } from "@openengage/core/contacts";
+import type { Tag, TagCreate, TagUpdate } from "@openengage/core/contacts";
 
 type TagResource = Tag;
 
@@ -15,4 +15,8 @@ export function contactResourcesQueryOptions() {
 
 export function createContactTag(input: TagCreate) {
   return orpc.contacts.createTag(input);
+}
+
+export function updateContactTag(input: TagUpdate) {
+  return orpc.contacts.updateTag(input);
 }

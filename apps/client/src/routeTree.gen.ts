@@ -24,6 +24,7 @@ import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppSegmentsRouteImport } from './routes/_app.segments'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppTagsRouteImport } from './routes/_app.tags'
+import { Route as AppTasksRouteImport } from './routes/_app.tasks'
 import { Route as AppWebsiteRouteImport } from './routes/_app.website'
 import { Route as AppAutomationsIndexRouteImport } from './routes/_app.automations.index'
 import { Route as AppAutomationsIdRouteImport } from './routes/_app.automations.$id'
@@ -36,6 +37,8 @@ import { Route as AppEmailsIndexRouteImport } from './routes/_app.emails.index'
 import { Route as AppEmailsArchiveRouteImport } from './routes/_app.emails.archive'
 import { Route as AppEmailsTemplatesRouteImport } from './routes/_app.emails.templates'
 import { Route as AppEmailsVariablesRouteImport } from './routes/_app.emails.variables'
+import { Route as AppSegmentsIndexRouteImport } from './routes/_app.segments.index'
+import { Route as AppSegmentsIdRouteImport } from './routes/_app.segments.$id'
 import { Route as AppWebsiteIndexRouteImport } from './routes/_app.website.index'
 import { Route as AppWebsiteAssetsRouteImport } from './routes/_app.website.assets'
 import { Route as AppWebsiteFormsRouteImport } from './routes/_app.website.forms'
@@ -119,6 +122,11 @@ const AppTagsRoute = AppTagsRouteImport.update({
   path: '/tags',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTasksRoute = AppTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppWebsiteRoute = AppWebsiteRouteImport.update({
   id: '/website',
   path: '/website',
@@ -179,6 +187,16 @@ const AppEmailsVariablesRoute = AppEmailsVariablesRouteImport.update({
   path: '/variables',
   getParentRoute: () => AppEmailsRoute,
 } as any)
+const AppSegmentsIndexRoute = AppSegmentsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSegmentsRoute,
+} as any)
+const AppSegmentsIdRoute = AppSegmentsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppSegmentsRoute,
+} as any)
 const AppWebsiteIndexRoute = AppWebsiteIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -233,9 +251,10 @@ export interface FileRoutesByFullPath {
   '/emails': typeof AppEmailsRouteWithChildren
   '/forms': typeof AppFormsRoute
   '/reports': typeof AppReportsRoute
-  '/segments': typeof AppSegmentsRoute
+  '/segments': typeof AppSegmentsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/tags': typeof AppTagsRoute
+  '/tasks': typeof AppTasksRoute
   '/website': typeof AppWebsiteRouteWithChildren
   '/automations/$id': typeof AppAutomationsIdRoute
   '/companies/$id': typeof AppCompaniesIdRoute
@@ -243,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
+  '/segments/$id': typeof AppSegmentsIdRoute
   '/website/assets': typeof AppWebsiteAssetsRoute
   '/website/forms': typeof AppWebsiteFormsRoute
   '/website/messages': typeof AppWebsiteMessagesRoute
@@ -253,6 +273,7 @@ export interface FileRoutesByFullPath {
   '/contacts/': typeof AppContactsIndexRoute
   '/deals/': typeof AppDealsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
+  '/segments/': typeof AppSegmentsIndexRoute
   '/website/': typeof AppWebsiteIndexRoute
   '/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
   '/automations/briefs/': typeof AppAutomationsBriefsIndexRoute
@@ -265,15 +286,16 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/forms': typeof AppFormsRoute
   '/reports': typeof AppReportsRoute
-  '/segments': typeof AppSegmentsRoute
   '/settings': typeof AppSettingsRoute
   '/tags': typeof AppTagsRoute
+  '/tasks': typeof AppTasksRoute
   '/automations/$id': typeof AppAutomationsIdRoute
   '/companies/$id': typeof AppCompaniesIdRoute
   '/deals/$id': typeof AppDealsIdRoute
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
+  '/segments/$id': typeof AppSegmentsIdRoute
   '/website/assets': typeof AppWebsiteAssetsRoute
   '/website/forms': typeof AppWebsiteFormsRoute
   '/website/messages': typeof AppWebsiteMessagesRoute
@@ -284,6 +306,7 @@ export interface FileRoutesByTo {
   '/contacts': typeof AppContactsIndexRoute
   '/deals': typeof AppDealsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
+  '/segments': typeof AppSegmentsIndexRoute
   '/website': typeof AppWebsiteIndexRoute
   '/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
   '/automations/briefs': typeof AppAutomationsBriefsIndexRoute
@@ -302,9 +325,10 @@ export interface FileRoutesById {
   '/_app/emails': typeof AppEmailsRouteWithChildren
   '/_app/forms': typeof AppFormsRoute
   '/_app/reports': typeof AppReportsRoute
-  '/_app/segments': typeof AppSegmentsRoute
+  '/_app/segments': typeof AppSegmentsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
   '/_app/tags': typeof AppTagsRoute
+  '/_app/tasks': typeof AppTasksRoute
   '/_app/website': typeof AppWebsiteRouteWithChildren
   '/_app/automations/$id': typeof AppAutomationsIdRoute
   '/_app/companies/$id': typeof AppCompaniesIdRoute
@@ -312,6 +336,7 @@ export interface FileRoutesById {
   '/_app/emails/archive': typeof AppEmailsArchiveRoute
   '/_app/emails/templates': typeof AppEmailsTemplatesRoute
   '/_app/emails/variables': typeof AppEmailsVariablesRoute
+  '/_app/segments/$id': typeof AppSegmentsIdRoute
   '/_app/website/assets': typeof AppWebsiteAssetsRoute
   '/_app/website/forms': typeof AppWebsiteFormsRoute
   '/_app/website/messages': typeof AppWebsiteMessagesRoute
@@ -322,6 +347,7 @@ export interface FileRoutesById {
   '/_app/contacts/': typeof AppContactsIndexRoute
   '/_app/deals/': typeof AppDealsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
+  '/_app/segments/': typeof AppSegmentsIndexRoute
   '/_app/website/': typeof AppWebsiteIndexRoute
   '/_app/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
   '/_app/automations/briefs/': typeof AppAutomationsBriefsIndexRoute
@@ -343,6 +369,7 @@ export interface FileRouteTypes {
     | '/segments'
     | '/settings'
     | '/tags'
+    | '/tasks'
     | '/website'
     | '/automations/$id'
     | '/companies/$id'
@@ -350,6 +377,7 @@ export interface FileRouteTypes {
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
+    | '/segments/$id'
     | '/website/assets'
     | '/website/forms'
     | '/website/messages'
@@ -360,6 +388,7 @@ export interface FileRouteTypes {
     | '/contacts/'
     | '/deals/'
     | '/emails/'
+    | '/segments/'
     | '/website/'
     | '/automations/briefs/$id'
     | '/automations/briefs/'
@@ -372,15 +401,16 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forms'
     | '/reports'
-    | '/segments'
     | '/settings'
     | '/tags'
+    | '/tasks'
     | '/automations/$id'
     | '/companies/$id'
     | '/deals/$id'
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
+    | '/segments/$id'
     | '/website/assets'
     | '/website/forms'
     | '/website/messages'
@@ -391,6 +421,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/deals'
     | '/emails'
+    | '/segments'
     | '/website'
     | '/automations/briefs/$id'
     | '/automations/briefs'
@@ -411,6 +442,7 @@ export interface FileRouteTypes {
     | '/_app/segments'
     | '/_app/settings'
     | '/_app/tags'
+    | '/_app/tasks'
     | '/_app/website'
     | '/_app/automations/$id'
     | '/_app/companies/$id'
@@ -418,6 +450,7 @@ export interface FileRouteTypes {
     | '/_app/emails/archive'
     | '/_app/emails/templates'
     | '/_app/emails/variables'
+    | '/_app/segments/$id'
     | '/_app/website/assets'
     | '/_app/website/forms'
     | '/_app/website/messages'
@@ -428,6 +461,7 @@ export interface FileRouteTypes {
     | '/_app/contacts/'
     | '/_app/deals/'
     | '/_app/emails/'
+    | '/_app/segments/'
     | '/_app/website/'
     | '/_app/automations/briefs/$id'
     | '/_app/automations/briefs/'
@@ -548,6 +582,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTagsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/tasks': {
+      id: '/_app/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof AppTasksRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/website': {
       id: '/_app/website'
       path: '/website'
@@ -631,6 +672,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/emails/variables'
       preLoaderRoute: typeof AppEmailsVariablesRouteImport
       parentRoute: typeof AppEmailsRoute
+    }
+    '/_app/segments/': {
+      id: '/_app/segments/'
+      path: '/'
+      fullPath: '/segments/'
+      preLoaderRoute: typeof AppSegmentsIndexRouteImport
+      parentRoute: typeof AppSegmentsRoute
+    }
+    '/_app/segments/$id': {
+      id: '/_app/segments/$id'
+      path: '/$id'
+      fullPath: '/segments/$id'
+      preLoaderRoute: typeof AppSegmentsIdRouteImport
+      parentRoute: typeof AppSegmentsRoute
     }
     '/_app/website/': {
       id: '/_app/website/'
@@ -749,6 +804,20 @@ const AppEmailsRouteWithChildren = AppEmailsRoute._addFileChildren(
   AppEmailsRouteChildren,
 )
 
+interface AppSegmentsRouteChildren {
+  AppSegmentsIdRoute: typeof AppSegmentsIdRoute
+  AppSegmentsIndexRoute: typeof AppSegmentsIndexRoute
+}
+
+const AppSegmentsRouteChildren: AppSegmentsRouteChildren = {
+  AppSegmentsIdRoute: AppSegmentsIdRoute,
+  AppSegmentsIndexRoute: AppSegmentsIndexRoute,
+}
+
+const AppSegmentsRouteWithChildren = AppSegmentsRoute._addFileChildren(
+  AppSegmentsRouteChildren,
+)
+
 interface AppWebsiteRouteChildren {
   AppWebsiteAssetsRoute: typeof AppWebsiteAssetsRoute
   AppWebsiteFormsRoute: typeof AppWebsiteFormsRoute
@@ -779,9 +848,10 @@ interface AppRouteChildren {
   AppEmailsRoute: typeof AppEmailsRouteWithChildren
   AppFormsRoute: typeof AppFormsRoute
   AppReportsRoute: typeof AppReportsRoute
-  AppSegmentsRoute: typeof AppSegmentsRoute
+  AppSegmentsRoute: typeof AppSegmentsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
   AppTagsRoute: typeof AppTagsRoute
+  AppTasksRoute: typeof AppTasksRoute
   AppWebsiteRoute: typeof AppWebsiteRouteWithChildren
   AppAutomationsIdRoute: typeof AppAutomationsIdRoute
   AppAutomationsIndexRoute: typeof AppAutomationsIndexRoute
@@ -797,9 +867,10 @@ const AppRouteChildren: AppRouteChildren = {
   AppEmailsRoute: AppEmailsRouteWithChildren,
   AppFormsRoute: AppFormsRoute,
   AppReportsRoute: AppReportsRoute,
-  AppSegmentsRoute: AppSegmentsRoute,
+  AppSegmentsRoute: AppSegmentsRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
   AppTagsRoute: AppTagsRoute,
+  AppTasksRoute: AppTasksRoute,
   AppWebsiteRoute: AppWebsiteRouteWithChildren,
   AppAutomationsIdRoute: AppAutomationsIdRoute,
   AppAutomationsIndexRoute: AppAutomationsIndexRoute,

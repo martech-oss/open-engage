@@ -40,6 +40,7 @@ export function contactColumns({
   return [
     {
       key: "select",
+      enableHiding: false,
       header: (
         <Checkbox
           checked={allVisibleSelected}
@@ -68,6 +69,7 @@ export function contactColumns({
     {
       key: "contact",
       header: "連絡先",
+      sortValue: (contact) => contactName(contact).toLocaleLowerCase(),
       cell: (contact) => (
         <div className="flex items-center gap-2.5">
           <ContactAvatar contact={contact} tinted />
@@ -86,6 +88,7 @@ export function contactColumns({
     {
       key: "status",
       header: "状態・ステージ",
+      sortValue: (contact) => `${contact.status} ${contact.stage}`,
       cell: (contact) => (
         <div className="flex items-center gap-2">
           <ContactStatusDot status={contact.status} />
@@ -99,6 +102,8 @@ export function contactColumns({
     {
       key: "classification",
       header: "会社・タグ",
+      sortValue: (contact) =>
+        `${contact.companies[0]?.name ?? ""} ${contact.tags.map((tag) => tag.name).join(" ")}`,
       cell: (contact) => (
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="max-w-32 truncate text-[11.5px]">
@@ -118,6 +123,7 @@ export function contactColumns({
     {
       key: "score",
       header: "スコア",
+      sortValue: (contact) => contact.score,
       cell: (contact) => <ContactScoreBadge score={contact.score} />,
       headClassName: "w-20 text-right",
       cellClassName: "text-right",
@@ -125,12 +131,14 @@ export function contactColumns({
     {
       key: "updatedAt",
       header: "更新",
+      sortValue: (contact) => contact.updatedAt,
       cell: (contact) => formatRelativeTime(contact.updatedAt),
       headClassName: "w-24 text-right",
       cellClassName: "text-right text-[11px] text-muted-foreground",
     },
     {
       key: "actions",
+      enableHiding: false,
       header: "",
       cell: (contact) => (
         <DropdownMenu>

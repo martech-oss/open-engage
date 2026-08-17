@@ -8,12 +8,31 @@ export function segmentsQueryOptions() {
   return orpcQuery.segments.list.queryOptions();
 }
 
+export function segmentQueryOptions(segmentId: string) {
+  return orpcQuery.segments.get.queryOptions({ input: { id: segmentId } });
+}
+
 export function segmentOptionsQueryOptions() {
   return orpcQuery.segments.options.queryOptions();
 }
 
 export function invalidateSegmentsList(queryClient: QueryClient): Promise<void> {
   return queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
+}
+
+export function invalidateSegmentQueries(
+  queryClient: QueryClient,
+  segmentId?: string,
+): Promise<void> {
+  return Promise.all([
+    invalidateSegmentsList(queryClient),
+    queryClient.invalidateQueries({
+      queryKey: segmentId
+        ? orpcQuery.segments.get.key({ input: { id: segmentId } })
+        : orpcQuery.segments.get.key(),
+    }),
+    queryClient.invalidateQueries({ queryKey: orpcQuery.contacts.options.key() }),
+  ]).then(() => undefined);
 }
 
 export function createDynamicSegment(input: { name: string; slug: string; filter: SegmentFilter }) {
@@ -26,7 +45,7 @@ export function useCreateSegment() {
     ...orpcQuery.segments.create.mutationOptions(),
     onSuccess: async (_, variables) => {
       await Promise.all([
-        invalidateSegmentsList(queryClient),
+        invalidateSegmentQueries(queryClient),
         ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
       ]);
     },
@@ -37,7 +56,7 @@ export function useUpdateSegment() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.segments.update.mutationOptions(),
-    onSuccess: () => invalidateSegmentsList(queryClient),
+    onSuccess: (_data, variables) => invalidateSegmentQueries(queryClient, variables.id),
   });
 }
 
@@ -57,7 +76,7 @@ export function useRefreshSegment() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.segments.refresh.mutationOptions(),
-    onSuccess: () => invalidateSegmentsList(queryClient),
+    onSuccess: (_data, variables) => invalidateSegmentQueries(queryClient, variables.id),
   });
 }
 

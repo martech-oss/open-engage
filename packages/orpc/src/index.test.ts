@@ -52,7 +52,7 @@ describe("v0.1 API contract", () => {
   });
 
   it("uses domain-prefixed REST paths", () => {
-    expect.assertions(24);
+    expect.assertions(26);
     expectRoute(contract.dashboard.get, "GET", "/dashboard");
     expectRoute(contract.workspace.createApiKey, "POST", "/workspace/api-keys");
     expectRoute(contract.workspace.listWebhookEndpoints, "GET", "/workspace/webhooks");
@@ -63,6 +63,7 @@ describe("v0.1 API contract", () => {
     expectRoute(contract.contacts.archive, "POST", "/contacts/{id}/archive");
     expectRoute(contract.contacts.restore, "POST", "/contacts/{id}/restore");
     expectRoute(contract.contacts.options, "GET", "/contacts/options");
+    expectRoute(contract.contacts.updateTag, "PATCH", "/contacts/tags/{id}");
     expectRoute(contract.contacts.assignTag, "POST", "/contacts/{contactId}/tags");
     expectRoute(contract.contacts.addToSegment, "POST", "/contacts/{contactId}/segments");
     expectRoute(contract.contacts.bulkUpdate, "POST", "/contacts/bulk-update");
@@ -77,6 +78,7 @@ describe("v0.1 API contract", () => {
     expectRoute(contract.projects.briefWithdraw, "POST", "/projects/{id}/brief/withdraw");
     expectRoute(contract.platform.listDeadLetters, "GET", "/platform/dead-letters");
     expectRoute(contract.agents.conversations.list, "GET", "/agents/conversations");
+    expectRoute(contract.deals.listTasks, "GET", "/deals/tasks");
   });
 });
 

@@ -8,6 +8,7 @@ import {
   dealOptionsSchema,
   dealSummarySchema,
   dealTaskCreateSchema,
+  dealTaskListItemSchema,
   dealTaskSchema,
   dealTaskUpdateSchema,
   dealUpdateSchema,
@@ -49,6 +50,15 @@ export const dealsContract = {
       }),
     )
     .output(dealListDataSchema),
+  listTasks: oc
+    .route({ method: "GET", path: "/deals/tasks" })
+    .errors(workspaceErrors)
+    .input(
+      z.object({
+        status: z.enum(["open", "completed", "all"]).default("open"),
+      }),
+    )
+    .output(z.array(dealTaskListItemSchema)),
   get: oc
     .route({ method: "GET", path: "/deals/{id}" })
     .errors({ ...workspaceErrors, ...dealNotFound })

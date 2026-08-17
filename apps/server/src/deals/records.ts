@@ -1,5 +1,5 @@
-import type { DealSummary, DealTask } from "@openengage/core/deals";
-import type { DealRow, DealStageRow, DealTaskRow } from "@openengage/database";
+import type { DealSummary, DealTask, DealTaskListItem } from "@openengage/core/deals";
+import type { DealRow, DealStageRow, DealTaskListItemRow, DealTaskRow } from "@openengage/database";
 
 export function serializeStage(
   stage: Pick<DealStageRow, "id" | "name" | "color" | "position" | "probability">,
@@ -65,4 +65,8 @@ export function serializeTask(row: DealTaskRow): DealTask {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+export function serializeTaskListItem(row: DealTaskListItemRow): DealTaskListItem {
+  return { ...serializeTask(row), dealName: row.dealName };
 }

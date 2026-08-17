@@ -72,6 +72,7 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
     {
       key: "name",
       header: "会社名",
+      sortValue: (company) => company.name.toLocaleLowerCase(),
       cell: (company) => (
         <Button
           variant="link"
@@ -88,12 +89,14 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
     {
       key: "domain",
       header: "ドメイン",
+      sortValue: (company) => (company.domain ?? "").toLocaleLowerCase(),
       cell: (company) => company.domain ?? "未設定",
       cellClassName: "text-muted-foreground",
     },
     {
       key: "contactCount",
       header: "連絡先",
+      sortValue: (company) => Number(company.contactCount),
       cell: (company) => (
         <Badge variant="secondary">{Number(company.contactCount).toLocaleString()}人</Badge>
       ),
@@ -101,6 +104,7 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
     {
       key: "updatedAt",
       header: "更新日",
+      sortValue: (company) => company.updatedAt,
       cell: (company) => formatDate(company.updatedAt),
       headClassName: "px-4 text-right",
       cellClassName: "px-4 text-right text-muted-foreground",
@@ -130,9 +134,10 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
           </InputGroupAddon>
         </InputGroup>
       </div>
-      <Card>
+      <Card className="py-0">
         <CardContent className="px-0">
           <DataTable
+            showColumnVisibility
             columns={columns}
             rows={companies}
             rowKey={(company) => company.id}
@@ -194,6 +199,8 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
     {
       key: "contact",
       header: "連絡先",
+      sortValue: (contact) =>
+        (contactSurnameFirstName(contact) || contact.email || "").toLocaleLowerCase(),
       cell: (contact) => (
         <div className="flex flex-col gap-0.5">
           <span className="font-medium">
@@ -213,23 +220,27 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
     {
       key: "title",
       header: "役職",
+      sortValue: (contact) => (contact.title ?? "").toLocaleLowerCase(),
       cell: (contact) => contact.title ?? "未設定",
       cellClassName: "text-muted-foreground",
     },
     {
       key: "stage",
       header: "ステージ",
+      sortValue: (contact) => contact.stage,
       cell: (contact) => <Badge variant="secondary">{contact.stage}</Badge>,
     },
     {
       key: "score",
       header: "スコア",
+      sortValue: (contact) => contact.score,
       cell: (contact) => contact.score,
       cellClassName: "tabular-nums",
     },
     {
       key: "actions",
       header: "操作",
+      enableHiding: false,
       cell: (contact) => (
         <Button
           variant="ghost"
@@ -310,9 +321,10 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
           </CardHeader>
         </Card>
       </div>
-      <Card>
+      <Card className="py-0">
         <CardContent className="px-0">
           <DataTable
+            showColumnVisibility
             columns={columns}
             rows={company.contacts}
             rowKey={(contact) => contact.id}

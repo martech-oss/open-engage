@@ -143,7 +143,7 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
 
   return (
     <WebsiteResourceListPage
-      title="サインアップフォーム"
+      title="フォーム"
       createLabel="フォームを作成"
       onCreateClick={openCreate}
       summary={<FormSummary items={items} />}
