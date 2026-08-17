@@ -7,7 +7,7 @@ import {
   companyQueryOptions,
 } from "@/features/companies/company-api";
 
-export const Route = createFileRoute("/_app/contacts/companies/$id")({
+export const Route = createFileRoute("/_app/companies/$id")({
   loader: ({ params, context }) =>
     Promise.all([
       context.queryClient.ensureQueryData(companyQueryOptions(params.id)),

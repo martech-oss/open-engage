@@ -63,7 +63,6 @@ export function ContactCreateForm({
       open={open}
       onOpenChange={onOpenChange}
       title="連絡先を追加"
-      description="プロフィール、会社、タグ、セグメントを登録します。"
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}

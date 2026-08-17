@@ -8,16 +8,16 @@ export interface NavLink {
 
 export interface NavSection extends NavLink {
   icon: typeof Gauge;
-  /** Sub-navigation rendered as tabs in the page header, empty for leaf sections. */
+  /** Nested sidebar links for the section, empty for leaf sections. */
   tabs: readonly NavLink[];
 }
 
 /**
- * The sidebar's six sections plus 設定, each owning the sub-navigation that used
- * to be a nested sidebar menu and is now a tab row in the page header.
+ * The sidebar's six sections plus 設定. Nested `tabs` render under the active
+ * section in the sidebar.
  *
- * Single source of truth: the sidebar reads the sections, `PageLayout` reads the
- * tabs of whichever section {@link activeSection} resolves for the current URL.
+ * Single source of truth: the sidebar reads both the sections and the tabs of
+ * whichever section {@link activeSection} resolves for the current URL.
  * That resolution walks the tabs too, so ホーム stays lit on `/reports` even
  * though `/reports` does not sit under `/dashboard`.
  */
@@ -37,9 +37,9 @@ export const navigationSections: readonly NavSection[] = [
     icon: UsersRound,
     tabs: linkOptions([
       { to: "/contacts", label: "連絡先" },
-      { to: "/contacts/companies", label: "会社" },
-      { to: "/contacts/segments", label: "セグメント" },
-      { to: "/contacts/tags", label: "タグ" },
+      { to: "/companies", label: "会社" },
+      { to: "/segments", label: "セグメント" },
+      { to: "/tags", label: "タグ" },
     ]),
   },
   {
@@ -106,8 +106,13 @@ export function activeSection(pathname: string): NavSection | undefined {
 
 /**
  * Whether `tab` should only highlight on an exact URL match — true when another
- * tab in the same row lives underneath it, as 会社/セグメント/タグ do under 連絡先.
+ * tab in the same section lives underneath it.
  */
-export function isTabExact(section: NavSection, tab: NavLink): boolean {
+function isTabExact(section: NavSection, tab: NavLink): boolean {
   return section.tabs.some((other) => other.to !== tab.to && other.to.startsWith(`${tab.to}/`));
+}
+
+/** Whether `tab` is the current nested sidebar item for `pathname`. */
+export function isNavTabActive(pathname: string, section: NavSection, tab: NavLink): boolean {
+  return isTabExact(section, tab) ? pathname === tab.to : matches(pathname, tab.to);
 }

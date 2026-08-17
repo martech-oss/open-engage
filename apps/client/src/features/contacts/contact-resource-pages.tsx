@@ -7,14 +7,7 @@ import { FormDialog, FormInput, PageLayout } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   contactResourcesQueryOptions,
   createContactTag,
@@ -79,7 +72,6 @@ export function ContactTagsPage(): ReactNode {
       <Card>
         <CardHeader className="border-b">
           <CardTitle>すべてのタグ</CardTitle>
-          <CardDescription>タグごとの利用数と識別用スラッグを確認できます。</CardDescription>
           <CardAction>
             <Badge variant="secondary">{resources.tags.length}件</Badge>
           </CardAction>

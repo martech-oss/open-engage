@@ -9,7 +9,7 @@ import {
   parseCompanySearch,
 } from "@/features/companies/company-api";
 
-export const Route = createFileRoute("/_app/contacts/companies/")({
+export const Route = createFileRoute("/_app/companies/")({
   validateSearch: (search: Partial<CompanySearch> & SearchSchemaInput): CompanySearch =>
     parseCompanySearch(search as Record<string, unknown>),
   search: {

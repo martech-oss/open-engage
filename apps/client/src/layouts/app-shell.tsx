@@ -22,12 +22,20 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { contactOptionsQueryOptions } from "@/features/contacts/contact-api";
-import { activeSection, navigationSections, settingsSection } from "@/layouts/navigation";
+import {
+  activeSection,
+  isNavTabActive,
+  navigationSections,
+  settingsSection,
+} from "@/layouts/navigation";
 import { WorkspaceSwitcher } from "@/layouts/workspace-switcher";
 import { cn } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
@@ -92,6 +100,22 @@ export function AppShell({
                   <item.icon />
                   <span>{item.label}</span>
                 </SidebarMenuButton>
+                {section?.to === item.to && item.tabs.length > 0 ? (
+                  <SidebarMenuSub>
+                    {item.tabs.map((tab) => (
+                      <SidebarMenuSubItem key={tab.to}>
+                        <SidebarMenuSubButton
+                          render={<Link to={tab.to} />}
+                          size="sm"
+                          isActive={isNavTabActive(pathname, item, tab)}
+                          className="rounded-[7px] text-[13px] font-medium"
+                        >
+                          <span>{tab.label}</span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                ) : null}
               </SidebarMenuItem>
             ))}
           </SidebarMenu>

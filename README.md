@@ -218,7 +218,7 @@ pnpm dev
 
 `pnpm dev`は未適用のローカルD1 migrationを先に適用してから開発サーバーを起動します。
 
-管理画面とAPIは `http://localhost:5173`、Agent Viteは `http://localhost:5174` で起動します。
+管理画面とAPIは `http://localhost:5173`、Agent Viteは `http://localhost:3583` で起動します。
 ブラウザはAgentへ直接アクセスせず、常にClient → Server → Agentを通ります。
 
 開発環境では登録時のメール確認を省略し、アカウント作成後にそのままログインします。本番環境ではメール確認が必須です。

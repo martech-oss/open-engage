@@ -46,6 +46,7 @@ export default defineConfig({
           configPath: "../server/wrangler.jsonc",
         },
       ],
+      inspectorPort: 9229,
       viteEnvironment: { name: "ssr" },
     }),
     tanstackStart(),

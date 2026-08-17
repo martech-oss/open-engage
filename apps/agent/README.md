@@ -49,7 +49,7 @@ The agent has a lightweight in-memory sandbox for drafting Markdown. Workspace f
 pnpm run dev
 ```
 
-The private Hello agent is mounted at `/api/agents/hello` and is reached through the Server Worker's authenticated Service Binding gateway. Local Vite diagnostics listen on port `5174`.
+The private Hello agent is mounted at `/api/agents/hello` and is reached through the Server Worker's authenticated Service Binding gateway. Local Vite diagnostics listen on Flue's default port `3583`.
 
 ## Deploy
 

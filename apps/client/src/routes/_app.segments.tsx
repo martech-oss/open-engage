@@ -1,7 +1,11 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+
+import { routeStatusComponents } from "@/components/route-status";
+import { segmentsQueryOptions } from "@/features/segments/segment-api";
+import { SegmentsPage } from "@/features/segments/segments-page";
 
 export const Route = createFileRoute("/_app/segments")({
-  beforeLoad: () => {
-    throw redirect({ to: "/contacts/segments", replace: true });
-  },
+  loader: ({ context }) => context.queryClient.ensureQueryData(segmentsQueryOptions()),
+  ...routeStatusComponents,
+  component: SegmentsPage,
 });

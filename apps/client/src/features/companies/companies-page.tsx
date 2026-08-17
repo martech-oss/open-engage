@@ -64,7 +64,7 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
     value: query,
     onCommit: (value) => {
       if (value === initialQuery) return;
-      void navigate({ to: "/contacts/companies", search: { q: value }, replace: true });
+      void navigate({ to: "/companies", search: { q: value }, replace: true });
     },
   });
 
@@ -77,7 +77,7 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
           variant="link"
           className="h-auto p-0"
           nativeButton={false}
-          render={<Link to="/contacts/companies/$id" params={{ id: company.id }} />}
+          render={<Link to="/companies/$id" params={{ id: company.id }} />}
         >
           {company.name}
         </Button>
@@ -131,13 +131,6 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
         </InputGroup>
       </div>
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle>すべての会社</CardTitle>
-          <CardDescription>会社情報と所属する連絡先数を確認できます。</CardDescription>
-          <CardAction>
-            <Badge variant="secondary">{companies.length}社</Badge>
-          </CardAction>
-        </CardHeader>
         <CardContent className="px-0">
           <DataTable
             columns={columns}
@@ -173,7 +166,7 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
           toast.success("会社を作成しました");
           setShowCreate(false);
           await navigate({
-            to: "/contacts/companies/$id",
+            to: "/companies/$id",
             params: { id: company.id },
           });
         }}
@@ -261,7 +254,7 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
       title={company.name}
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/companies" />}>
+          <Button variant="outline" nativeButton={false} render={<Link to="/companies" />}>
             <ArrowLeft data-icon="inline-start" />
             一覧
           </Button>
@@ -318,15 +311,6 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
         </Card>
       </div>
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle>連絡先</CardTitle>
-          <CardDescription>
-            この会社に所属する担当者と役職、主担当関係を管理します。
-          </CardDescription>
-          <CardAction>
-            <Badge variant="secondary">{company.contacts.length}人</Badge>
-          </CardAction>
-        </CardHeader>
         <CardContent className="px-0">
           <DataTable
             columns={columns}
