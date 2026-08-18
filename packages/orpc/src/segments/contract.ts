@@ -20,6 +20,13 @@ export const segmentsContract = {
   list: oc
     .route({ method: "GET", path: "/segments" })
     .errors(workspaceErrors)
+    .input(
+      z
+        .object({
+          kind: z.enum(["static", "dynamic"]).optional(),
+        })
+        .default({}),
+    )
     .output(z.array(segmentRowSchema)),
   options: oc
     .route({ method: "GET", path: "/segments/options" })

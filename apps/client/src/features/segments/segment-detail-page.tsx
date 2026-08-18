@@ -25,7 +25,7 @@ import {
   useRefreshSegment,
   useUpdateSegment,
 } from "./segment-api";
-import { evaluationLabel, segmentKindLabel, toSegmentDefinition } from "./segment-bits";
+import { evaluationLabel, toSegmentDefinition } from "./segment-bits";
 import { SegmentFilterSummary } from "./segment-filter-summary";
 import { SegmentFormDialog } from "./segment-form-dialog";
 
@@ -120,16 +120,14 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
             <Users data-icon="inline-start" />
             連絡先で管理
           </Button>
-          {segment.kind === "dynamic" ? (
-            <Button
-              variant="outline"
-              disabled={refreshSegment.isPending}
-              onClick={() => void refreshSegment.mutateAsync({ id: segment.id })}
-            >
-              <RefreshCw data-icon="inline-start" />
-              再評価
-            </Button>
-          ) : null}
+          <Button
+            variant="outline"
+            disabled={refreshSegment.isPending}
+            onClick={() => void refreshSegment.mutateAsync({ id: segment.id })}
+          >
+            <RefreshCw data-icon="inline-start" />
+            再評価
+          </Button>
           <Button variant="outline" onClick={() => setAiOpen(true)}>
             <Sparkles data-icon="inline-start" />
             AIで編集
@@ -147,8 +145,7 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
           <AlertDescription>{segment.evaluationError}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard label="種類" value={segmentKindLabel(segment.kind)} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <SummaryCard label="連絡先" value={`${segment.memberCount.toLocaleString()}人`} tabular />
         <SummaryCard
           label="状態"
@@ -164,12 +161,9 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
           {segment.description ? (
             <p className="text-sm text-muted-foreground">{segment.description}</p>
           ) : null}
-          {segment.kind === "static" && segment.membershipSource ? (
-            <p className="text-sm text-muted-foreground">選定元: {segment.membershipSource}</p>
-          ) : null}
         </CardHeader>
       </Card>
-      {segment.kind === "dynamic" && segment.filterAst ? (
+      {segment.filterAst ? (
         <Card>
           <CardHeader>
             <CardDescription>オーディエンス条件</CardDescription>
@@ -189,11 +183,7 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
             caption={`${segment.name}のメンバー`}
             loading={membersQuery.isFetching}
             emptyTitle="メンバーがいません"
-            emptyDescription={
-              segment.kind === "static"
-                ? "連絡先画面からメンバーを追加できます。"
-                : "条件に一致する連絡先がまだありません。"
-            }
+            emptyDescription="条件に一致する連絡先がまだありません。"
             emptyAction={
               <Button
                 variant="outline"
@@ -231,6 +221,7 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
         onOpenChange={setEditOpen}
         initial={segment}
         catalog={catalog}
+        kind="dynamic"
       />
       <Suspense fallback={null}>
         {aiOpen ? (

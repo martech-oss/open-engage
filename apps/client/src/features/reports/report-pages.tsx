@@ -33,7 +33,6 @@ import { reportExport } from "./report-export";
 import {
   AutomationsReportView,
   ContactsReportView,
-  DealsReportView,
   EmailsReportView,
   SiteReportView,
 } from "./report-views";
@@ -48,7 +47,6 @@ const reportNavigation: Array<{
   { view: "contacts", label: "連絡先", icon: UsersRound },
   { view: "automations", label: "オートメーション", icon: GitBranch },
   { view: "emails", label: "メール", icon: Mail },
-  { view: "deals", label: "商談", icon: BriefcaseBusiness },
   { view: "site", label: "サイト", icon: Globe2 },
 ];
 
@@ -93,9 +91,6 @@ export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
         <AutomationsReportView report={data.automations} />
       ) : null}
       {data.view === "emails" && data.emails ? <EmailsReportView report={data.emails} /> : null}
-      {data.view === "deals" && data.deals ? (
-        <DealsReportView report={data.deals} search={search} />
-      ) : null}
       {data.view === "site" && data.site ? <SiteReportView report={data.site} /> : null}
     </PageLayout>
   );
@@ -245,7 +240,16 @@ function ReportsOverview({
                 variant="outline"
                 size="sm"
                 nativeButton={false}
-                render={<Link to="/reports" search={{ ...search, view: card.view }} />}
+                render={
+                  card.view === "deals" ? (
+                    <Link
+                      to="/deal-reports"
+                      search={{ from: search.from, to: search.to, currency: search.currency }}
+                    />
+                  ) : (
+                    <Link to="/reports" search={{ ...search, view: card.view }} />
+                  )
+                }
               >
                 詳細を見る
               </Button>

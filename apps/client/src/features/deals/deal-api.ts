@@ -6,6 +6,8 @@ import type {
   DealDetailData,
   DealListData,
   DealOptions,
+  DealPipelineCreate,
+  DealPipelineUpdate,
   DealStage,
   DealStatus,
   DealSummary,
@@ -22,6 +24,8 @@ export type {
   DealDetailData,
   DealListData,
   DealOptions,
+  DealPipelineCreate,
+  DealPipelineUpdate,
   DealStage,
   DealStatus,
   DealSummary,
@@ -104,6 +108,7 @@ function invalidateDealQueries(queryClient: ReturnType<typeof useQueryClient>, d
       : []),
     queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() }),
     queryClient.invalidateQueries({ queryKey: orpcQuery.deals.listTasks.key() }),
+    queryClient.invalidateQueries({ queryKey: orpcQuery.deals.options.key() }),
   ]);
 }
 
@@ -166,5 +171,29 @@ export function useDeleteDealTask() {
   return useMutation({
     ...orpcQuery.deals.deleteTask.mutationOptions(),
     onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
+  });
+}
+
+export function useCreateDealPipeline() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.deals.createPipeline.mutationOptions(),
+    onSuccess: () => invalidateDealQueries(queryClient),
+  });
+}
+
+export function useUpdateDealPipeline() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.deals.updatePipeline.mutationOptions(),
+    onSuccess: () => invalidateDealQueries(queryClient),
+  });
+}
+
+export function useArchiveDealPipeline() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.deals.archivePipeline.mutationOptions(),
+    onSuccess: () => invalidateDealQueries(queryClient),
   });
 }

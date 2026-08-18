@@ -74,7 +74,7 @@ export const contactResourcesContract = {
     .output(ackSchema),
   addToSegment: oc
     .route({ method: "POST", path: "/contacts/{contactId}/segments", successStatus: 201 })
-    .errors(relationErrors("静的セグメントへ追加できませんでした"))
+    .errors(relationErrors("リストへ追加できませんでした"))
     .input(contactRelationInput)
     .output(ackSchema),
   removeFromSegment: oc

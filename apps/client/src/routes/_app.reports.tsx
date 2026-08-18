@@ -1,4 +1,9 @@
-import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  redirect,
+  type SearchSchemaInput,
+  stripSearchParams,
+} from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
 import {
@@ -17,6 +22,12 @@ export const Route = createFileRoute("/_app/reports")({
   },
   loaderDeps: ({ search }) => search,
   loader: async ({ context, deps }) => {
+    if (deps.view === "deals") {
+      throw redirect({
+        to: "/deal-reports",
+        search: { from: deps.from, to: deps.to, currency: deps.currency },
+      });
+    }
     await context.queryClient.ensureQueryData(reportWorkspaceQueryOptions(deps));
   },
   ...routeStatusComponents,

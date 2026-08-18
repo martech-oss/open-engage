@@ -88,6 +88,6 @@ describe("validateAutomationResources", () => {
       }),
       context,
     );
-    expect(issues[0]?.message).toContain("静的セグメントのみ");
+    expect(issues[0]?.message).toContain("リストのみ");
   });
 });

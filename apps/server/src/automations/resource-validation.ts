@@ -61,11 +61,7 @@ export async function loadAutomationResourceContext(
     .slice(0, 1_000);
   const segmentOptions = segments
     .map((segment) =>
-      option(
-        segment.id,
-        segment.name,
-        segment.kind === "static" ? "静的セグメント" : "動的セグメント",
-      ),
+      option(segment.id, segment.name, segment.kind === "static" ? "リスト" : "セグメント"),
     )
     .slice(0, 1_000);
   const tagOptions = contactOptions.tags.map((tag) => option(tag.id, tag.name)).slice(0, 1_000);
@@ -181,7 +177,7 @@ export function validateAutomationResources(
             kind: "segment",
             resourceId: node.config.segmentId,
             nodeId: node.id,
-            message: `ノード ${node.id} のセグメント操作は静的セグメントのみ参照できます`,
+            message: `ノード ${node.id} のセグメント操作はリストのみ参照できます`,
           });
         }
         break;

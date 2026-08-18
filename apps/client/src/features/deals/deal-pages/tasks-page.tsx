@@ -87,7 +87,7 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
     },
     {
       key: "deal",
-      header: "Deal",
+      header: "取引",
       sortValue: (task) => task.dealName.toLocaleLowerCase(),
       cell: (task) => (
         <Link
@@ -134,7 +134,7 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
   ];
 
   return (
-    <PageLayout title="Task">
+    <PageLayout title="タスク">
       <Card>
         <CardContent>
           <FieldGroup className="max-w-52">
@@ -174,7 +174,7 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
             emptyAction={
               <Button variant="outline" nativeButton={false} render={<Link to="/deals" />}>
                 <BriefcaseBusiness data-icon="inline-start" />
-                Dealを開く
+                パイプラインを開く
               </Button>
             }
             onRowClick={(task) => void navigate({ to: "/deals/$id", params: { id: task.dealId } })}

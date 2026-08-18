@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   dealCreateSchema,
   dealMoveSchema,
+  dealPipelineCreateSchema,
+  dealPipelineUpdateSchema,
   dealTaskCreateSchema,
   dealTaskUpdateSchema,
   dealUpdateSchema,
@@ -64,5 +66,28 @@ describe("deal schemas", () => {
     expect(dealTaskUpdateSchema.parse({ status: "completed" })).toEqual({
       status: "completed",
     });
+  });
+
+  it("seeds default stages when creating a pipeline", () => {
+    expect(dealPipelineCreateSchema.parse({ name: "インバウンド" })).toMatchObject({
+      name: "インバウンド",
+      isDefault: false,
+      stages: [
+        { name: "新規", color: "#64748b", probability: 10 },
+        { name: "連絡済み", color: "#3b82f6", probability: 25 },
+        { name: "提案", color: "#8b5cf6", probability: 50 },
+        { name: "交渉", color: "#f59e0b", probability: 75 },
+        { name: "最終確認", color: "#10b981", probability: 90 },
+      ],
+    });
+  });
+
+  it("rejects empty or overlong pipeline stage lists", () => {
+    expect(dealPipelineCreateSchema.safeParse({ name: "空", stages: [] }).success).toBe(false);
+    expect(
+      dealPipelineUpdateSchema.safeParse({
+        stages: Array.from({ length: 21 }, (_, index) => ({ name: `S${index}` })),
+      }).success,
+    ).toBe(false);
   });
 });

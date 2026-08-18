@@ -97,7 +97,7 @@ export function ContactCreateForm({
               </NativeSelectOption>
             ))}
           </FormNativeSelect>
-          <FormNativeSelect label="セグメント" name="segmentId">
+          <FormNativeSelect label="リスト" name="segmentId">
             <NativeSelectOption value="">指定なし</NativeSelectOption>
             {options.segments
               .filter((segment) => segment.kind === "static")

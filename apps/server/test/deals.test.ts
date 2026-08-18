@@ -157,4 +157,109 @@ describe("Deals CRM", () => {
       code: "FORBIDDEN",
     });
   });
+
+  it("creates, updates, and archives additional pipelines", async () => {
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
+      timezone: "Asia/Tokyo",
+    });
+    await seedMember(env.DB, { workspaceId, userId });
+
+    const options = await client.deals.options();
+    const defaultPipeline = options.pipelines[0]!;
+
+    await expect(client.deals.archivePipeline({ id: defaultPipeline.id })).rejects.toMatchObject({
+      code: "LAST_DEAL_PIPELINE",
+      status: 409,
+    });
+
+    const inbound = await client.deals.createPipeline({ name: "インバウンド" });
+    expect(inbound).toMatchObject({
+      name: "インバウンド",
+      isDefault: false,
+      stages: [
+        expect.objectContaining({ name: "新規" }),
+        expect.objectContaining({ name: "連絡済み" }),
+        expect.objectContaining({ name: "提案" }),
+        expect.objectContaining({ name: "交渉" }),
+        expect.objectContaining({ name: "最終確認" }),
+      ],
+    });
+
+    await expect(client.deals.createPipeline({ name: "インバウンド" })).rejects.toMatchObject({
+      code: "DEAL_PIPELINE_CONFLICT",
+      status: 409,
+    });
+
+    const hiring = await client.deals.createPipeline({
+      name: "採用",
+      stages: [
+        { name: "応募", color: "#3b82f6", probability: 20 },
+        { name: "面接", color: "#8b5cf6", probability: 60 },
+      ],
+    });
+    expect(hiring.stages.map((stage) => stage.name)).toEqual(["応募", "面接"]);
+
+    const promoted = await client.deals.updatePipeline({
+      id: inbound.id,
+      name: "パートナー",
+      isDefault: true,
+      stages: [
+        { id: inbound.stages[0]!.id, name: "受付", color: "#64748b", probability: 10 },
+        {
+          id: inbound.stages[1]!.id,
+          name: inbound.stages[1]!.name,
+          color: inbound.stages[1]!.color,
+          probability: inbound.stages[1]!.probability,
+        },
+        { name: "クローズ", color: "#10b981", probability: 90 },
+      ],
+    });
+    expect(promoted).toMatchObject({ name: "パートナー", isDefault: true });
+    expect(promoted.stages.map((stage) => stage.name)).toEqual(["受付", "連絡済み", "クローズ"]);
+
+    const listed = await client.deals.options();
+    expect(listed.pipelines.map((pipeline) => pipeline.name).sort()).toEqual(
+      ["パートナー", "セールスパイプライン", "採用"].sort(),
+    );
+    expect(listed.pipelines.find((pipeline) => pipeline.id === inbound.id)?.isDefault).toBe(true);
+    expect(listed.pipelines.find((pipeline) => pipeline.id === defaultPipeline.id)?.isDefault).toBe(
+      false,
+    );
+
+    await client.deals.create({
+      name: "パートナー案件",
+      pipelineId: inbound.id,
+      stageId: promoted.stages[0]!.id,
+      value: 0,
+      currency: "JPY",
+    });
+    await expect(
+      client.deals.updatePipeline({
+        id: inbound.id,
+        stages: promoted.stages.slice(1).map((stage) => ({
+          id: stage.id,
+          name: stage.name,
+          color: stage.color,
+          probability: stage.probability,
+        })),
+      }),
+    ).rejects.toMatchObject({ code: "DEAL_STAGE_IN_USE", status: 409 });
+    await expect(client.deals.archivePipeline({ id: inbound.id })).rejects.toMatchObject({
+      code: "DEAL_PIPELINE_IN_USE",
+      status: 409,
+    });
+
+    await expect(client.deals.archivePipeline({ id: hiring.id })).resolves.toEqual({ ok: true });
+    await expect(client.deals.archivePipeline({ id: defaultPipeline.id })).resolves.toEqual({
+      ok: true,
+    });
+    const remaining = await client.deals.options();
+    expect(remaining.pipelines).toEqual([
+      expect.objectContaining({ id: inbound.id, isDefault: true, name: "パートナー" }),
+    ]);
+    await expect(client.deals.archivePipeline({ id: inbound.id })).rejects.toMatchObject({
+      code: "LAST_DEAL_PIPELINE",
+      status: 409,
+    });
+  });
 });

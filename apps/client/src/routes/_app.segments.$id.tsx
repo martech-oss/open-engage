@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
 import { contactSearchDefaults, contactsQueryOptions } from "@/features/contacts/contact-api";
@@ -6,9 +6,12 @@ import { segmentOptionsQueryOptions, segmentQueryOptions } from "@/features/segm
 import { SegmentDetailPage } from "@/features/segments/segment-detail-page";
 
 export const Route = createFileRoute("/_app/segments/$id")({
-  loader: ({ params, context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(segmentQueryOptions(params.id)),
+  loader: async ({ params, context }) => {
+    const segment = await context.queryClient.ensureQueryData(segmentQueryOptions(params.id));
+    if (segment.kind === "static") {
+      throw redirect({ to: "/lists/$id", params: { id: params.id } });
+    }
+    await Promise.all([
       context.queryClient.ensureQueryData(segmentOptionsQueryOptions()),
       context.queryClient.ensureQueryData(
         contactsQueryOptions({
@@ -17,7 +20,8 @@ export const Route = createFileRoute("/_app/segments/$id")({
           status: "all",
         }),
       ),
-    ]),
+    ]);
+  },
   ...routeStatusComponents,
   component: SegmentDetailRoute,
 });

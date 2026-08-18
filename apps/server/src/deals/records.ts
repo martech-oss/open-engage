@@ -1,5 +1,11 @@
-import type { DealSummary, DealTask, DealTaskListItem } from "@openengage/core/deals";
-import type { DealRow, DealStageRow, DealTaskListItemRow, DealTaskRow } from "@openengage/database";
+import type { DealPipeline, DealSummary, DealTask, DealTaskListItem } from "@openengage/core/deals";
+import type {
+  DealPipelineRow,
+  DealRow,
+  DealStageRow,
+  DealTaskListItemRow,
+  DealTaskRow,
+} from "@openengage/database";
 
 export function serializeStage(
   stage: Pick<DealStageRow, "id" | "name" | "color" | "position" | "probability">,
@@ -10,6 +16,15 @@ export function serializeStage(
     color: stage.color,
     position: Number(stage.position),
     probability: Number(stage.probability),
+  };
+}
+
+export function serializePipeline(pipeline: DealPipelineRow, stages: DealStageRow[]): DealPipeline {
+  return {
+    id: pipeline.id,
+    name: pipeline.name,
+    isDefault: Boolean(pipeline.isDefault),
+    stages: stages.map(serializeStage),
   };
 }
 

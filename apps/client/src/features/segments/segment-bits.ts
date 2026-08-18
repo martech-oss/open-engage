@@ -1,7 +1,11 @@
 import type { SegmentDefinition, SegmentRow } from "@openengage/core/segments";
 
-export function segmentKindLabel(kind: SegmentRow["kind"]): string {
-  return kind === "static" ? "静的" : "動的";
+export function audienceGroupPath(kind: SegmentRow["kind"]): "/lists" | "/segments" {
+  return kind === "static" ? "/lists" : "/segments";
+}
+
+export function audienceGroupLabel(kind: SegmentRow["kind"]): string {
+  return kind === "static" ? "リスト" : "セグメント";
 }
 
 export function evaluationLabel(segment: SegmentRow): string {

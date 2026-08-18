@@ -98,4 +98,27 @@ describe("segment designer support", () => {
     await reconcileContactSegmentMemberships(database, workspaceId, contact.id);
     expect((await client.segments.get({ id: segment.id })).memberCount).toBe(0);
   });
+
+  it("filters the segment list by static and dynamic kinds", async () => {
+    const { client } = await seedWorkspaceClient(env.DB);
+    const dynamic = await client.segments.create({
+      name: "Active leads",
+      slug: "active-leads",
+      kind: "dynamic",
+      filter: { kind: "condition", field: "status", operator: "eq", value: "active" },
+    });
+    const list = await client.segments.create({
+      name: "Event attendees",
+      slug: "event-attendees",
+      kind: "static",
+      membershipSource: "Manual selection",
+    });
+
+    await expect(client.segments.list({ kind: "dynamic" })).resolves.toEqual([
+      expect.objectContaining({ id: dynamic.id, kind: "dynamic" }),
+    ]);
+    await expect(client.segments.list({ kind: "static" })).resolves.toEqual([
+      expect.objectContaining({ id: list.id, kind: "static" }),
+    ]);
+  });
 });

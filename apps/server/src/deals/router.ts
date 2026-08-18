@@ -3,7 +3,9 @@ import { ack } from "@openengage/orpc";
 import { authed, requireRole } from "../orpc/base";
 import {
   archiveDeal,
+  archiveDealPipeline,
   createDeal,
+  createDealPipeline,
   createDealTask,
   deleteDealTask,
   getDealDetail,
@@ -12,6 +14,7 @@ import {
   listWorkspaceDealTasks,
   moveDeal,
   updateDeal,
+  updateDealPipeline,
   updateDealTask,
 } from "./service";
 
@@ -27,6 +30,54 @@ export const listDealsProcedure = authed.deals.list.handler(async ({ context, in
 
 export const listDealTasksProcedure = authed.deals.listTasks.handler(({ context, input }) =>
   listWorkspaceDealTasks(context.database, context.workspace, input.status),
+);
+
+export const createPipelineProcedure = authed.deals.createPipeline.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    const outcome = await createDealPipeline(
+      context.database,
+      context.workspace,
+      input,
+      context.executionContext,
+    );
+    if (outcome.kind === "conflict") throw errors.DEAL_PIPELINE_CONFLICT();
+    return outcome.pipeline;
+  },
+);
+
+export const updatePipelineProcedure = authed.deals.updatePipeline.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    const { id, ...changes } = input;
+    const outcome = await updateDealPipeline(
+      context.database,
+      context.workspace,
+      id,
+      changes,
+      context.executionContext,
+    );
+    if (outcome.kind === "not_found") throw errors.DEAL_PIPELINE_NOT_FOUND();
+    if (outcome.kind === "conflict") throw errors.DEAL_PIPELINE_CONFLICT();
+    if (outcome.kind === "stage_in_use") throw errors.DEAL_STAGE_IN_USE();
+    return outcome.pipeline;
+  },
+);
+
+export const archivePipelineProcedure = authed.deals.archivePipeline.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    const outcome = await archiveDealPipeline(
+      context.database,
+      context.workspace,
+      input.id,
+      context.executionContext,
+    );
+    if (outcome.kind === "not_found") throw errors.DEAL_PIPELINE_NOT_FOUND();
+    if (outcome.kind === "last") throw errors.LAST_DEAL_PIPELINE();
+    if (outcome.kind === "in_use") throw errors.DEAL_PIPELINE_IN_USE();
+    return ack;
+  },
 );
 
 export const getDealProcedure = authed.deals.get.handler(async ({ context, input, errors }) => {
@@ -139,6 +190,9 @@ export const dealProcedures = {
   options: dealOptionsProcedure,
   list: listDealsProcedure,
   listTasks: listDealTasksProcedure,
+  createPipeline: createPipelineProcedure,
+  updatePipeline: updatePipelineProcedure,
+  archivePipeline: archivePipelineProcedure,
   get: getDealProcedure,
   create: createDealProcedure,
   update: updateDealProcedure,

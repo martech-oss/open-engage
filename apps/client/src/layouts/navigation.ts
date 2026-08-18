@@ -38,6 +38,7 @@ export const navigationSections: readonly NavSection[] = [
     tabs: linkOptions([
       { to: "/contacts", label: "連絡先" },
       { to: "/companies", label: "会社" },
+      { to: "/lists", label: "リスト" },
       { to: "/segments", label: "セグメント" },
       { to: "/tags", label: "タグ" },
     ]),
@@ -78,8 +79,9 @@ export const navigationSections: readonly NavSection[] = [
     label: "セール",
     icon: BriefcaseBusiness,
     tabs: linkOptions([
-      { to: "/deals", label: "Deal" },
-      { to: "/tasks", label: "Task" },
+      { to: "/deals", label: "パイプライン" },
+      { to: "/deal-reports", label: "レポート" },
+      { to: "/tasks", label: "タスク" },
     ]),
   },
 ];

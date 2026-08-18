@@ -3,7 +3,9 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "types": ["./worker-configuration.d.ts"],
-    "noEmit": true
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "worker-configuration.d.ts", "vitest.config.ts"]
 }

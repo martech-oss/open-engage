@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { CircleDollarSign } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -6,19 +5,18 @@ import { FormNativeSelect, FormSelectOption, MetricCard, MetricGrid } from "@/co
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { DealsReport, ReportSearch } from "@/features/reports/report-api";
+import type { DealsReport } from "@/features/reports/report-api";
 import { formatMoney, formatPercent } from "@/lib/format";
 
 import { NoReportData, ProgressRow, ReportTableCard, TrendCard } from "../report-widgets";
 
 export function DealsReportView({
   report,
-  search,
+  onCurrencyChange,
 }: {
   report: DealsReport;
-  search: ReportSearch;
+  onCurrencyChange: (currency: string) => void;
 }): ReactNode {
-  const navigate = useNavigate();
   const ownerColumns: DataTableColumn<DealsReport["owners"][number]>[] = [
     {
       key: "name",
@@ -70,12 +68,7 @@ export function DealsReportView({
           label="通貨"
           name="reportCurrency"
           value={report.currency}
-          onChange={(event) =>
-            void navigate({
-              to: "/reports",
-              search: { ...search, currency: event.target.value },
-            })
-          }
+          onChange={(event) => onCurrencyChange(event.target.value)}
         >
           {report.currencies.map((currency) => (
             <FormSelectOption key={currency} value={currency}>

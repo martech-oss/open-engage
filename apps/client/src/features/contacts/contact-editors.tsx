@@ -196,7 +196,7 @@ export function SegmentEditor({
   const [selectedId, setSelectedId] = useState("");
   const assigned = new Set(profile.segments.map((segment) => segment.id));
   return (
-    <Section title="セグメント" icon={<Filter className="size-4" />}>
+    <Section title="リスト / セグメント" icon={<Filter className="size-4" />}>
       <ItemGroup>
         {profile.segments.map((segment) => (
           <Item key={segment.id} variant="muted" size="sm">
@@ -204,7 +204,7 @@ export function SegmentEditor({
               <ItemTitle>{segment.name}</ItemTitle>
             </ItemContent>
             <ItemActions>
-              <Badge variant="outline">{segment.kind}</Badge>
+              <Badge variant="outline">{segment.kind === "static" ? "リスト" : "セグメント"}</Badge>
               {!disabled && segment.source === "static" && (
                 <Button
                   variant="ghost"
@@ -227,7 +227,7 @@ export function SegmentEditor({
           <ControlledSelect
             value={selectedId}
             onValueChange={setSelectedId}
-            placeholder="静的セグメントを選択"
+            placeholder="リストを選択"
             className="flex-1"
             options={options
               .filter((segment) => segment.kind === "static" && !assigned.has(segment.id))

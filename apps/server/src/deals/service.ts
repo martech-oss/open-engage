@@ -3,6 +3,9 @@ import type {
   DealDetailData,
   DealListData,
   DealOptions,
+  DealPipeline,
+  DealPipelineCreate,
+  DealPipelineUpdate,
   DealSummary,
   DealTask,
   DealTaskCreate,
@@ -19,7 +22,13 @@ import {
   type OpenEngageDatabase,
 } from "@openengage/database";
 
-import { serializeDeal, serializeStage, serializeTask, serializeTaskListItem } from "./records";
+import {
+  serializeDeal,
+  serializePipeline,
+  serializeStage,
+  serializeTask,
+  serializeTaskListItem,
+} from "./records";
 
 /** Deals list needs a pipeline; a missing one is distinct from an empty list. */
 export type DealListOutcome = { kind: "pipeline_not_found" } | { kind: "ok"; data: DealListData };
@@ -35,6 +44,17 @@ export type DealTaskOutcome =
   | { kind: "not_found" }
   | { kind: "invalid_assignee" }
   | { kind: "ok"; task: DealTask };
+export type PipelineCreateOutcome = { kind: "conflict" } | { kind: "ok"; pipeline: DealPipeline };
+export type PipelineWriteOutcome =
+  | { kind: "conflict" }
+  | { kind: "not_found" }
+  | { kind: "stage_in_use" }
+  | { kind: "ok"; pipeline: DealPipeline };
+export type PipelineArchiveOutcome =
+  | { kind: "not_found" }
+  | { kind: "last" }
+  | { kind: "in_use" }
+  | { kind: "ok" };
 
 interface Background {
   waitUntil(promise: Promise<unknown>): void;
@@ -295,4 +315,68 @@ export async function deleteDealTask(
 ): Promise<boolean> {
   const repository = new DealRepository(database, workspace);
   return repository.deleteDealTask(dealId, taskId);
+}
+
+export async function createDealPipeline(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  input: DealPipelineCreate,
+  background: Background,
+): Promise<PipelineCreateOutcome> {
+  const repository = new DealRepository(database, workspace);
+  const created = await repository.createPipeline(input);
+  if (created.kind === "conflict") return { kind: "conflict" };
+  const loaded = ensureLoaded(
+    await repository.getPipelineWithStages(created.id),
+    "Created deal pipeline",
+  );
+  background.waitUntil(
+    writeAuditLog(database, workspace, {
+      action: "deal.pipeline.create",
+      resourceType: "deal_pipeline",
+      resourceId: loaded.pipeline.id,
+    }),
+  );
+  return { kind: "ok", pipeline: serializePipeline(loaded.pipeline, loaded.stages) };
+}
+
+export async function updateDealPipeline(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  id: string,
+  input: DealPipelineUpdate,
+  background: Background,
+): Promise<PipelineWriteOutcome> {
+  const repository = new DealRepository(database, workspace);
+  const result = await repository.updatePipeline(id, input);
+  if (result !== "ok") return { kind: result };
+  const loaded = ensureLoaded(await repository.getPipelineWithStages(id), "Updated deal pipeline");
+  background.waitUntil(
+    writeAuditLog(database, workspace, {
+      action: "deal.pipeline.update",
+      resourceType: "deal_pipeline",
+      resourceId: id,
+    }),
+  );
+  return { kind: "ok", pipeline: serializePipeline(loaded.pipeline, loaded.stages) };
+}
+
+export async function archiveDealPipeline(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  id: string,
+  background: Background,
+): Promise<PipelineArchiveOutcome> {
+  const repository = new DealRepository(database, workspace);
+  const result = await repository.archivePipeline(id);
+  if (result === "ok") {
+    background.waitUntil(
+      writeAuditLog(database, workspace, {
+        action: "deal.pipeline.archive",
+        resourceType: "deal_pipeline",
+        resourceId: id,
+      }),
+    );
+  }
+  return { kind: result };
 }

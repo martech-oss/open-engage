@@ -18,7 +18,7 @@ import {
   useRefreshSegment,
   useUpdateSegment,
 } from "./segment-api";
-import { evaluationLabel, segmentKindLabel, toSegmentDefinition } from "./segment-bits";
+import { evaluationLabel, toSegmentDefinition } from "./segment-bits";
 import { SegmentFormDialog } from "./segment-form-dialog";
 
 const SegmentAiSheet = lazy(async () => ({
@@ -28,7 +28,7 @@ const SegmentAiSheet = lazy(async () => ({
 export function SegmentsPage(): ReactNode {
   const navigate = useNavigate();
   const [{ data: segments }, { data: catalog }] = useSuspenseQueries({
-    queries: [segmentsQueryOptions(), segmentOptionsQueryOptions()],
+    queries: [segmentsQueryOptions("dynamic"), segmentOptionsQueryOptions()],
   });
   const createSegment = useCreateSegment();
   const updateSegment = useUpdateSegment();
@@ -49,7 +49,10 @@ export function SegmentsPage(): ReactNode {
         ...(definition.filter ? { filter: definition.filter } : {}),
         membershipSource: definition.membershipSource,
       });
-      await navigate({ to: "/segments/$id", params: { id: created.id } });
+      await navigate({
+        to: definition.kind === "static" ? "/lists/$id" : "/segments/$id",
+        params: { id: created.id },
+      });
     }
     setEditing(null);
   }
@@ -71,12 +74,6 @@ export function SegmentsPage(): ReactNode {
       ),
       headClassName: "px-4",
       cellClassName: "px-4 font-medium",
-    },
-    {
-      key: "kind",
-      header: "種類",
-      sortValue: (segment) => segment.kind,
-      cell: (segment) => <Badge variant="outline">{segmentKindLabel(segment.kind)}</Badge>,
     },
     {
       key: "memberCount",
@@ -118,17 +115,15 @@ export function SegmentsPage(): ReactNode {
       enableHiding: false,
       cell: (segment) => (
         <div className="flex justify-end gap-1">
-          {segment.kind === "dynamic" ? (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              disabled={refreshSegment.isPending}
-              aria-label={`${segment.name}を再評価`}
-              onClick={() => void refreshSegment.mutateAsync({ id: segment.id })}
-            >
-              <RefreshCw />
-            </Button>
-          ) : null}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            disabled={refreshSegment.isPending}
+            aria-label={`${segment.name}を再評価`}
+            onClick={() => void refreshSegment.mutateAsync({ id: segment.id })}
+          >
+            <RefreshCw />
+          </Button>
           <Button
             variant="ghost"
             size="icon-xs"
@@ -194,7 +189,7 @@ export function SegmentsPage(): ReactNode {
             rowKey={(segment) => segment.id}
             caption="セグメント一覧"
             emptyTitle="セグメントがまだありません"
-            emptyDescription="最初のセグメントを作成しましょう。"
+            emptyDescription="条件に合う連絡先が自動で出入りする最初のセグメントを作成しましょう。"
             emptyAction={
               <Button variant="outline" onClick={() => setManualOpen(true)}>
                 <Plus data-icon="inline-start" />
@@ -213,6 +208,7 @@ export function SegmentsPage(): ReactNode {
         }}
         initial={editing}
         catalog={catalog}
+        kind="dynamic"
         onCreated={(id) => void navigate({ to: "/segments/$id", params: { id } })}
       />
       <Suspense fallback={null}>

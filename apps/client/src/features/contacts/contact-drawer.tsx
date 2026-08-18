@@ -163,7 +163,7 @@ export function ContactDrawer({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatCard label="スコア" value={profile.contact.score} icon={<Zap />} />
                 <StatCard label="タグ" value={profile.tags.length} icon={<Tag />} />
-                <StatCard label="セグメント" value={profile.segments.length} icon={<Filter />} />
+                <StatCard label="所属" value={profile.segments.length} icon={<Filter />} />
                 <StatCard label="会社" value={profile.companies.length} icon={<Building2 />} />
               </div>
 

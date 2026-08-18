@@ -7,13 +7,7 @@ import { cn } from "@/lib/utils";
  * The app-wide page header: title and page actions.
  * Section sub-navigation lives in the sidebar under the active item.
  */
-export function PageHeader({
-  title,
-  action,
-}: {
-  title: string;
-  action?: ReactNode;
-}): ReactNode {
+export function PageHeader({ title, action }: { title: string; action?: ReactNode }): ReactNode {
   return (
     <header className="shrink-0 border-b bg-card px-6 py-3.5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">

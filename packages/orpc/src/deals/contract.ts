@@ -6,6 +6,9 @@ import {
   dealDetailDataSchema,
   dealListDataSchema,
   dealOptionsSchema,
+  dealPipelineCreateSchema,
+  dealPipelineSchema,
+  dealPipelineUpdateSchema,
   dealSummarySchema,
   dealTaskCreateSchema,
   dealTaskListItemSchema,
@@ -59,6 +62,40 @@ export const dealsContract = {
       }),
     )
     .output(z.array(dealTaskListItemSchema)),
+  createPipeline: oc
+    .route({ method: "POST", path: "/deals/pipelines", successStatus: 201 })
+    .errors({
+      ...base,
+      DEAL_PIPELINE_CONFLICT: { status: 409, message: "同名のパイプラインが既に存在します" },
+    })
+    .input(dealPipelineCreateSchema)
+    .output(dealPipelineSchema),
+  updatePipeline: oc
+    .route({ method: "PATCH", path: "/deals/pipelines/{id}" })
+    .errors({
+      ...base,
+      DEAL_PIPELINE_NOT_FOUND: { status: 404, message: "パイプラインが見つかりません" },
+      DEAL_PIPELINE_CONFLICT: { status: 409, message: "同名のパイプラインが既に存在します" },
+      DEAL_STAGE_IN_USE: {
+        status: 409,
+        message: "商談が残っているステージは削除できません",
+      },
+    })
+    .input(dealPipelineUpdateSchema.extend({ id: z.string().min(1) }))
+    .output(dealPipelineSchema),
+  archivePipeline: oc
+    .route({ method: "POST", path: "/deals/pipelines/{id}/archive" })
+    .errors({
+      ...base,
+      DEAL_PIPELINE_NOT_FOUND: { status: 404, message: "パイプラインが見つかりません" },
+      LAST_DEAL_PIPELINE: { status: 409, message: "最後のパイプラインはアーカイブできません" },
+      DEAL_PIPELINE_IN_USE: {
+        status: 409,
+        message: "このパイプラインに商談が残っているためアーカイブできません",
+      },
+    })
+    .input(z.object({ id: z.string().min(1) }))
+    .output(ackSchema),
   get: oc
     .route({ method: "GET", path: "/deals/{id}" })
     .errors({ ...workspaceErrors, ...dealNotFound })

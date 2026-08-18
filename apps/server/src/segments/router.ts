@@ -12,8 +12,8 @@ import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
 import { loadSegmentCatalog, validateSegmentFilter } from "./validation-service";
 
-export const listSegmentsProcedure = authed.segments.list.handler(async ({ context }) => {
-  return listSegments(context.database, context.workspace);
+export const listSegmentsProcedure = authed.segments.list.handler(async ({ context, input }) => {
+  return listSegments(context.database, context.workspace, input.kind);
 });
 
 export const segmentOptionsProcedure = authed.segments.options.handler(async ({ context }) =>

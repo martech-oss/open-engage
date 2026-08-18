@@ -4,8 +4,10 @@ import { orpc, orpcQuery } from "@/lib/orpc";
 import { invalidateProjectBriefQueries } from "@/lib/project-brief-cache";
 import type { SegmentFilter } from "@openengage/core/segments";
 
-export function segmentsQueryOptions() {
-  return orpcQuery.segments.list.queryOptions();
+export function segmentsQueryOptions(kind?: "static" | "dynamic") {
+  return orpcQuery.segments.list.queryOptions({
+    input: kind ? { kind } : {},
+  });
 }
 
 export function segmentQueryOptions(segmentId: string) {
@@ -14,6 +16,13 @@ export function segmentQueryOptions(segmentId: string) {
 
 export function segmentOptionsQueryOptions() {
   return orpcQuery.segments.options.queryOptions();
+}
+
+/** Active contacts offered when adding one to a static list. */
+export function listMemberOptionsQueryOptions() {
+  return orpcQuery.contacts.list.queryOptions({
+    input: { limit: 100, status: "active", sort: "name", direction: "asc" },
+  });
 }
 
 export function invalidateSegmentsList(queryClient: QueryClient): Promise<void> {

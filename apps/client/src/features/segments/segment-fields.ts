@@ -19,7 +19,7 @@ export const segmentFieldOptions = [
   { field: "updated_at", label: "更新日時" },
   { field: "company", label: "会社" },
   { field: "tag", label: "タグ" },
-  { field: "segment", label: "静的セグメント" },
+  { field: "segment", label: "リスト" },
   { field: "subscription", label: "購読トピック" },
   { field: "event", label: "イベント" },
   { field: "custom_field", label: "カスタム項目" },

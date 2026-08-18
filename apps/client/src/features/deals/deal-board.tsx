@@ -1,5 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Clock3, Plus, UserRound, UsersRound } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Clock3,
+  EllipsisVertical,
+  Pencil,
+  Plus,
+  Trash2,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { EmptyState } from "@/components/app-ui";
@@ -13,6 +23,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { type DealPipeline, type DealSummary } from "@/features/deals/deal-api";
 import { formatMoney, formatMonthDayTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -25,12 +42,18 @@ export function DealBoard({
   movingId,
   onMove,
   onCreate,
+  onAddStage,
+  onEditStage,
+  onDeleteStage,
 }: {
   pipeline: DealPipeline;
   deals: DealSummary[];
   movingId: string | null;
   onMove: (dealId: string, stageId: string) => Promise<void>;
   onCreate: () => void;
+  onAddStage: () => void;
+  onEditStage: (stageId: string) => void;
+  onDeleteStage: (stageId: string) => void;
 }): ReactNode {
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   return (
@@ -68,6 +91,31 @@ export function DealBoard({
                     {stage.probability}%
                   </p>
                 </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button variant="ghost" size="icon-xs" aria-label={`${stage.name}の操作`} />
+                    }
+                  >
+                    <EllipsisVertical />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onClick={() => onEditStage(stage.id)}>
+                        <Pencil />
+                        ステージを編集
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        disabled={pipeline.stages.length <= 1 || stageDeals.length > 0}
+                        onClick={() => onDeleteStage(stage.id)}
+                      >
+                        <Trash2 />
+                        ステージを削除
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </header>
               <div className="flex flex-col gap-3">
                 {stageDeals.map((deal) => (
@@ -157,6 +205,19 @@ export function DealBoard({
             </section>
           );
         })}
+        {pipeline.stages.length < 20 ? (
+          <section className="flex w-[300px] items-start">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-24 w-full border-dashed"
+              onClick={onAddStage}
+            >
+              <Plus data-icon="inline-start" />
+              ステージを追加
+            </Button>
+          </section>
+        ) : null}
       </div>
     </div>
   );

@@ -1,13 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import {
-  FormDialog,
-  FormInput,
-  FormNativeSelect,
-  FormSelectOption,
-  LoadingButton,
-} from "@/components/app-ui";
+import { FormDialog, FormInput, LoadingButton } from "@/components/app-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -22,6 +16,7 @@ import type {
 } from "@openengage/core/segments";
 
 import { useCreateSegment, usePreviewSegment, useUpdateSegment } from "./segment-api";
+import { audienceGroupLabel } from "./segment-bits";
 import { defaultSegmentFilter, SegmentBuilder } from "./segment-builder";
 
 export function SegmentFormDialog({
@@ -29,27 +24,31 @@ export function SegmentFormDialog({
   onOpenChange,
   initial,
   catalog,
+  kind,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial: SegmentRow | null;
-  catalog: SegmentGenerationCatalog;
+  catalog?: SegmentGenerationCatalog;
+  kind: "static" | "dynamic";
   onCreated?: (id: string) => void;
 }): ReactNode {
   const createSegment = useCreateSegment();
   const updateSegment = useUpdateSegment();
   const previewSegment = usePreviewSegment();
   const { mutateAsync: previewSegmentFilter } = previewSegment;
-  const { busy, error, run } = useFormSubmission("セグメントを保存できませんでした");
-  const [kind, setKind] = useState<"static" | "dynamic">(initial?.kind ?? "dynamic");
-  const [filter, setFilter] = useState<SegmentFilter>(
-    initial?.filterAst ?? defaultSegmentFilter(catalog),
+  const label = audienceGroupLabel(kind);
+  const { busy, error, run } = useFormSubmission(`${label}を保存できませんでした`);
+  const [filter, setFilter] = useState<SegmentFilter | null>(
+    kind === "dynamic"
+      ? (initial?.filterAst ?? (catalog ? defaultSegmentFilter(catalog) : null))
+      : null,
   );
   const [previewError, setPreviewError] = useState("");
 
   useEffect(() => {
-    if (!open || kind !== "dynamic") return;
+    if (!open || kind !== "dynamic" || !filter) return;
     let active = true;
     const timeout = window.setTimeout(() => {
       void previewSegmentFilter({ filter })
@@ -73,7 +72,7 @@ export function SegmentFormDialog({
     const form = new FormData(event.currentTarget);
     const name = getFormString(form, "name");
     const description = getFormString(form, "description");
-    const membershipSource = getFormString(form, "membershipSource") || "Manual selection";
+    const membershipSource = getFormString(form, "membershipSource") || "手動選定";
     await run(async () => {
       if (initial) {
         await updateSegment.mutateAsync({
@@ -82,7 +81,7 @@ export function SegmentFormDialog({
           slug: initial.slug,
           description,
           kind,
-          filter: kind === "dynamic" ? filter : null,
+          filter: kind === "dynamic" && filter ? filter : null,
           membershipSource: kind === "static" ? membershipSource : null,
         });
       } else {
@@ -91,7 +90,7 @@ export function SegmentFormDialog({
           slug: slugify(name),
           description,
           kind,
-          ...(kind === "dynamic" ? { filter } : {}),
+          ...(kind === "dynamic" && filter ? { filter } : {}),
           membershipSource: kind === "static" ? membershipSource : null,
         });
         onCreated?.(created.id);
@@ -101,6 +100,7 @@ export function SegmentFormDialog({
   }
 
   async function preview(): Promise<void> {
+    if (!filter) return;
     setPreviewError("");
     try {
       await previewSegmentFilter({ filter });
@@ -113,26 +113,19 @@ export function SegmentFormDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "セグメントを編集" : "セグメントを作成"}
-      description="複数の属性・行動・同意条件を組み合わせて対象者を定義します。"
+      title={initial ? `${label}を編集` : `${label}を作成`}
+      description={
+        kind === "static"
+          ? "手動でメンバーを出し入れする連絡先の集まりです。"
+          : "複数の属性・行動・同意条件を組み合わせて対象者を定義します。"
+      }
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}
       submitLabel={initial ? "更新" : "作成"}
-      className="sm:max-w-4xl"
+      {...(kind === "dynamic" ? { className: "sm:max-w-4xl" } : {})}
     >
-      <div className="grid gap-3 md:grid-cols-2">
-        <FormInput label="名前" name="name" defaultValue={initial?.name} required />
-        <FormNativeSelect
-          label="種類"
-          name="kind"
-          value={kind}
-          onChange={(event) => setKind(event.target.value as "static" | "dynamic")}
-        >
-          <FormSelectOption value="static">静的（手動メンバー）</FormSelectOption>
-          <FormSelectOption value="dynamic">動的（条件で自動更新）</FormSelectOption>
-        </FormNativeSelect>
-      </div>
+      <FormInput label="名前" name="name" defaultValue={initial?.name} required />
       <Field>
         <FieldLabel htmlFor="segment-description">説明</FieldLabel>
         <Input id="segment-description" name="description" defaultValue={initial?.description} />
@@ -143,12 +136,12 @@ export function SegmentFormDialog({
           <Input
             id="membership-source"
             name="membershipSource"
-            defaultValue={initial?.membershipSource ?? "Manual selection"}
+            defaultValue={initial?.membershipSource ?? "手動選定"}
             required
           />
-          <FieldDescription>作成後、連絡先画面からメンバーを追加・削除できます。</FieldDescription>
+          <FieldDescription>作成後、この画面からメンバーを追加・削除できます。</FieldDescription>
         </Field>
-      ) : (
+      ) : catalog && filter ? (
         <FieldGroup>
           <Field>
             <FieldLabel>オーディエンス条件</FieldLabel>
@@ -196,7 +189,7 @@ export function SegmentFormDialog({
             </AlertDescription>
           </Alert>
         </FieldGroup>
-      )}
+      ) : null}
     </FormDialog>
   );
 }

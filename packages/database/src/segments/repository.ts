@@ -37,11 +37,13 @@ export type SegmentRecord = Omit<typeof segments.$inferSelect, "filterAst"> & {
 };
 
 export class SegmentRepository extends WorkspaceRepository {
-  public async listSegments(): Promise<SegmentRecord[]> {
+  public async listSegments(kind?: "static" | "dynamic"): Promise<SegmentRecord[]> {
+    const conditions: SQL[] = [this.inWorkspace(segments)];
+    if (kind) conditions.push(eq(segments.kind, kind));
     const rows = await this.database.orm
       .select()
       .from(segments)
-      .where(this.inWorkspace(segments))
+      .where(and(...conditions))
       .orderBy(desc(segments.updatedAt))
       .limit(UNPAGINATED_LIST_LIMIT);
     return rows.map((row) => ({

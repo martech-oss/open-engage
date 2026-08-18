@@ -7,7 +7,7 @@ import { SegmentsPage } from "@/features/segments/segments-page";
 export const Route = createFileRoute("/_app/segments/")({
   loader: ({ context }) =>
     Promise.all([
-      context.queryClient.ensureQueryData(segmentsQueryOptions()),
+      context.queryClient.ensureQueryData(segmentsQueryOptions("dynamic")),
       context.queryClient.ensureQueryData(segmentOptionsQueryOptions()),
     ]),
   ...routeStatusComponents,

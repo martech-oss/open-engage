@@ -64,6 +64,8 @@ export const dealTaskUpdateSchema = dealTaskFieldsSchema.partial().extend({
 });
 export type DealTaskUpdate = z.infer<typeof dealTaskUpdateSchema>;
 
+const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
 const dealStageSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -73,13 +75,50 @@ const dealStageSchema = z.object({
 });
 export type DealStage = z.infer<typeof dealStageSchema>;
 
-const dealPipelineSchema = z.object({
+export const dealPipelineSchema = z.object({
   id: z.string(),
   name: z.string(),
   isDefault: z.boolean(),
   stages: z.array(dealStageSchema),
 });
 export type DealPipeline = z.infer<typeof dealPipelineSchema>;
+
+/** Seed stages copied onto a new pipeline when the caller does not supply any. */
+export const defaultDealStages = [
+  { name: "新規", color: "#64748b", probability: 10 },
+  { name: "連絡済み", color: "#3b82f6", probability: 25 },
+  { name: "提案", color: "#8b5cf6", probability: 50 },
+  { name: "交渉", color: "#f59e0b", probability: 75 },
+  { name: "最終確認", color: "#10b981", probability: 90 },
+] as const;
+
+const dealStageWriteSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  color: hexColorSchema.default("#64748b"),
+  probability: z.number().int().min(0).max(100).default(0),
+});
+
+export const dealPipelineCreateSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  isDefault: z.boolean().default(false),
+  stages: z
+    .array(dealStageWriteSchema)
+    .min(1)
+    .max(20)
+    .default(() => defaultDealStages.map((stage) => ({ ...stage }))),
+});
+export type DealPipelineCreate = z.infer<typeof dealPipelineCreateSchema>;
+
+export const dealPipelineUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(191).optional(),
+  isDefault: z.boolean().optional(),
+  stages: z
+    .array(dealStageWriteSchema.extend({ id: z.string().min(1).optional() }))
+    .min(1)
+    .max(20)
+    .optional(),
+});
+export type DealPipelineUpdate = z.infer<typeof dealPipelineUpdateSchema>;
 
 const dealContactOptionSchema = z.object({
   id: z.string(),

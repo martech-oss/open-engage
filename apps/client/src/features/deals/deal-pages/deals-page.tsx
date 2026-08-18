@@ -1,13 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  BriefcaseBusiness,
-  CircleDollarSign,
-  CircleX,
-  Plus,
-  Search,
-  UsersRound,
-} from "lucide-react";
+import { Pencil, Plus, Search } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,7 +9,6 @@ import {
   EmptyState,
   FormNativeSelect,
   FormSelectOption,
-  MetricCard,
   PageLayout,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
@@ -28,14 +20,17 @@ import {
   dealsQueryOptions,
   useCreateDeal,
   useMoveDeal,
+  useUpdateDealPipeline,
   type DealSearch,
+  type DealStage,
 } from "@/features/deals/deal-api";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { formatMoney } from "@/lib/format";
 
 import { DealBoard } from "../deal-board";
 import { DealForm } from "../deal-forms";
+import { DealPipelineForm } from "../deal-pipeline-form";
+import { DealStageForm, type DealStageDraft } from "../deal-stage-form";
 
 export function DealsPage({ search }: { search: DealSearch }): ReactNode {
   const navigate = useNavigate();
@@ -43,6 +38,8 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
   const { data: deals } = useSuspenseQuery(dealsQueryOptions(search));
   const [query, setQuery] = useState(search.q);
   const [showCreate, setShowCreate] = useState(false);
+  const [pipelineForm, setPipelineForm] = useState<"create" | "edit" | null>(null);
+  const [stageForm, setStageForm] = useState<"add" | DealStage | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const activePipeline =
     options.pipelines.find((pipeline) => pipeline.id === search.pipelineId) ??
@@ -51,6 +48,7 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
 
   const createDeal = useCreateDeal();
   const moveDeal = useMoveDeal();
+  const updatePipeline = useUpdateDealPipeline();
 
   useEffect(() => {
     setQuery(search.q);
@@ -63,6 +61,42 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
       void navigate({ to: "/deals", search: { ...search, q: value }, replace: true });
     },
   });
+
+  async function saveStage(values: DealStageDraft): Promise<void> {
+    if (!activePipeline || stageForm === null) return;
+    const current = activePipeline.stages.map((stage) => ({
+      id: stage.id,
+      name: stage.name,
+      color: stage.color,
+      probability: stage.probability,
+    }));
+    const stages =
+      stageForm === "add"
+        ? [...current, values]
+        : current.map((stage) => (stage.id === stageForm.id ? { ...stage, ...values } : stage));
+    await updatePipeline.mutateAsync({ id: activePipeline.id, stages });
+    toast.success(stageForm === "add" ? "ステージを追加しました" : "ステージを更新しました");
+  }
+
+  async function deleteStage(stageId: string): Promise<void> {
+    if (!activePipeline) return;
+    try {
+      await updatePipeline.mutateAsync({
+        id: activePipeline.id,
+        stages: activePipeline.stages
+          .filter((stage) => stage.id !== stageId)
+          .map((stage) => ({
+            id: stage.id,
+            name: stage.name,
+            color: stage.color,
+            probability: stage.probability,
+          })),
+      });
+      toast.success("ステージを削除しました");
+    } catch (caught) {
+      toast.error(getErrorMessage(caught, "ステージを削除できませんでした"));
+    }
+  }
 
   async function move(dealId: string, stageId: string): Promise<void> {
     setMovingId(dealId);
@@ -77,7 +111,7 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
 
   return (
     <PageLayout
-      title="Deal"
+      title="パイプライン"
       action={
         <Button onClick={() => setShowCreate(true)} disabled={!activePipeline}>
           <Plus data-icon="inline-start" />
@@ -85,33 +119,6 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
         </Button>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="進行中の商談"
-          value={`${deals.summary.openCount.toLocaleString()}件`}
-          description={formatMoney(deals.summary.openValue, "JPY")}
-          icon={<BriefcaseBusiness />}
-        />
-        <MetricCard
-          label="獲得済み"
-          value={`${deals.summary.wonCount.toLocaleString()}件`}
-          description={formatMoney(deals.summary.wonValue, "JPY")}
-          icon={<CircleDollarSign />}
-        />
-        <MetricCard
-          label="失注"
-          value={`${deals.summary.lostCount.toLocaleString()}件`}
-          description="パイプライン累計"
-          icon={<CircleX />}
-        />
-        <MetricCard
-          label="パイプライン"
-          value={activePipeline?.name ?? "未設定"}
-          description={`${activePipeline?.stages.length ?? 0}ステージ`}
-          icon={<UsersRound />}
-        />
-      </div>
-
       <Card>
         <CardContent>
           <FieldGroup className="flex-row flex-wrap items-end gap-3">
@@ -134,6 +141,19 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
                 ))}
               </FormNativeSelect>
             </FieldGroup>
+            <Button type="button" variant="outline" onClick={() => setPipelineForm("create")}>
+              <Plus data-icon="inline-start" />
+              作成
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!activePipeline}
+              onClick={() => setPipelineForm("edit")}
+            >
+              <Pencil data-icon="inline-start" />
+              ステージを編集
+            </Button>
             <FieldGroup className="min-w-40">
               <FormNativeSelect
                 label="ステータス"
@@ -180,13 +200,52 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
           movingId={movingId}
           onMove={move}
           onCreate={() => setShowCreate(true)}
+          onAddStage={() => setStageForm("add")}
+          onEditStage={(stageId) => {
+            const stage = activePipeline.stages.find((item) => item.id === stageId);
+            if (stage) setStageForm(stage);
+          }}
+          onDeleteStage={(stageId) => void deleteStage(stageId)}
         />
       ) : (
         <EmptyState
           title="パイプラインがありません"
-          description="ワークスペースのセール設定を確認してください。"
+          description="最初のパイプラインを作成すると、商談のステージを管理できます。"
+          action={
+            <Button variant="outline" onClick={() => setPipelineForm("create")}>
+              <Plus data-icon="inline-start" />
+              パイプラインを作成
+            </Button>
+          }
         />
       )}
+
+      <DealStageForm
+        key={stageForm === "add" ? "add" : (stageForm?.id ?? "closed")}
+        open={stageForm !== null}
+        onOpenChange={(open) => {
+          if (!open) setStageForm(null);
+        }}
+        initial={stageForm === "add" || stageForm === null ? null : stageForm}
+        onSubmit={saveStage}
+      />
+
+      <DealPipelineForm
+        key={`${pipelineForm}-${pipelineForm === "edit" ? (activePipeline?.id ?? "none") : "new"}`}
+        open={pipelineForm !== null}
+        onOpenChange={(open) => {
+          if (!open) setPipelineForm(null);
+        }}
+        pipeline={pipelineForm === "edit" ? (activePipeline ?? null) : null}
+        sourcePipeline={activePipeline ?? null}
+        canArchive={options.pipelines.length > 1}
+        onCreated={async (pipelineId) => {
+          await navigate({ to: "/deals", search: { ...search, pipelineId } });
+        }}
+        onArchived={async () => {
+          await navigate({ to: "/deals", search: { ...search, pipelineId: "" } });
+        }}
+      />
 
       {activePipeline ? (
         <AppDialog

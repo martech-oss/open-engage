@@ -184,7 +184,7 @@ export function ContactsToolbar({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={onExport}>CSVエクスポート</DropdownMenuItem>
               <DropdownMenuItem onClick={filters.clearFilters}>条件をクリア</DropdownMenuItem>
-              {selectedSegment ? (
+              {selectedSegment?.kind === "dynamic" ? (
                 <DropdownMenuItem disabled={busy} onClick={onRefreshSegment}>
                   <RefreshCw />
                   セグメントを再評価
@@ -205,7 +205,10 @@ function activeChips(
   const chips: Array<{ label: string; onRemove: () => void }> = [];
   const segment = options.segments.find((item) => item.id === filters.segmentId);
   if (segment) {
-    chips.push({ label: `セグメント: ${segment.name}`, onRemove: () => filters.setSegmentId("") });
+    chips.push({
+      label: `${segment.kind === "static" ? "リスト" : "セグメント"}: ${segment.name}`,
+      onRemove: () => filters.setSegmentId(""),
+    });
   }
   const tag = options.tags.find((item) => item.id === filters.tagId);
   if (tag) chips.push({ label: `タグ: ${tag.name}`, onRemove: () => filters.setTagId("") });

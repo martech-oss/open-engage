@@ -18,8 +18,9 @@ import {
 export async function listSegments(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
+  kind?: "static" | "dynamic",
 ): Promise<SegmentRow[]> {
-  const rows = await new SegmentRepository(database, workspace).listSegments();
+  const rows = await new SegmentRepository(database, workspace).listSegments(kind);
   return rows.map(toSegmentRow);
 }
 

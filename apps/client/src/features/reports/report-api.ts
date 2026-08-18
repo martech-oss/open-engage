@@ -98,6 +98,23 @@ export async function loadReportWorkspace(
   }
 }
 
+export type DealReportSearch = Pick<ReportSearch, "from" | "to" | "currency">;
+
+export const dealReportSearchDefaults: DealReportSearch = {
+  from: reportSearchDefaults.from,
+  to: reportSearchDefaults.to,
+  currency: "",
+};
+
+export function parseDealReportSearch(search: Record<string, unknown>): DealReportSearch {
+  const parsed = parseReportSearch(search);
+  return { from: parsed.from, to: parsed.to, currency: parsed.currency };
+}
+
+export function dealReportQueryOptions(search: DealReportSearch) {
+  return reportWorkspaceQueryOptions({ view: "deals", ...search });
+}
+
 /**
  * No single oRPC procedure returns the whole workspace, so the query key is
  * built by hand instead of via `orpcQuery` — it stays namespaced under

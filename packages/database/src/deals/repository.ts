@@ -1,10 +1,26 @@
-import { and, asc, count, desc, eq, isNull, min, ne, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  min,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import {
   dealSummarySchema,
   dealTaskListItemSchema,
   dealTaskSchema,
+  defaultDealStages,
   type DealCreate,
+  type DealPipelineCreate,
+  type DealPipelineUpdate,
   type DealSummary,
   type DealTask,
   type DealTaskCreate,
@@ -15,7 +31,13 @@ import {
 
 import { member, user } from "../auth/schema";
 import { companies, contacts } from "../contacts/schema";
-import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
+import {
+  didChange,
+  ensureLoaded,
+  isConstraintError,
+  likeContains,
+  nowIso,
+} from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { dealPipelines, dealStages, deals, dealTasks } from "./schema";
@@ -23,14 +45,9 @@ import { dealPipelines, dealStages, deals, dealTasks } from "./schema";
 /** Cap on the contact/company option lists offered when assigning a deal. */
 const DEAL_OPTION_LIST_LIMIT = 500;
 
-/** Seed stages for a workspace's first (default) pipeline. */
-const DEFAULT_STAGES = [
-  { name: "新規", color: "#64748b", probability: 10 },
-  { name: "連絡済み", color: "#3b82f6", probability: 25 },
-  { name: "提案", color: "#8b5cf6", probability: 50 },
-  { name: "交渉", color: "#f59e0b", probability: 75 },
-  { name: "最終確認", color: "#10b981", probability: 90 },
-] as const;
+export type PipelineCreateResult = { kind: "conflict" } | { kind: "ok"; id: string };
+export type PipelineUpdateResult = "not_found" | "conflict" | "stage_in_use" | "ok";
+export type PipelineArchiveResult = "not_found" | "last" | "in_use" | "ok";
 
 /**
  * One deal row joined with its pipeline/stage/owner/contact/company names and
@@ -123,7 +140,7 @@ export class DealRepository extends WorkspaceRepository {
         createdAt: now,
         updatedAt: now,
       }),
-      ...DEFAULT_STAGES.map((stage, position) =>
+      ...defaultDealStages.map((stage, position) =>
         orm.insert(dealStages).values({
           id: uuidv7(),
           workspaceId,
@@ -571,6 +588,175 @@ export class DealRepository extends WorkspaceRepository {
     return didChange(result);
   }
 
+  public async getPipelineWithStages(
+    id: string,
+  ): Promise<{ pipeline: DealPipelineRow; stages: DealStageRow[] } | null> {
+    const pipeline = await this.database.orm
+      .select({
+        id: dealPipelines.id,
+        name: dealPipelines.name,
+        isDefault: dealPipelines.isDefault,
+      })
+      .from(dealPipelines)
+      .where(
+        and(
+          this.inWorkspace(dealPipelines),
+          eq(dealPipelines.id, id),
+          isNull(dealPipelines.archivedAt),
+        ),
+      )
+      .get();
+    if (!pipeline) return null;
+    return { pipeline, stages: await this.listPipelineStages(id) };
+  }
+
+  public async createPipeline(input: DealPipelineCreate): Promise<PipelineCreateResult> {
+    if (await this.activePipelineNameTaken(input.name)) return { kind: "conflict" };
+
+    const pipelineId = uuidv7();
+    const now = nowIso();
+    const workspaceId = this.context.workspaceId;
+    const orm = this.database.orm;
+    const statements = [
+      ...(input.isDefault ? [this.clearDefaultFlag(now)] : []),
+      orm.insert(dealPipelines).values({
+        id: pipelineId,
+        workspaceId,
+        name: input.name,
+        isDefault: input.isDefault,
+        createdAt: now,
+        updatedAt: now,
+      }),
+      ...input.stages.map((stage, position) =>
+        orm.insert(dealStages).values({
+          id: uuidv7(),
+          workspaceId,
+          pipelineId,
+          name: stage.name,
+          color: stage.color,
+          position,
+          probability: stage.probability,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ),
+    ];
+    const [first, ...rest] = statements;
+    if (!first) throw new Error("no pipeline insert statements");
+    try {
+      await orm.batch([first, ...rest]);
+      return { kind: "ok", id: pipelineId };
+    } catch (error) {
+      if (isConstraintError(error)) return { kind: "conflict" };
+      throw error;
+    }
+  }
+
+  public async updatePipeline(
+    id: string,
+    input: DealPipelineUpdate,
+  ): Promise<PipelineUpdateResult> {
+    const current = await this.getPipelineWithStages(id);
+    if (!current) return "not_found";
+    if (input.name && (await this.activePipelineNameTaken(input.name, id))) return "conflict";
+    if (input.stages) {
+      const incomingIds = new Set(input.stages.flatMap((stage) => (stage.id ? [stage.id] : [])));
+      const removed = current.stages.filter((stage) => !incomingIds.has(stage.id));
+      if (removed.length > 0 && (await this.stagesHaveDeals(removed.map((stage) => stage.id)))) {
+        return "stage_in_use";
+      }
+    }
+
+    const now = nowIso();
+    const orm = this.database.orm;
+    const statements = [
+      ...(input.isDefault === true ? [this.clearDefaultFlag(now, id)] : []),
+      orm
+        .update(dealPipelines)
+        .set({
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            this.inWorkspace(dealPipelines),
+            eq(dealPipelines.id, id),
+            isNull(dealPipelines.archivedAt),
+          ),
+        ),
+      ...(input.stages ? this.replaceStageStatements(id, current.stages, input.stages, now) : []),
+    ];
+    const [first, ...rest] = statements;
+    if (!first) return "ok";
+    try {
+      await orm.batch([first, ...rest]);
+      return "ok";
+    } catch (error) {
+      if (isConstraintError(error)) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/deal_stages/i.test(message)) return "stage_in_use";
+        return "conflict";
+      }
+      throw error;
+    }
+  }
+
+  public async archivePipeline(id: string): Promise<PipelineArchiveResult> {
+    const current = await this.getPipelineWithStages(id);
+    if (!current) return "not_found";
+    if ((await this.countActivePipelines()) <= 1) return "last";
+    if ((await this.countPipelineDeals(id)) > 0) return "in_use";
+
+    const now = nowIso();
+    const suffix = ` [archived ${id.slice(0, 8)}]`;
+    const archivedName = `${current.pipeline.name.slice(0, Math.max(0, 191 - suffix.length))}${suffix}`;
+    const fallback = current.pipeline.isDefault
+      ? await this.database.orm
+          .select({ id: dealPipelines.id })
+          .from(dealPipelines)
+          .where(
+            and(
+              this.inWorkspace(dealPipelines),
+              isNull(dealPipelines.archivedAt),
+              ne(dealPipelines.id, id),
+            ),
+          )
+          .orderBy(asc(dealPipelines.createdAt))
+          .limit(1)
+          .get()
+      : null;
+    const statements = [
+      this.database.orm
+        .update(dealPipelines)
+        .set({
+          name: archivedName,
+          isDefault: false,
+          archivedAt: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            this.inWorkspace(dealPipelines),
+            eq(dealPipelines.id, id),
+            isNull(dealPipelines.archivedAt),
+          ),
+        ),
+      ...(fallback
+        ? [
+            this.database.orm
+              .update(dealPipelines)
+              .set({ isDefault: true, updatedAt: now })
+              .where(and(this.inWorkspace(dealPipelines), eq(dealPipelines.id, fallback.id))),
+          ]
+        : []),
+    ];
+    const [first, ...rest] = statements;
+    if (!first) return "not_found";
+    await this.database.orm.batch([first, ...rest]);
+    return "ok";
+  }
+
   private async findDefaultPipeline(): Promise<{ id: string } | null> {
     const row = await this.database.orm
       .select({ id: dealPipelines.id })
@@ -580,6 +766,136 @@ export class DealRepository extends WorkspaceRepository {
       .limit(1)
       .get();
     return row ?? null;
+  }
+
+  private async listPipelineStages(pipelineId: string): Promise<DealStageRow[]> {
+    return this.database.orm
+      .select({
+        id: dealStages.id,
+        pipelineId: dealStages.pipelineId,
+        name: dealStages.name,
+        color: dealStages.color,
+        position: dealStages.position,
+        probability: dealStages.probability,
+      })
+      .from(dealStages)
+      .where(and(this.inWorkspace(dealStages), eq(dealStages.pipelineId, pipelineId)))
+      .orderBy(asc(dealStages.position))
+      .all();
+  }
+
+  private async activePipelineNameTaken(name: string, exceptId?: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: dealPipelines.id })
+      .from(dealPipelines)
+      .where(
+        and(
+          this.inWorkspace(dealPipelines),
+          eq(dealPipelines.name, name),
+          isNull(dealPipelines.archivedAt),
+          ...(exceptId ? [ne(dealPipelines.id, exceptId)] : []),
+        ),
+      )
+      .get();
+    return row !== undefined;
+  }
+
+  private async countActivePipelines(): Promise<number> {
+    const row = await this.database.orm
+      .select({ value: count().as("value") })
+      .from(dealPipelines)
+      .where(and(this.inWorkspace(dealPipelines), isNull(dealPipelines.archivedAt)))
+      .get();
+    return Number(row?.value ?? 0);
+  }
+
+  private async countPipelineDeals(pipelineId: string): Promise<number> {
+    const row = await this.database.orm
+      .select({ value: count().as("value") })
+      .from(deals)
+      .where(
+        and(this.inWorkspace(deals), eq(deals.pipelineId, pipelineId), isNull(deals.archivedAt)),
+      )
+      .get();
+    return Number(row?.value ?? 0);
+  }
+
+  private async stagesHaveDeals(stageIds: string[]): Promise<boolean> {
+    if (stageIds.length === 0) return false;
+    const row = await this.database.orm
+      .select({ id: deals.id })
+      .from(deals)
+      .where(
+        and(this.inWorkspace(deals), inArray(deals.stageId, stageIds), isNull(deals.archivedAt)),
+      )
+      .limit(1)
+      .get();
+    return row !== undefined;
+  }
+
+  private clearDefaultFlag(now: string, exceptId?: string) {
+    return this.database.orm
+      .update(dealPipelines)
+      .set({ isDefault: false, updatedAt: now })
+      .where(
+        and(
+          this.inWorkspace(dealPipelines),
+          isNull(dealPipelines.archivedAt),
+          ...(exceptId ? [ne(dealPipelines.id, exceptId)] : []),
+        ),
+      );
+  }
+
+  private replaceStageStatements(
+    pipelineId: string,
+    current: DealStageRow[],
+    stages: NonNullable<DealPipelineUpdate["stages"]>,
+    now: string,
+  ) {
+    const workspaceId = this.context.workspaceId;
+    const currentIds = new Set(current.map((stage) => stage.id));
+    const incomingIds = new Set(stages.flatMap((stage) => (stage.id ? [stage.id] : [])));
+    const removed = current.filter((stage) => !incomingIds.has(stage.id));
+    const orm = this.database.orm;
+    return [
+      ...(current.length > 0
+        ? [
+            orm
+              .update(dealStages)
+              .set({ position: sql`${dealStages.position} + 1000`, updatedAt: now })
+              .where(and(this.inWorkspace(dealStages), eq(dealStages.pipelineId, pipelineId))),
+          ]
+        : []),
+      ...stages.map((stage, position) =>
+        stage.id && currentIds.has(stage.id)
+          ? orm
+              .update(dealStages)
+              .set({
+                name: stage.name,
+                color: stage.color,
+                probability: stage.probability,
+                position,
+                updatedAt: now,
+              })
+              .where(and(this.inWorkspace(dealStages), eq(dealStages.id, stage.id)))
+          : orm.insert(dealStages).values({
+              id: uuidv7(),
+              workspaceId,
+              pipelineId,
+              name: stage.name,
+              color: stage.color,
+              position,
+              probability: stage.probability,
+              createdAt: now,
+              updatedAt: now,
+            }),
+      ),
+      ...removed.map((stage) =>
+        orm
+          .delete(dealStages)
+          .where(and(this.inWorkspace(dealStages), eq(dealStages.id, stage.id))),
+      ),
+    ];
   }
 
   /**

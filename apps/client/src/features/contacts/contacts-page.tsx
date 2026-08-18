@@ -39,7 +39,7 @@ import { createSegmentFilter } from "./segment-filter";
 /** The design lists bulk operations inline, so only the common ones get a button. */
 const BULK_ACTIONS: Array<{ action: BulkAction; label: string; resource?: "tag" | "segment" }> = [
   { action: "add_tag", label: "タグを追加", resource: "tag" },
-  { action: "add_segment", label: "セグメントへ追加", resource: "segment" },
+  { action: "add_segment", label: "リストへ追加", resource: "segment" },
   { action: "archive", label: "アーカイブ" },
 ];
 
@@ -292,7 +292,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
               <ControlledSelect
                 value={bulkResourceId}
                 onValueChange={setBulkResourceId}
-                placeholder="セグメントを選択"
+                placeholder="リストを選択"
                 options={options.segments
                   .filter((segment) => segment.kind === "static")
                   .map((segment) => ({ value: segment.id, label: segment.name }))}
