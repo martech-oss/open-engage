@@ -5,7 +5,10 @@ import {
   type AutomationNode,
 } from "@openengage/core/automations";
 import {
+  AutomationActionRepository,
   AutomationEngineRepository,
+  AutomationJobRecoveryRepository,
+  AUTOMATION_MAX_STARTS,
   createDatabase,
   type AutomationContactColumn,
   type AutomationJobRow,
@@ -26,10 +29,21 @@ export async function processAutomationJob(
 ): Promise<void> {
   const database = createDatabase(env.DB);
   const engine = new AutomationEngineRepository(database);
+  const recovery = new AutomationJobRecoveryRepository(database);
   const job = await engine.findJobForProcessing(jobId, leaseId);
   if (!job) return;
   const started = await engine.startLeasedJob(jobId, leaseId, new Date().toISOString());
-  if (!started && job.status !== "running") return;
+  if (!started && job.status !== "running") {
+    if (job.attempts >= AUTOMATION_MAX_STARTS) {
+      await recovery.failJobAndEnrollmentForLease(
+        job.id,
+        leaseId,
+        "Automation attempts exhausted",
+        new Date().toISOString(),
+      );
+    }
+    return;
+  }
 
   try {
     const definition = job.graph;
@@ -41,18 +55,21 @@ export async function processAutomationJob(
         dueAt: result.waitUntil,
         payload: JSON.stringify({ waiting: true }),
         now: new Date().toISOString(),
+        waitEventType: result.waitEventType ?? null,
+        waitResourceId: result.waitResourceId ?? null,
       });
       return;
     }
     await finishNode(job, leaseId, definition, result.branch, engine);
   } catch (error) {
-    await engine.releaseJobForRetry(
+    const failure = await recovery.recordJobFailure(
       job.id,
       leaseId,
       error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000),
       new Date().toISOString(),
+      error instanceof PermanentChannelError,
     );
-    throw error;
+    if (failure === "retry" || error instanceof PermanentChannelError) throw error;
   }
 }
 
@@ -63,7 +80,12 @@ export async function executeNode(
   env: RuntimeEnv,
   database: OpenEngageDatabase,
   engine: AutomationEngineRepository,
-): Promise<{ branch?: AutomationEdge["branch"]; waitUntil?: string }> {
+): Promise<{
+  branch?: AutomationEdge["branch"];
+  waitUntil?: string;
+  waitEventType?: string;
+  waitResourceId?: string | null;
+}> {
   if (node.type === "source") return { branch: "next" };
   if (node.type === "delay") {
     return {
@@ -87,13 +109,20 @@ export async function executeNode(
       job.workspaceId,
       job.contactId,
       eventType,
-      job.enteredAt,
+      job.createdAt,
       node.config.resourceId ?? null,
     );
     if (found) return { branch: "yes" };
-    if (job.payload["waiting"] === true) return { branch: "timeout" };
+    const deadline = new Date(
+      new Date(job.createdAt).getTime() + node.config.withinMinutes * 60_000,
+    );
+    if (job.payload["waiting"] === true || Date.now() >= deadline.getTime()) {
+      return { branch: "timeout" };
+    }
     return {
-      waitUntil: new Date(Date.now() + node.config.withinMinutes * 60_000).toISOString(),
+      waitUntil: deadline.toISOString(),
+      waitEventType: eventType,
+      waitResourceId: node.config.resourceId ?? null,
     };
   }
 
@@ -135,10 +164,8 @@ export async function executeNode(
       await engine.removeSegmentMembership(job.workspaceId, action.segmentId, job.contactId);
       break;
     case "change_score":
-      await engine.adjustContactScoreForEnrollment(
-        job.workspaceId,
-        job.contactId,
-        job.enrollmentId,
+      await new AutomationActionRepository(database).adjustContactScoreForJob(
+        job,
         action.amount,
         now,
       );

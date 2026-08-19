@@ -5,7 +5,6 @@ import { jsonRecordSchema } from "@openengage/core/shared";
 
 import type { DatabaseSource } from "../client";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
-import { scoreEvents } from "../contacts/score-schema";
 import { segmentMemberships } from "../segments/schema";
 import { changedExactlyOne, didChange } from "../shared/database-utils";
 import { decodeJson, defineJsonCodec } from "../shared/json-codec";
@@ -13,6 +12,7 @@ import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import {
   assertAutomationJobTransition,
+  AUTOMATION_MAX_STARTS,
   AUTOMATION_CONTACT_COLUMNS,
   type AutomationContactColumn,
   type AutomationJobRow,
@@ -30,6 +30,7 @@ export type {
   AutomationJobRow,
   AutomationJobStatus,
 } from "./engine-support";
+export { AUTOMATION_MAX_STARTS } from "./engine-support";
 
 const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
@@ -53,7 +54,13 @@ export class AutomationEngineRepository extends DatabaseRepository {
     const rows = await this.database.orm
       .select({ workspaceId: automationJobs.workspaceId, oldest })
       .from(automationJobs)
-      .where(and(eq(automationJobs.status, "pending"), lte(automationJobs.dueAt, now)))
+      .where(
+        and(
+          eq(automationJobs.status, "pending"),
+          lte(automationJobs.dueAt, now),
+          lt(automationJobs.attempts, AUTOMATION_MAX_STARTS),
+        ),
+      )
       .groupBy(automationJobs.workspaceId)
       .orderBy(asc(sql`oldest`))
       .limit(limit);
@@ -75,6 +82,7 @@ export class AutomationEngineRepository extends DatabaseRepository {
     const conditions = [
       eq(automationJobs.status, "pending"),
       lte(automationJobs.dueAt, now),
+      lt(automationJobs.attempts, AUTOMATION_MAX_STARTS),
       or(isNull(automationJobs.leaseUntil), lt(automationJobs.leaseUntil, now))!,
     ];
     if (workspaceId) conditions.push(eq(automationJobs.workspaceId, workspaceId));
@@ -93,6 +101,7 @@ export class AutomationEngineRepository extends DatabaseRepository {
           and(
             eq(automationJobs.id, claim.id),
             eq(automationJobs.status, "pending"),
+            lt(automationJobs.attempts, AUTOMATION_MAX_STARTS),
             or(isNull(automationJobs.leaseUntil), lt(automationJobs.leaseUntil, now)),
           ),
         ),
@@ -186,6 +195,7 @@ export class AutomationEngineRepository extends DatabaseRepository {
           eq(automationJobs.id, jobId),
           eq(automationJobs.leaseId, leaseId),
           eq(automationJobs.status, "leased"),
+          lt(automationJobs.attempts, AUTOMATION_MAX_STARTS),
         ),
       );
     return didChange(result);
@@ -195,7 +205,13 @@ export class AutomationEngineRepository extends DatabaseRepository {
   public async parkJobUntil(
     jobId: string,
     leaseId: string,
-    input: { dueAt: string; payload: string; now: string },
+    input: {
+      dueAt: string;
+      payload: string;
+      now: string;
+      waitEventType?: string | null;
+      waitResourceId?: string | null;
+    },
   ): Promise<void> {
     assertAutomationJobTransition("running", "pending");
     await this.database.orm
@@ -204,33 +220,12 @@ export class AutomationEngineRepository extends DatabaseRepository {
         status: "pending",
         dueAt: input.dueAt,
         payload: input.payload,
+        waitEventType: input.waitEventType ?? null,
+        waitResourceId: input.waitResourceId ?? null,
         leaseId: null,
         leaseUntil: null,
         updatedAt: input.now,
       })
-      .where(
-        and(
-          eq(automationJobs.id, jobId),
-          eq(automationJobs.leaseId, leaseId),
-          eq(automationJobs.status, "running"),
-        ),
-      );
-  }
-
-  /**
-   * Records the failure and hands the running job back to the queue retry
-   * (running -> leased); the lease is kept so the retried message can resume.
-   */
-  public async releaseJobForRetry(
-    jobId: string,
-    leaseId: string,
-    lastError: string,
-    now: string,
-  ): Promise<void> {
-    assertAutomationJobTransition("running", "leased");
-    await this.database.orm
-      .update(automationJobs)
-      .set({ status: "leased", lastError, updatedAt: now })
       .where(
         and(
           eq(automationJobs.id, jobId),
@@ -338,6 +333,40 @@ export class AutomationEngineRepository extends DatabaseRepository {
     return row !== undefined;
   }
 
+  /** New matching events make parked decision jobs immediately claimable. */
+  public async wakeWaitingDecisionJobs(input: {
+    workspaceId: string;
+    contactId: string;
+    eventType: string;
+    resourceId: string | null;
+    occurredAt: string;
+    now: string;
+  }): Promise<void> {
+    const resourceMatches =
+      input.resourceId === null
+        ? isNull(automationJobs.waitResourceId)
+        : or(
+            isNull(automationJobs.waitResourceId),
+            eq(automationJobs.waitResourceId, input.resourceId),
+          );
+    await this.database.orm
+      .update(automationJobs)
+      .set({
+        dueAt: sql`CASE WHEN ${automationJobs.dueAt} > ${input.now} THEN ${input.now} ELSE ${automationJobs.dueAt} END`,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(automationJobs.status, "pending"),
+          eq(automationJobs.workspaceId, input.workspaceId),
+          eq(automationJobs.contactId, input.contactId),
+          eq(automationJobs.waitEventType, input.eventType),
+          lte(automationJobs.createdAt, input.occurredAt),
+          resourceMatches,
+        ),
+      );
+  }
+
   /** Condition nodes: does the contact carry a tag with this slug? */
   public async contactHasTagWithSlug(
     workspaceId: string,
@@ -423,37 +452,6 @@ export class AutomationEngineRepository extends DatabaseRepository {
           eq(segmentMemberships.contactId, contactId),
         ),
       );
-  }
-
-  /**
-   * change_score action: applies the delta and records the score event
-   * against the enrollment, atomically. The delta is applied as a SQL
-   * expression (not read-then-write) so the whole operation - not just the
-   * two writes - is race-free against a concurrent adjustment.
-   */
-  public async adjustContactScoreForEnrollment(
-    workspaceId: string,
-    contactId: string,
-    enrollmentId: string,
-    amount: number,
-    now: string,
-  ): Promise<void> {
-    const orm = this.database.orm;
-    await orm.batch([
-      orm
-        .update(contacts)
-        .set({ score: sql`${contacts.score} + ${amount}`, updatedAt: now })
-        .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId))),
-      orm.insert(scoreEvents).values({
-        id: uuidv7(),
-        workspaceId,
-        contactId,
-        delta: amount,
-        reason: "automation",
-        automationEnrollmentId: enrollmentId,
-        createdAt: now,
-      }),
-    ]);
   }
 
   /** update_field action targeting one of the known contact columns. */
@@ -564,7 +562,14 @@ export class AutomationEngineRepository extends DatabaseRepository {
   private jobSucceededUpdate(jobId: string, leaseId: string, now: string) {
     return this.database.orm
       .update(automationJobs)
-      .set({ status: "succeeded", leaseId: null, leaseUntil: null, updatedAt: now })
+      .set({
+        status: "succeeded",
+        leaseId: null,
+        leaseUntil: null,
+        waitEventType: null,
+        waitResourceId: null,
+        updatedAt: now,
+      })
       .where(and(eq(automationJobs.id, jobId), eq(automationJobs.leaseId, leaseId)));
   }
 }

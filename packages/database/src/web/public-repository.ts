@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, notExists, sql } from "drizzle-orm";
 
 import { stringArraySchema } from "@openengage/core/shared";
 import {
@@ -9,12 +9,21 @@ import {
 } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import { contactEventOutbox, contactEvents, contacts } from "../contacts/schema";
+import {
+  contactEventOutbox,
+  contactEventProjections,
+  contactEvents,
+  contacts,
+} from "../contacts/schema";
 import { isConstraintError, nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { dueContactEventWork, isContactEmailConstraintError } from "./public-form-persistence";
+import {
+  persistPublicFormSubmissionBatch,
+  type PersistPublicFormSubmissionInput,
+} from "./public-form-submission-writer";
 import {
   assets,
   forms,
@@ -56,24 +65,7 @@ export interface PublicFormContactEvent {
   occurredAt: string;
 }
 
-export interface PersistPublicFormSubmissionInput {
-  workspaceId: string;
-  formId: string;
-  email: string;
-  idempotencyKey: string;
-  contactFields: {
-    firstName: string | null;
-    lastName: string | null;
-    phone: string | null;
-    customFields: Record<string, unknown>;
-  };
-  payload: Record<string, unknown>;
-  ipHash: string | null;
-  occurredAt: string;
-  submissionId: string;
-  contactCreatedEventId: string;
-  formSubmittedEventId: string;
-}
+export type { PersistPublicFormSubmissionInput } from "./public-form-submission-writer";
 
 /**
  * Public, unauthenticated lookups and writes behind the hosted signup form
@@ -143,7 +135,7 @@ export class PublicFormRepository extends DatabaseRepository {
     for (;;) {
       const existingContactId = await this.findContactIdByEmail(input.workspaceId, input.email);
       try {
-        await this.persistSubmissionBatch(input, existingContactId);
+        await persistPublicFormSubmissionBatch(this.database, input, existingContactId);
         return "accepted";
       } catch (error) {
         if (!isConstraintError(error)) throw error;
@@ -232,6 +224,17 @@ export class PublicFormRepository extends DatabaseRepository {
           eq(contactEventOutbox.eventId, eventId),
           eq(contactEventOutbox.status, "processing"),
           eq(contactEventOutbox.leaseId, leaseId),
+          notExists(
+            this.database.orm
+              .select({ eventId: contactEventProjections.eventId })
+              .from(contactEventProjections)
+              .where(
+                and(
+                  eq(contactEventProjections.eventId, eventId),
+                  eq(contactEventProjections.status, "pending"),
+                ),
+              ),
+          ),
         ),
       );
   }
@@ -392,98 +395,6 @@ export class PublicFormRepository extends DatabaseRepository {
       )
       .get();
     return Boolean(row);
-  }
-
-  private async persistSubmissionBatch(
-    input: PersistPublicFormSubmissionInput,
-    existingContactId: string | null,
-  ): Promise<void> {
-    const orm = this.database.orm;
-    const contactId = existingContactId ?? uuidv7();
-    const contactMutation = existingContactId
-      ? orm
-          .update(contacts)
-          .set({
-            firstName: sql`coalesce(${input.contactFields.firstName}, ${contacts.firstName})`,
-            lastName: sql`coalesce(${input.contactFields.lastName}, ${contacts.lastName})`,
-            phone: sql`coalesce(${input.contactFields.phone}, ${contacts.phone})`,
-            ...(Object.keys(input.contactFields.customFields).length > 0
-              ? {
-                  customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), ${JSON.stringify(input.contactFields.customFields)})`,
-                }
-              : {}),
-            updatedAt: input.occurredAt,
-          })
-          .where(and(eq(contacts.workspaceId, input.workspaceId), eq(contacts.id, contactId)))
-      : orm.insert(contacts).values({
-          id: contactId,
-          workspaceId: input.workspaceId,
-          email: input.email,
-          firstName: input.contactFields.firstName,
-          lastName: input.contactFields.lastName,
-          phone: input.contactFields.phone,
-          stage: "lead",
-          score: 0,
-          status: "active",
-          customFields: JSON.stringify(input.contactFields.customFields),
-          createdAt: input.occurredAt,
-          updatedAt: input.occurredAt,
-        });
-    const submission = orm.insert(formSubmissions).values({
-      id: input.submissionId,
-      workspaceId: input.workspaceId,
-      formId: input.formId,
-      contactId,
-      idempotencyKey: input.idempotencyKey,
-      payload: JSON.stringify(input.payload),
-      ipHash: input.ipHash,
-      createdAt: input.occurredAt,
-    });
-    const formSubmittedEvent = orm.insert(contactEvents).values({
-      id: input.formSubmittedEventId,
-      workspaceId: input.workspaceId,
-      contactId,
-      type: "form_submitted",
-      resourceType: "form",
-      resourceId: input.formId,
-      properties: JSON.stringify({ formId: input.formId }),
-      occurredAt: input.occurredAt,
-      createdAt: input.occurredAt,
-    });
-    const formSubmittedWork = orm.insert(contactEventOutbox).values({
-      eventId: input.formSubmittedEventId,
-      workspaceId: input.workspaceId,
-      status: "pending",
-      createdAt: input.occurredAt,
-    });
-
-    if (existingContactId) {
-      await orm.batch([contactMutation, submission, formSubmittedEvent, formSubmittedWork]);
-      return;
-    }
-    await orm.batch([
-      contactMutation,
-      submission,
-      orm.insert(contactEvents).values({
-        id: input.contactCreatedEventId,
-        workspaceId: input.workspaceId,
-        contactId,
-        type: "contact_created",
-        resourceType: "contact",
-        resourceId: contactId,
-        properties: "{}",
-        occurredAt: input.occurredAt,
-        createdAt: input.occurredAt,
-      }),
-      orm.insert(contactEventOutbox).values({
-        eventId: input.contactCreatedEventId,
-        workspaceId: input.workspaceId,
-        status: "pending",
-        createdAt: input.occurredAt,
-      }),
-      formSubmittedEvent,
-      formSubmittedWork,
-    ]);
   }
 }
 

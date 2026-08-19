@@ -239,7 +239,7 @@ describe("public form atomic idempotency", () => {
     )
       .bind(form.workspaceId)
       .first<{ score: number; status: string; attemptCount: number }>();
-    expect(afterConcurrentScan).toEqual({ score: 10, status: "processed", attemptCount: 2 });
+    expect(afterConcurrentScan).toEqual({ score: 5, status: "processed", attemptCount: 2 });
 
     await scheduled(controller, env, createExecutionContext());
     const afterProcessedScan = await env.DB.prepare(
@@ -247,12 +247,26 @@ describe("public form atomic idempotency", () => {
     )
       .bind(form.workspaceId)
       .first<{ score: number; attemptCount: number }>();
-    expect(afterProcessedScan).toEqual({ score: 10, attemptCount: 2 });
+    expect(afterProcessedScan).toEqual({ score: 5, attemptCount: 2 });
   });
 
   it("catches post-commit event failure losing durable retryable work", async () => {
     const form = await createPublicForm("pending-work");
-    await env.DB.prepare("DROP TABLE scoring_rules").run();
+    await form.client.scoring.createRule({
+      name: "Injected failure rule",
+      eventType: "form_submitted",
+      matchType: "any",
+      matchValue: null,
+      points: 1,
+      categoryId: null,
+      tagId: null,
+      enabled: true,
+    });
+    await env.DB.prepare(
+      `CREATE TRIGGER inject_public_form_score_failure
+       BEFORE UPDATE OF score ON contacts
+       BEGIN SELECT RAISE(FAIL, 'injected public form score failure'); END`,
+    ).run();
 
     const response = await publicCall(form.path, {
       email: "pending@example.com",
@@ -263,9 +277,10 @@ describe("public form atomic idempotency", () => {
     expect(await response.json()).toEqual({ data: { accepted: true, message: "Accepted" } });
 
     const counts = await env.DB.prepare(
-      "SELECT (SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND email = 'pending@example.com') AS contacts, (SELECT COUNT(*) FROM form_submissions WHERE workspace_id = ?) AS submissions, (SELECT COUNT(*) FROM contact_events WHERE workspace_id = ?) AS events, (SELECT COUNT(*) FROM contact_event_outbox WHERE workspace_id = ? AND status = 'pending') AS pending_work, (SELECT COUNT(*) FROM contact_event_outbox WHERE workspace_id = ? AND status = 'processed') AS processed_work",
+      "SELECT (SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND email = 'pending@example.com') AS contacts, (SELECT COUNT(*) FROM form_submissions WHERE workspace_id = ?) AS submissions, (SELECT COUNT(*) FROM contact_events WHERE workspace_id = ?) AS events, (SELECT COUNT(*) FROM contact_event_outbox WHERE workspace_id = ? AND status = 'pending') AS pending_work, (SELECT COUNT(*) FROM contact_event_outbox WHERE workspace_id = ? AND status = 'processed') AS processed_work, (SELECT COUNT(*) FROM contact_event_projections WHERE workspace_id = ?) AS projections",
     )
       .bind(
+        form.workspaceId,
         form.workspaceId,
         form.workspaceId,
         form.workspaceId,
@@ -278,6 +293,7 @@ describe("public form atomic idempotency", () => {
         events: number;
         pending_work: number;
         processed_work: number;
+        projections: number;
       }>();
     expect(counts).toEqual({
       contacts: 1,
@@ -285,6 +301,7 @@ describe("public form atomic idempotency", () => {
       events: 2,
       pending_work: 1,
       processed_work: 1,
+      projections: 12,
     });
   });
 

@@ -1,6 +1,7 @@
 import { retryDelaySeconds } from "@openengage/core/platform";
 import {
   AutomationEngineRepository,
+  AutomationJobRecoveryRepository,
   claimDueJobs,
   createDatabase,
   MessagingWorkerRepository,
@@ -45,17 +46,28 @@ export async function scheduled(
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
   const engine = new AutomationEngineRepository(database);
+  const recovery = new AutomationJobRecoveryRepository(database);
+  await recovery.recoverExpiredJobs(now);
   const workspaces = await engine.workspacesWithDueJobs(now, 50);
   const messages: Array<{ body: OpenEngageQueueMessage }> = [];
+  const automationClaims: Array<{ id: string; leaseId: string }> = [];
   for (const workspace of workspaces) {
     const jobs = await claimDueJobs(database, now, leaseUntil, 20, workspace.workspaceId);
     for (const job of jobs) {
+      automationClaims.push(job);
       messages.push({
         body: { kind: "automation_job", jobId: job.id, leaseId: job.leaseId },
       });
     }
   }
-  if (messages.length > 0) await env.JOBS_QUEUE.sendBatch(messages);
+  if (messages.length > 0) {
+    try {
+      await env.JOBS_QUEUE.sendBatch(messages);
+    } catch (error) {
+      await recovery.returnClaimsToPending(automationClaims, new Date().toISOString());
+      throw error;
+    }
+  }
 
   const dueDeliveries = await new MessagingWorkerRepository(database).scanDueDeliveries(now);
   if (dueDeliveries.length > 0) {

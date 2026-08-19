@@ -17,7 +17,7 @@ import {
 } from "@openengage/core/shared";
 
 import { organization, user } from "../auth/schema";
-import { contacts } from "../contacts/schema";
+import { contactEvents, contacts } from "../contacts/schema";
 import { checkEnum } from "../shared/enum-check";
 
 export const projects = sqliteTable(
@@ -472,6 +472,9 @@ export const campaignTouches = sqliteTable(
     resourceType: text("resource_type").notNull(),
     resourceId: text("resource_id").notNull(),
     eventType: text("event_type").notNull(),
+    sourceEventId: text("source_event_id").references(() => contactEvents.id, {
+      onDelete: "cascade",
+    }),
     occurredAt: text("occurred_at").notNull(),
     createdAt: text("created_at").notNull(),
   },
@@ -485,6 +488,11 @@ export const campaignTouches = sqliteTable(
       table.workspaceId,
       table.projectId,
       table.occurredAt,
+    ),
+    uniqueIndex("campaign_touches_source_event_project_unique").on(
+      table.workspaceId,
+      table.sourceEventId,
+      table.projectId,
     ),
   ],
 );

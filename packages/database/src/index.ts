@@ -4,6 +4,7 @@ export * from "./client";
 export * from "./consent/repository";
 export * from "./contacts/company-repository";
 export * from "./contacts/data-job-repository";
+export * from "./contacts/event-repository";
 export * from "./contacts/repository";
 export * from "./contacts/resource-repository";
 export * from "./deals/repository";

@@ -24,8 +24,11 @@ const MACHINE_STATUS = {
 
 const COLLAPSED_HOPS: Partial<Record<`${JobStatus}->${JobStatus}`, readonly JobStatus[]>> = {
   "leased->processing": ["queued"],
+  "leased->failed": ["queued", "processing"],
   "processing->leased": ["pending"],
 };
+
+export const AUTOMATION_MAX_STARTS = 5;
 
 /** Validates every shared-state-machine hop represented by one database transition. */
 export function assertAutomationJobTransition(

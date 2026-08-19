@@ -10,7 +10,8 @@ import {
 
 import { organization } from "../auth/schema";
 import { suppressions } from "../consent/schema";
-import { contactEvents } from "../contacts/schema";
+import { contactEventProjectionRows } from "../contacts/event-repository";
+import { contactEventOutbox, contactEventProjections, contactEvents } from "../contacts/schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { decodeJson, defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
@@ -428,6 +429,19 @@ export class MessagingWorkerRepository extends DatabaseRepository {
         occurredAt: input.receivedAt,
         createdAt: input.receivedAt,
       }),
+      orm.insert(contactEventOutbox).values({
+        eventId: input.contactEventId,
+        workspaceId: input.workspaceId,
+        status: "pending",
+        createdAt: input.receivedAt,
+      }),
+      orm.insert(contactEventProjections).values(
+        contactEventProjectionRows({
+          id: input.contactEventId,
+          workspaceId: input.workspaceId,
+          createdAt: input.receivedAt,
+        }),
+      ),
     ]);
   }
 

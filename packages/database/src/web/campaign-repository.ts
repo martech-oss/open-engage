@@ -33,6 +33,7 @@ export class CampaignTouchRepository extends DatabaseRepository {
   }
 
   public async recordTouches(input: {
+    sourceEventId: string;
     workspaceId: string;
     contactId: string;
     candidate: TouchCandidate;
@@ -51,20 +52,24 @@ export class CampaignTouchRepository extends DatabaseRepository {
       );
     if (owners.length === 0) return 0;
     const now = nowIso();
-    await this.database.orm.insert(campaignTouches).values(
-      owners.map((owner) => ({
-        id: uuidv7(),
-        workspaceId: input.workspaceId,
-        projectId: owner.projectId,
-        contactId: input.contactId,
-        resourceType: input.candidate.resourceType,
-        resourceId: input.candidate.resourceId,
-        eventType: input.eventType,
-        occurredAt: input.occurredAt,
-        createdAt: now,
-      })),
-    );
-    return owners.length;
+    const result = await this.database.orm
+      .insert(campaignTouches)
+      .values(
+        owners.map((owner) => ({
+          id: uuidv7(),
+          workspaceId: input.workspaceId,
+          projectId: owner.projectId,
+          contactId: input.contactId,
+          resourceType: input.candidate.resourceType,
+          resourceId: input.candidate.resourceId,
+          eventType: input.eventType,
+          sourceEventId: input.sourceEventId,
+          occurredAt: input.occurredAt,
+          createdAt: now,
+        })),
+      )
+      .onConflictDoNothing();
+    return result.meta.changes;
   }
 }
 

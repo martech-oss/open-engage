@@ -377,6 +377,8 @@ export class ContactResourceRepository extends WorkspaceRepository {
             delta: sql<number>`${input.delta}`.as("delta"),
             reason: sql<string>`${input.reason}`.as("reason"),
             automationEnrollmentId: sql<string | null>`null`.as("automation_enrollment_id"),
+            contactEventId: sql<string | null>`null`.as("contact_event_id"),
+            scoringRuleId: sql<string | null>`null`.as("scoring_rule_id"),
             createdAt: sql<string>`${now}`.as("created_at"),
           })
           .from(contacts)

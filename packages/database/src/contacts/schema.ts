@@ -267,6 +267,39 @@ export const contactEventOutbox = sqliteTable(
   ],
 );
 
+/** Independently resumable business effects for one durable contact event. */
+export const contactEventProjections = sqliteTable(
+  "contact_event_projections",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => contactEvents.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projection: text().notNull(),
+    status: text().default("pending").notNull(),
+    createdAt: text("created_at").notNull(),
+    completedAt: text("completed_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.projection] }),
+    index("contact_event_projections_workspace_status_idx").on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "contact_event_projections_name_check",
+      sql`${table.projection} IN ('scoring', 'grade', 'campaign', 'decision_wake', 'automation_enrollment', 'segment_reconcile')`,
+    ),
+    check(
+      "contact_event_projections_status_check",
+      sql`${table.status} IN ('pending', 'completed', 'skipped')`,
+    ),
+  ],
+);
+
 export const importJobs = sqliteTable(
   "import_jobs",
   {

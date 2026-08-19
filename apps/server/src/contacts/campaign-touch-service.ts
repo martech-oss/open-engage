@@ -12,6 +12,7 @@ import {
 export async function recordCampaignTouches(
   database: OpenEngageDatabase,
   input: {
+    id: string;
     workspaceId: string;
     contactId: string;
     type: string;
@@ -24,6 +25,7 @@ export async function recordCampaignTouches(
   const candidate = await toCandidate(repository, input);
   if (!candidate) return 0;
   return repository.recordTouches({
+    sourceEventId: input.id,
     workspaceId: input.workspaceId,
     contactId: input.contactId,
     candidate,

@@ -1,8 +1,16 @@
-import { foreignKey, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  foreignKey,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
 import { automationEnrollments } from "../automations/schema";
-import { contacts } from "./schema";
+import { scoringRules } from "../scoring/schema";
+import { contactEvents, contacts } from "./schema";
 
 /**
  * Bridge table between Contacts and Automation. Keeping it outside either
@@ -25,6 +33,12 @@ export const scoreEvents = sqliteTable(
       () => automationEnrollments.id,
       { onDelete: "set null" },
     ),
+    contactEventId: text("contact_event_id").references(() => contactEvents.id, {
+      onDelete: "cascade",
+    }),
+    scoringRuleId: text("scoring_rule_id").references(() => scoringRules.id, {
+      onDelete: "set null",
+    }),
     createdAt: text("created_at").notNull(),
   },
   (table) => [
@@ -32,6 +46,11 @@ export const scoreEvents = sqliteTable(
       table.workspaceId,
       table.contactId,
       table.createdAt,
+    ),
+    uniqueIndex("score_events_contact_event_rule_unique").on(
+      table.workspaceId,
+      table.contactEventId,
+      table.scoringRuleId,
     ),
     foreignKey({
       columns: [table.workspaceId, table.contactId],

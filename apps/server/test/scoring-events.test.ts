@@ -269,6 +269,18 @@ describe("archived contact events", () => {
         contact.id,
       ),
     ).resolves.toBe(0);
+    await expect(
+      countRows(
+        "SELECT COUNT(*) AS count FROM contact_event_projections WHERE event_id = ? AND status = 'skipped'",
+        recorded.eventId,
+      ),
+    ).resolves.toBe(6);
+    const outbox = await env.DB.prepare(
+      "SELECT status FROM contact_event_outbox WHERE event_id = ?",
+    )
+      .bind(recorded.eventId)
+      .first<{ status: string }>();
+    expect(outbox).toEqual({ status: "processed" });
   });
 });
 

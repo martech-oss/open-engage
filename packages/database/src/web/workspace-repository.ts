@@ -46,6 +46,7 @@ import {
   siteMessages,
   siteTrackingSettings,
 } from "./schema";
+import { persistSiteMessageEvent, type SiteMessageEventInput } from "./site-message-event-writer";
 
 const formDefinitionCodec = defineJsonCodec(signupFormDefinitionSchema, "forms.definition");
 const formAllowedDomainsCodec = defineJsonCodec(stringArraySchema, "forms.allowed_domains");
@@ -564,24 +565,7 @@ export class WebRepository extends WorkspaceRepository {
   }
 
   /** Direct timeline write, deliberately bypassing automation enrollment (unlike `recordContactEvent`). */
-  public async recordSiteMessageEvent(input: {
-    contactId: string;
-    visitorId: string;
-    messageId: string;
-    type: "impression" | "click";
-  }): Promise<void> {
-    const now = nowIso();
-    await this.database.orm.insert(contactEvents).values({
-      id: uuidv7(),
-      workspaceId: this.context.workspaceId,
-      contactId: input.contactId,
-      visitorId: input.visitorId,
-      type: input.type === "impression" ? "site_message_viewed" : "site_message_clicked",
-      resourceType: "site_message",
-      resourceId: input.messageId,
-      properties: "{}",
-      occurredAt: now,
-      createdAt: now,
-    });
+  public async recordSiteMessageEvent(input: SiteMessageEventInput): Promise<string> {
+    return await persistSiteMessageEvent(this.database, this.context.workspaceId, input);
   }
 }

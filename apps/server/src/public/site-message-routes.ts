@@ -3,6 +3,7 @@ import * as z from "zod";
 
 import { WebRepository } from "@openengage/database";
 
+import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
 import { originAllowed, pagePatternMatches } from "./domain";
 import { safeJson } from "./http";
@@ -71,12 +72,13 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     if (!updated) {
       return context.json({ data: { accepted: false } }, 202);
     }
-    await repository.recordSiteMessageEvent({
+    const eventId = await repository.recordSiteMessageEvent({
       contactId,
       visitorId: parsed.data.visitorId,
       messageId,
       type: parsed.data.type,
     });
+    await processPendingPublicFormEvent(database, eventId, context.env.JOBS_QUEUE);
     return context.json({ data: { accepted: true } }, 202);
   });
 }

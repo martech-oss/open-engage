@@ -157,6 +157,7 @@ export async function addContactSegment(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
+  queue?: Queue,
 ): Promise<boolean> {
   const workspaceId = workspace.workspaceId;
   const added = await new ContactResourceRepository(database, workspace).addContactSegment(
@@ -171,6 +172,7 @@ export async function addContactSegment(
     type: "segment_joined",
     resourceType: "segment",
     resourceId: input.resourceId,
+    ...(queue ? { queue } : {}),
   });
   return true;
 }

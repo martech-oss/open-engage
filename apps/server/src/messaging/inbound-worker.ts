@@ -2,11 +2,10 @@ import PostalMime from "postal-mime";
 
 import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
 
-import { enrollAutomationsForEvent } from "../automations/enrollment";
+import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { RuntimeEnv } from "../env";
 import { verifySignedToken } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";
-import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
 const maximumInboundSize = 5 * 1024 * 1024;
 
@@ -89,14 +88,5 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     contactEventProperties: JSON.stringify({ inboundId }),
     receivedAt,
   });
-  await enrollAutomationsForEvent(database, {
-    id: contactEventId,
-    workspaceId: payload.workspaceId,
-    contactId: payload.contactId,
-    type: "email_replied",
-    resourceId: delivery.id,
-  });
-  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, payload.workspaceId, [
-    payload.contactId,
-  ]);
+  await processPendingPublicFormEvent(database, contactEventId, env.JOBS_QUEUE);
 }

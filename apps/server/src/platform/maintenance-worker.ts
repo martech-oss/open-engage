@@ -1,5 +1,6 @@
 import {
   createDatabase,
+  AutomationJobRecoveryRepository,
   DeadLetterRepository,
   GeneratedEmailImageRepository,
   MaintenanceRepository,
@@ -17,10 +18,20 @@ export async function persistDeadLetter(
   error = "Queue retries exhausted",
 ): Promise<void> {
   const parsed = body as { jobId?: string; deliveryId?: string };
-  const repository = new DeadLetterRepository(createDatabase(env.DB));
+  const database = createDatabase(env.DB);
+  const repository = new DeadLetterRepository(database);
   let workspaceId: string | null = null;
   if (parsed.jobId) {
     workspaceId = await repository.findJobWorkspace(parsed.jobId);
+    const leaseId = (body as { leaseId?: unknown }).leaseId;
+    if (typeof leaseId === "string") {
+      await new AutomationJobRecoveryRepository(database).failJobAndEnrollmentForLease(
+        parsed.jobId,
+        leaseId,
+        error,
+        new Date().toISOString(),
+      );
+    }
   } else if (parsed.deliveryId) {
     workspaceId = await repository.findDeliveryWorkspace(parsed.deliveryId);
   }

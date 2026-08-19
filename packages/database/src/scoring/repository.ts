@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 
 import type {
   GradingCriterion,
@@ -332,10 +332,13 @@ export class ScoringEngineRepository extends DatabaseRepository {
   public async applyScore(input: {
     workspaceId: string;
     contactId: string;
-    total: number;
-    categoryTotals: Map<string, number>;
-    tagIds: string[];
-    events: { ruleId: string; delta: number }[];
+    contactEventId: string;
+    effects: Array<{
+      ruleId: string;
+      delta: number;
+      categoryId: string | null;
+      tagId: string | null;
+    }>;
     now: string;
   }): Promise<void> {
     const orm = this.database.orm;
@@ -352,64 +355,78 @@ export class ScoringEngineRepository extends DatabaseRepository {
       .get();
     if (!activeContact) return;
     const statements = [];
-    if (input.total !== 0) {
-      statements.push(
+    for (const effect of input.effects) {
+      const notApplied = notExists(
         orm
-          .update(contacts)
-          .set({ score: sql`${contacts.score} + ${input.total}`, updatedAt: input.now })
+          .select({ id: scoreEvents.id })
+          .from(scoreEvents)
           .where(
             and(
-              eq(contacts.workspaceId, input.workspaceId),
-              eq(contacts.id, input.contactId),
-              ne(contacts.status, "archived"),
+              eq(scoreEvents.workspaceId, input.workspaceId),
+              eq(scoreEvents.contactEventId, input.contactEventId),
+              eq(scoreEvents.scoringRuleId, effect.ruleId),
             ),
           ),
       );
-    }
-    for (const event of input.events) {
-      statements.push(
-        orm.insert(scoreEvents).values({
-          id: uuidv7(),
-          workspaceId: input.workspaceId,
-          contactId: input.contactId,
-          delta: event.delta,
-          reason: `rule:${event.ruleId}`,
-          createdAt: input.now,
-        }),
-      );
-    }
-    for (const [categoryId, delta] of input.categoryTotals) {
+      if (effect.delta !== 0) {
+        statements.push(
+          orm
+            .update(contacts)
+            .set({ score: sql`${contacts.score} + ${effect.delta}`, updatedAt: input.now })
+            .where(
+              and(
+                eq(contacts.workspaceId, input.workspaceId),
+                eq(contacts.id, input.contactId),
+                ne(contacts.status, "archived"),
+                notApplied,
+              ),
+            ),
+        );
+      }
+      if (effect.categoryId && effect.delta !== 0) {
+        statements.push(
+          orm
+            .insert(contactCategoryScores)
+            .select(
+              sql`SELECT ${input.workspaceId}, ${input.contactId}, ${effect.categoryId},
+                         ${effect.delta}, ${input.now}
+                  WHERE ${notApplied}`,
+            )
+            .onConflictDoUpdate({
+              target: [
+                contactCategoryScores.workspaceId,
+                contactCategoryScores.contactId,
+                contactCategoryScores.categoryId,
+              ],
+              set: {
+                score: sql`${contactCategoryScores.score} + ${effect.delta}`,
+                updatedAt: input.now,
+              },
+            }),
+        );
+      }
+      if (effect.tagId) {
+        statements.push(
+          orm
+            .insert(contactTags)
+            .select(
+              sql`SELECT ${input.workspaceId}, ${input.contactId}, ${effect.tagId}, ${input.now}
+                  WHERE ${notApplied}`,
+            )
+            .onConflictDoNothing(),
+        );
+      }
       statements.push(
         orm
-          .insert(contactCategoryScores)
+          .insert(scoreEvents)
           .values({
+            id: uuidv7(),
             workspaceId: input.workspaceId,
             contactId: input.contactId,
-            categoryId,
-            score: delta,
-            updatedAt: input.now,
-          })
-          .onConflictDoUpdate({
-            target: [
-              contactCategoryScores.workspaceId,
-              contactCategoryScores.contactId,
-              contactCategoryScores.categoryId,
-            ],
-            set: {
-              score: sql`${contactCategoryScores.score} + ${delta}`,
-              updatedAt: input.now,
-            },
-          }),
-      );
-    }
-    for (const tagId of input.tagIds) {
-      statements.push(
-        orm
-          .insert(contactTags)
-          .values({
-            workspaceId: input.workspaceId,
-            contactId: input.contactId,
-            tagId,
+            delta: effect.delta,
+            reason: `rule:${effect.ruleId}`,
+            contactEventId: input.contactEventId,
+            scoringRuleId: effect.ruleId,
             createdAt: input.now,
           })
           .onConflictDoNothing(),
