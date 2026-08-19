@@ -161,7 +161,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         context.env.TURNSTILE_SECRET ?? "",
         primitiveString(body["cf-turnstile-response"]) || primitiveString(body["turnstileToken"]),
         context.req.header("cf-connecting-ip"),
-        idempotencyKey,
+        { workspaceId: form.workspaceId, formId: form.id, publicKey: idempotencyKey },
       ))
     ) {
       return apiError(context, 422, "turnstile_failed", "Turnstile検証に失敗しました");

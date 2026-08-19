@@ -80,6 +80,74 @@ async function seedTurnstileForm(): Promise<{
 }
 
 describe("public form Turnstile", () => {
+  it("catches reusing a provider UUID when a fresh Turnstile token changes the verification request", async () => {
+    const form = await seedTurnstileForm();
+    const runtime = bindings({
+      TURNSTILE_SITE_KEY: "site-test",
+      TURNSTILE_SECRET: "secret-test",
+    });
+    const verificationKeys: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = init?.body;
+      if (!(body instanceof FormData)) throw new Error("Siteverify must receive FormData");
+      const verificationKey = body.get("idempotency_key");
+      if (typeof verificationKey !== "string") throw new Error("Siteverify key is missing");
+      verificationKeys.push(verificationKey);
+      return Response.json({ success: false });
+    });
+    const submit = (turnstileToken: string) =>
+      appCall(form.path, runtime, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "verification-scope@example.com",
+          "cf-turnstile-response": turnstileToken,
+          idempotencyKey: "verification-scope-key",
+        }),
+      });
+
+    expect((await submit("token-a")).status).toBe(422);
+    expect((await submit("token-a")).status).toBe(422);
+    expect((await submit("token-b")).status).toBe(422);
+
+    expect(verificationKeys[0]).toBe(verificationKeys[1]);
+    expect(verificationKeys[2]).not.toBe(verificationKeys[0]);
+  });
+
+  it("catches reusing a provider UUID for the same public key and token in another form workspace", async () => {
+    const firstForm = await seedTurnstileForm();
+    const secondForm = await seedTurnstileForm();
+    const runtime = bindings({
+      TURNSTILE_SITE_KEY: "site-test",
+      TURNSTILE_SECRET: "secret-test",
+    });
+    const verificationKeys: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = init?.body;
+      if (!(body instanceof FormData)) throw new Error("Siteverify must receive FormData");
+      const verificationKey = body.get("idempotency_key");
+      if (typeof verificationKey !== "string") throw new Error("Siteverify key is missing");
+      verificationKeys.push(verificationKey);
+      return Response.json({ success: true });
+    });
+    const submit = (path: string) =>
+      appCall(path, runtime, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "workspace-scope@example.com",
+          "cf-turnstile-response": "shared-token",
+          idempotencyKey: "shared-public-key",
+        }),
+      });
+
+    expect((await submit(firstForm.path)).status).toBe(202);
+    expect((await submit(secondForm.path)).status).toBe(202);
+
+    expect(verificationKeys).toHaveLength(2);
+    expect(verificationKeys[1]).not.toBe(verificationKeys[0]);
+  });
+
   it("catches forwarding a non-UUID public replay key directly to Siteverify", async () => {
     const form = await seedTurnstileForm();
     const runtime = bindings({
@@ -120,7 +188,7 @@ describe("public form Turnstile", () => {
     });
     expect(replay.status).toBe(202);
     expect(await replay.json()).toEqual({ data: { accepted: true, duplicate: true } });
-    expect(verificationKeys).toEqual(["6471d2fb-f0c0-5b59-96aa-2a25d443e086"]);
+    expect(verificationKeys).toHaveLength(1);
     expect(verificationKeys[0]).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
