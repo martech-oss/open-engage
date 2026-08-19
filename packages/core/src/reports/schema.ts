@@ -20,7 +20,14 @@ export const dashboardSchema = z.object({
 });
 export type Dashboard = z.infer<typeof dashboardSchema>;
 
-export const reportCategorySchema = z.enum(["contacts", "automations", "emails", "deals", "site"]);
+export const reportCategorySchema = z.enum([
+  "contacts",
+  "automations",
+  "emails",
+  "deals",
+  "site",
+  "campaigns",
+]);
 export type ReportCategory = z.infer<typeof reportCategorySchema>;
 
 export const reportDateRangeSchema = z
@@ -246,3 +253,38 @@ export const siteReportSchema = z.object({
   notes: z.object({ messageMetrics: z.string() }),
 });
 export type SiteReport = z.infer<typeof siteReportSchema>;
+
+/**
+ * Campaign attribution. `influencedValue` credits every project that touched a
+ * won deal, so it double counts across rows on purpose; `firstTouchValue` and
+ * `lastTouchValue` each split the same revenue exactly once.
+ */
+export const campaignsReportSchema = z.object({
+  category: z.literal("campaigns"),
+  range: reportRangeOutputSchema,
+  currency: z.string(),
+  summary: z.object({
+    campaigns: int,
+    activeCampaigns: int,
+    touches: int,
+    contacts: int,
+    influencedDeals: int,
+    firstTouchValue: int,
+    lastTouchValue: int,
+  }),
+  campaigns: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      color: z.string(),
+      touches: int,
+      contacts: int,
+      influencedDeals: int,
+      influencedValue: int,
+      firstTouchValue: int,
+      lastTouchValue: int,
+      touchesPerContact: rate,
+    }),
+  ),
+});
+export type CampaignsReport = z.infer<typeof campaignsReportSchema>;

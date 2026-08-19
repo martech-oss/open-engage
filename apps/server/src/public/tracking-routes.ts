@@ -5,16 +5,10 @@ import { WebRepository } from "@openengage/database";
 
 import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
-import { verifySignedToken } from "../platform/crypto";
 import { originAllowed } from "./domain";
 import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";
 import { siteTrackingScript } from "./templates";
-
-const transparentGif = Uint8Array.from([
-  71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 255, 255, 255, 33, 249, 4, 1, 0, 0, 0, 0,
-  44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0, 59,
-]);
 
 export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/api/public/site-tracking/:workspaceSlug/script.js", async (context) => {
@@ -92,31 +86,5 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
       },
       202,
     );
-  });
-
-  publicApp.get("/t/:token", async (context) => {
-    const payload = await verifySignedToken(
-      context.env.TRACKING_SIGNING_SECRET,
-      context.req.param("token"),
-      "tracking",
-    );
-    if (payload) {
-      context.executionCtx.waitUntil(
-        recordContactEvent(context.get("database"), {
-          workspaceId: payload.workspaceId,
-          contactId: payload.contactId ?? null,
-          type: "email_opened",
-          resourceType: "delivery",
-          resourceId: payload.resourceId,
-          queue: context.env.JOBS_QUEUE,
-        }).then(() => undefined),
-      );
-    }
-    return new Response(transparentGif, {
-      headers: {
-        "Content-Type": "image/gif",
-        "Cache-Control": "no-store, private",
-      },
-    });
   });
 }

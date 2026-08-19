@@ -23,6 +23,7 @@ import { Route as AppEmailsRouteImport } from './routes/_app.emails'
 import { Route as AppFormsRouteImport } from './routes/_app.forms'
 import { Route as AppListsRouteImport } from './routes/_app.lists'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
+import { Route as AppScoringRouteImport } from './routes/_app.scoring'
 import { Route as AppSegmentsRouteImport } from './routes/_app.segments'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppTagsRouteImport } from './routes/_app.tags'
@@ -38,9 +39,13 @@ import { Route as AppDealsIdRouteImport } from './routes/_app.deals.$id'
 import { Route as AppEmailsIndexRouteImport } from './routes/_app.emails.index'
 import { Route as AppEmailsArchiveRouteImport } from './routes/_app.emails.archive'
 import { Route as AppEmailsTemplatesRouteImport } from './routes/_app.emails.templates'
+import { Route as AppEmailsTrackingRouteImport } from './routes/_app.emails.tracking'
 import { Route as AppEmailsVariablesRouteImport } from './routes/_app.emails.variables'
 import { Route as AppListsIndexRouteImport } from './routes/_app.lists.index'
 import { Route as AppListsIdRouteImport } from './routes/_app.lists.$id'
+import { Route as AppScoringIndexRouteImport } from './routes/_app.scoring.index'
+import { Route as AppScoringGradingRouteImport } from './routes/_app.scoring.grading'
+import { Route as AppScoringRulesRouteImport } from './routes/_app.scoring.rules'
 import { Route as AppSegmentsIndexRouteImport } from './routes/_app.segments.index'
 import { Route as AppSegmentsIdRouteImport } from './routes/_app.segments.$id'
 import { Route as AppWebsiteIndexRouteImport } from './routes/_app.website.index'
@@ -48,6 +53,7 @@ import { Route as AppWebsiteAssetsRouteImport } from './routes/_app.website.asse
 import { Route as AppWebsiteFormsRouteImport } from './routes/_app.website.forms'
 import { Route as AppWebsiteMessagesRouteImport } from './routes/_app.website.messages'
 import { Route as AppWebsitePagesRouteImport } from './routes/_app.website.pages'
+import { Route as AppWebsiteRedirectsRouteImport } from './routes/_app.website.redirects'
 import { Route as AppWebsiteTrackingRouteImport } from './routes/_app.website.tracking'
 import { Route as AppAutomationsBriefsIndexRouteImport } from './routes/_app.automations.briefs.index'
 import { Route as AppAutomationsBriefsIdRouteImport } from './routes/_app.automations.briefs.$id'
@@ -119,6 +125,11 @@ const AppListsRoute = AppListsRouteImport.update({
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppScoringRoute = AppScoringRouteImport.update({
+  id: '/scoring',
+  path: '/scoring',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSegmentsRoute = AppSegmentsRouteImport.update({
@@ -196,6 +207,11 @@ const AppEmailsTemplatesRoute = AppEmailsTemplatesRouteImport.update({
   path: '/templates',
   getParentRoute: () => AppEmailsRoute,
 } as any)
+const AppEmailsTrackingRoute = AppEmailsTrackingRouteImport.update({
+  id: '/tracking',
+  path: '/tracking',
+  getParentRoute: () => AppEmailsRoute,
+} as any)
 const AppEmailsVariablesRoute = AppEmailsVariablesRouteImport.update({
   id: '/variables',
   path: '/variables',
@@ -210,6 +226,21 @@ const AppListsIdRoute = AppListsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AppListsRoute,
+} as any)
+const AppScoringIndexRoute = AppScoringIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppScoringRoute,
+} as any)
+const AppScoringGradingRoute = AppScoringGradingRouteImport.update({
+  id: '/grading',
+  path: '/grading',
+  getParentRoute: () => AppScoringRoute,
+} as any)
+const AppScoringRulesRoute = AppScoringRulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
+  getParentRoute: () => AppScoringRoute,
 } as any)
 const AppSegmentsIndexRoute = AppSegmentsIndexRouteImport.update({
   id: '/',
@@ -246,6 +277,11 @@ const AppWebsitePagesRoute = AppWebsitePagesRouteImport.update({
   path: '/pages',
   getParentRoute: () => AppWebsiteRoute,
 } as any)
+const AppWebsiteRedirectsRoute = AppWebsiteRedirectsRouteImport.update({
+  id: '/redirects',
+  path: '/redirects',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
 const AppWebsiteTrackingRoute = AppWebsiteTrackingRouteImport.update({
   id: '/tracking',
   path: '/tracking',
@@ -277,6 +313,7 @@ export interface FileRoutesByFullPath {
   '/forms': typeof AppFormsRoute
   '/lists': typeof AppListsRouteWithChildren
   '/reports': typeof AppReportsRoute
+  '/scoring': typeof AppScoringRouteWithChildren
   '/segments': typeof AppSegmentsRouteWithChildren
   '/settings': typeof AppSettingsRoute
   '/tags': typeof AppTagsRoute
@@ -287,13 +324,17 @@ export interface FileRoutesByFullPath {
   '/deals/$id': typeof AppDealsIdRoute
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
+  '/emails/tracking': typeof AppEmailsTrackingRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
   '/lists/$id': typeof AppListsIdRoute
+  '/scoring/grading': typeof AppScoringGradingRoute
+  '/scoring/rules': typeof AppScoringRulesRoute
   '/segments/$id': typeof AppSegmentsIdRoute
   '/website/assets': typeof AppWebsiteAssetsRoute
   '/website/forms': typeof AppWebsiteFormsRoute
   '/website/messages': typeof AppWebsiteMessagesRoute
   '/website/pages': typeof AppWebsitePagesRoute
+  '/website/redirects': typeof AppWebsiteRedirectsRoute
   '/website/tracking': typeof AppWebsiteTrackingRoute
   '/automations/': typeof AppAutomationsIndexRoute
   '/companies/': typeof AppCompaniesIndexRoute
@@ -301,6 +342,7 @@ export interface FileRoutesByFullPath {
   '/deals/': typeof AppDealsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
   '/lists/': typeof AppListsIndexRoute
+  '/scoring/': typeof AppScoringIndexRoute
   '/segments/': typeof AppSegmentsIndexRoute
   '/website/': typeof AppWebsiteIndexRoute
   '/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
@@ -323,13 +365,17 @@ export interface FileRoutesByTo {
   '/deals/$id': typeof AppDealsIdRoute
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
+  '/emails/tracking': typeof AppEmailsTrackingRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
   '/lists/$id': typeof AppListsIdRoute
+  '/scoring/grading': typeof AppScoringGradingRoute
+  '/scoring/rules': typeof AppScoringRulesRoute
   '/segments/$id': typeof AppSegmentsIdRoute
   '/website/assets': typeof AppWebsiteAssetsRoute
   '/website/forms': typeof AppWebsiteFormsRoute
   '/website/messages': typeof AppWebsiteMessagesRoute
   '/website/pages': typeof AppWebsitePagesRoute
+  '/website/redirects': typeof AppWebsiteRedirectsRoute
   '/website/tracking': typeof AppWebsiteTrackingRoute
   '/automations': typeof AppAutomationsIndexRoute
   '/companies': typeof AppCompaniesIndexRoute
@@ -337,6 +383,7 @@ export interface FileRoutesByTo {
   '/deals': typeof AppDealsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
   '/lists': typeof AppListsIndexRoute
+  '/scoring': typeof AppScoringIndexRoute
   '/segments': typeof AppSegmentsIndexRoute
   '/website': typeof AppWebsiteIndexRoute
   '/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
@@ -358,6 +405,7 @@ export interface FileRoutesById {
   '/_app/forms': typeof AppFormsRoute
   '/_app/lists': typeof AppListsRouteWithChildren
   '/_app/reports': typeof AppReportsRoute
+  '/_app/scoring': typeof AppScoringRouteWithChildren
   '/_app/segments': typeof AppSegmentsRouteWithChildren
   '/_app/settings': typeof AppSettingsRoute
   '/_app/tags': typeof AppTagsRoute
@@ -368,13 +416,17 @@ export interface FileRoutesById {
   '/_app/deals/$id': typeof AppDealsIdRoute
   '/_app/emails/archive': typeof AppEmailsArchiveRoute
   '/_app/emails/templates': typeof AppEmailsTemplatesRoute
+  '/_app/emails/tracking': typeof AppEmailsTrackingRoute
   '/_app/emails/variables': typeof AppEmailsVariablesRoute
   '/_app/lists/$id': typeof AppListsIdRoute
+  '/_app/scoring/grading': typeof AppScoringGradingRoute
+  '/_app/scoring/rules': typeof AppScoringRulesRoute
   '/_app/segments/$id': typeof AppSegmentsIdRoute
   '/_app/website/assets': typeof AppWebsiteAssetsRoute
   '/_app/website/forms': typeof AppWebsiteFormsRoute
   '/_app/website/messages': typeof AppWebsiteMessagesRoute
   '/_app/website/pages': typeof AppWebsitePagesRoute
+  '/_app/website/redirects': typeof AppWebsiteRedirectsRoute
   '/_app/website/tracking': typeof AppWebsiteTrackingRoute
   '/_app/automations/': typeof AppAutomationsIndexRoute
   '/_app/companies/': typeof AppCompaniesIndexRoute
@@ -382,6 +434,7 @@ export interface FileRoutesById {
   '/_app/deals/': typeof AppDealsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
   '/_app/lists/': typeof AppListsIndexRoute
+  '/_app/scoring/': typeof AppScoringIndexRoute
   '/_app/segments/': typeof AppSegmentsIndexRoute
   '/_app/website/': typeof AppWebsiteIndexRoute
   '/_app/automations/briefs/$id': typeof AppAutomationsBriefsIdRoute
@@ -403,6 +456,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/lists'
     | '/reports'
+    | '/scoring'
     | '/segments'
     | '/settings'
     | '/tags'
@@ -413,13 +467,17 @@ export interface FileRouteTypes {
     | '/deals/$id'
     | '/emails/archive'
     | '/emails/templates'
+    | '/emails/tracking'
     | '/emails/variables'
     | '/lists/$id'
+    | '/scoring/grading'
+    | '/scoring/rules'
     | '/segments/$id'
     | '/website/assets'
     | '/website/forms'
     | '/website/messages'
     | '/website/pages'
+    | '/website/redirects'
     | '/website/tracking'
     | '/automations/'
     | '/companies/'
@@ -427,6 +485,7 @@ export interface FileRouteTypes {
     | '/deals/'
     | '/emails/'
     | '/lists/'
+    | '/scoring/'
     | '/segments/'
     | '/website/'
     | '/automations/briefs/$id'
@@ -449,13 +508,17 @@ export interface FileRouteTypes {
     | '/deals/$id'
     | '/emails/archive'
     | '/emails/templates'
+    | '/emails/tracking'
     | '/emails/variables'
     | '/lists/$id'
+    | '/scoring/grading'
+    | '/scoring/rules'
     | '/segments/$id'
     | '/website/assets'
     | '/website/forms'
     | '/website/messages'
     | '/website/pages'
+    | '/website/redirects'
     | '/website/tracking'
     | '/automations'
     | '/companies'
@@ -463,6 +526,7 @@ export interface FileRouteTypes {
     | '/deals'
     | '/emails'
     | '/lists'
+    | '/scoring'
     | '/segments'
     | '/website'
     | '/automations/briefs/$id'
@@ -483,6 +547,7 @@ export interface FileRouteTypes {
     | '/_app/forms'
     | '/_app/lists'
     | '/_app/reports'
+    | '/_app/scoring'
     | '/_app/segments'
     | '/_app/settings'
     | '/_app/tags'
@@ -493,13 +558,17 @@ export interface FileRouteTypes {
     | '/_app/deals/$id'
     | '/_app/emails/archive'
     | '/_app/emails/templates'
+    | '/_app/emails/tracking'
     | '/_app/emails/variables'
     | '/_app/lists/$id'
+    | '/_app/scoring/grading'
+    | '/_app/scoring/rules'
     | '/_app/segments/$id'
     | '/_app/website/assets'
     | '/_app/website/forms'
     | '/_app/website/messages'
     | '/_app/website/pages'
+    | '/_app/website/redirects'
     | '/_app/website/tracking'
     | '/_app/automations/'
     | '/_app/companies/'
@@ -507,6 +576,7 @@ export interface FileRouteTypes {
     | '/_app/deals/'
     | '/_app/emails/'
     | '/_app/lists/'
+    | '/_app/scoring/'
     | '/_app/segments/'
     | '/_app/website/'
     | '/_app/automations/briefs/$id'
@@ -621,6 +691,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/scoring': {
+      id: '/_app/scoring'
+      path: '/scoring'
+      fullPath: '/scoring'
+      preLoaderRoute: typeof AppScoringRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/segments': {
       id: '/_app/segments'
       path: '/segments'
@@ -726,6 +803,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEmailsTemplatesRouteImport
       parentRoute: typeof AppEmailsRoute
     }
+    '/_app/emails/tracking': {
+      id: '/_app/emails/tracking'
+      path: '/tracking'
+      fullPath: '/emails/tracking'
+      preLoaderRoute: typeof AppEmailsTrackingRouteImport
+      parentRoute: typeof AppEmailsRoute
+    }
     '/_app/emails/variables': {
       id: '/_app/emails/variables'
       path: '/variables'
@@ -746,6 +830,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/lists/$id'
       preLoaderRoute: typeof AppListsIdRouteImport
       parentRoute: typeof AppListsRoute
+    }
+    '/_app/scoring/': {
+      id: '/_app/scoring/'
+      path: '/'
+      fullPath: '/scoring/'
+      preLoaderRoute: typeof AppScoringIndexRouteImport
+      parentRoute: typeof AppScoringRoute
+    }
+    '/_app/scoring/grading': {
+      id: '/_app/scoring/grading'
+      path: '/grading'
+      fullPath: '/scoring/grading'
+      preLoaderRoute: typeof AppScoringGradingRouteImport
+      parentRoute: typeof AppScoringRoute
+    }
+    '/_app/scoring/rules': {
+      id: '/_app/scoring/rules'
+      path: '/rules'
+      fullPath: '/scoring/rules'
+      preLoaderRoute: typeof AppScoringRulesRouteImport
+      parentRoute: typeof AppScoringRoute
     }
     '/_app/segments/': {
       id: '/_app/segments/'
@@ -794,6 +899,13 @@ declare module '@tanstack/react-router' {
       path: '/pages'
       fullPath: '/website/pages'
       preLoaderRoute: typeof AppWebsitePagesRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
+    '/_app/website/redirects': {
+      id: '/_app/website/redirects'
+      path: '/redirects'
+      fullPath: '/website/redirects'
+      preLoaderRoute: typeof AppWebsiteRedirectsRouteImport
       parentRoute: typeof AppWebsiteRoute
     }
     '/_app/website/tracking': {
@@ -863,6 +975,7 @@ const AppDealsRouteWithChildren = AppDealsRoute._addFileChildren(
 interface AppEmailsRouteChildren {
   AppEmailsArchiveRoute: typeof AppEmailsArchiveRoute
   AppEmailsTemplatesRoute: typeof AppEmailsTemplatesRoute
+  AppEmailsTrackingRoute: typeof AppEmailsTrackingRoute
   AppEmailsVariablesRoute: typeof AppEmailsVariablesRoute
   AppEmailsIndexRoute: typeof AppEmailsIndexRoute
 }
@@ -870,6 +983,7 @@ interface AppEmailsRouteChildren {
 const AppEmailsRouteChildren: AppEmailsRouteChildren = {
   AppEmailsArchiveRoute: AppEmailsArchiveRoute,
   AppEmailsTemplatesRoute: AppEmailsTemplatesRoute,
+  AppEmailsTrackingRoute: AppEmailsTrackingRoute,
   AppEmailsVariablesRoute: AppEmailsVariablesRoute,
   AppEmailsIndexRoute: AppEmailsIndexRoute,
 }
@@ -892,6 +1006,22 @@ const AppListsRouteWithChildren = AppListsRoute._addFileChildren(
   AppListsRouteChildren,
 )
 
+interface AppScoringRouteChildren {
+  AppScoringGradingRoute: typeof AppScoringGradingRoute
+  AppScoringRulesRoute: typeof AppScoringRulesRoute
+  AppScoringIndexRoute: typeof AppScoringIndexRoute
+}
+
+const AppScoringRouteChildren: AppScoringRouteChildren = {
+  AppScoringGradingRoute: AppScoringGradingRoute,
+  AppScoringRulesRoute: AppScoringRulesRoute,
+  AppScoringIndexRoute: AppScoringIndexRoute,
+}
+
+const AppScoringRouteWithChildren = AppScoringRoute._addFileChildren(
+  AppScoringRouteChildren,
+)
+
 interface AppSegmentsRouteChildren {
   AppSegmentsIdRoute: typeof AppSegmentsIdRoute
   AppSegmentsIndexRoute: typeof AppSegmentsIndexRoute
@@ -911,6 +1041,7 @@ interface AppWebsiteRouteChildren {
   AppWebsiteFormsRoute: typeof AppWebsiteFormsRoute
   AppWebsiteMessagesRoute: typeof AppWebsiteMessagesRoute
   AppWebsitePagesRoute: typeof AppWebsitePagesRoute
+  AppWebsiteRedirectsRoute: typeof AppWebsiteRedirectsRoute
   AppWebsiteTrackingRoute: typeof AppWebsiteTrackingRoute
   AppWebsiteIndexRoute: typeof AppWebsiteIndexRoute
 }
@@ -920,6 +1051,7 @@ const AppWebsiteRouteChildren: AppWebsiteRouteChildren = {
   AppWebsiteFormsRoute: AppWebsiteFormsRoute,
   AppWebsiteMessagesRoute: AppWebsiteMessagesRoute,
   AppWebsitePagesRoute: AppWebsitePagesRoute,
+  AppWebsiteRedirectsRoute: AppWebsiteRedirectsRoute,
   AppWebsiteTrackingRoute: AppWebsiteTrackingRoute,
   AppWebsiteIndexRoute: AppWebsiteIndexRoute,
 }
@@ -938,6 +1070,7 @@ interface AppRouteChildren {
   AppFormsRoute: typeof AppFormsRoute
   AppListsRoute: typeof AppListsRouteWithChildren
   AppReportsRoute: typeof AppReportsRoute
+  AppScoringRoute: typeof AppScoringRouteWithChildren
   AppSegmentsRoute: typeof AppSegmentsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
   AppTagsRoute: typeof AppTagsRoute
@@ -959,6 +1092,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppFormsRoute: AppFormsRoute,
   AppListsRoute: AppListsRouteWithChildren,
   AppReportsRoute: AppReportsRoute,
+  AppScoringRoute: AppScoringRouteWithChildren,
   AppSegmentsRoute: AppSegmentsRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
   AppTagsRoute: AppTagsRoute,

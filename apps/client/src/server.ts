@@ -1,6 +1,6 @@
 import startHandler from "@tanstack/react-start/server-entry";
 
-const backendPrefixes = ["/a", "/api", "/f", "/p", "/t", "/u", "/preference"] as const;
+const backendPrefixes = ["/a", "/api", "/c", "/f", "/p", "/r", "/t", "/u", "/preference"] as const;
 
 export function isBackendRequest(request: Request): boolean {
   const pathname = new URL(request.url).pathname;

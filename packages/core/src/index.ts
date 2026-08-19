@@ -17,6 +17,7 @@ export * from "./messaging/index.js";
 export * from "./platform/jobs.js";
 export * from "./projects/schema.js";
 export * from "./reports/schema.js";
+export * from "./scoring/index.js";
 export * from "./segments/fields.js";
 export * from "./segments/schema.js";
 export * from "./segments/segment.js";

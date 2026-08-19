@@ -8,6 +8,7 @@ import { dealProcedures } from "../deals/router";
 import { messagingProcedures } from "../messaging/router";
 import { platformProcedures } from "../platform/router";
 import { dashboardProcedures, reportProcedures } from "../reports/router";
+import { scoringProcedures } from "../scoring/router";
 import { segmentProcedures } from "../segments/router";
 import { assetProcedures } from "../web/asset-router";
 import { projectProcedures } from "../web/project-router";
@@ -31,6 +32,7 @@ export const orpcRouter = os.router({
   projects: projectProcedures,
   reports: reportProcedures,
   segments: segmentProcedures,
+  scoring: scoringProcedures,
   website: websiteProcedures,
   workspace: workspaceProcedures,
 });

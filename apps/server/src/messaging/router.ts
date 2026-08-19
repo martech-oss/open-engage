@@ -1,4 +1,4 @@
-import { MessagingRepository } from "@openengage/database";
+import { EmailTrackingSettingsRepository, MessagingRepository } from "@openengage/database";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -202,6 +202,21 @@ export const listTopicOptionsProcedure = authed.emails.listTopicOptions.handler(
   listSubscriptionTopicOptions(context.database, context.workspace),
 );
 
+export const getTrackingSettingsProcedure = authed.emails.getTrackingSettings.handler(
+  ({ context }) =>
+    new EmailTrackingSettingsRepository(context.database, context.workspace).getSettings(),
+);
+
+export const updateTrackingSettingsProcedure = authed.emails.updateTrackingSettings.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    await new EmailTrackingSettingsRepository(context.database, context.workspace).updateSettings(
+      input,
+    );
+    return ack;
+  },
+);
+
 export const messagingProcedures = {
   listTemplates: listTemplatesProcedure,
   generateTemplate: generateTemplateProcedure,
@@ -217,4 +232,6 @@ export const messagingProcedures = {
   archiveVariable: archiveVariableProcedure,
   listSegmentOptions: listSegmentOptionsProcedure,
   listTopicOptions: listTopicOptionsProcedure,
+  getTrackingSettings: getTrackingSettingsProcedure,
+  updateTrackingSettings: updateTrackingSettingsProcedure,
 };

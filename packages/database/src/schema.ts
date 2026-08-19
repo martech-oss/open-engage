@@ -9,6 +9,7 @@ import * as messagingSchema from "./messaging/schema";
 import * as platformSchema from "./platform/schema";
 import * as relationsSchema from "./relations";
 import * as reportsSchema from "./reports/schema";
+import * as scoringSchema from "./scoring/schema";
 import * as segmentsSchema from "./segments/schema";
 import * as webSchema from "./web/schema";
 import * as workspacesSchema from "./workspaces/schema";
@@ -26,6 +27,7 @@ export * from "./web/schema";
 export * from "./workspaces/schema";
 export * from "./platform/schema";
 export * from "./reports/schema";
+export * from "./scoring/schema";
 
 /**
  * Every table in the application, keyed by export name, for `drizzle()`
@@ -46,5 +48,6 @@ export const schema = {
   ...workspacesSchema,
   ...platformSchema,
   ...reportsSchema,
+  ...scoringSchema,
   ...relationsSchema,
 };

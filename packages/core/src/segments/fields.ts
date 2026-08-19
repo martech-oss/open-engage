@@ -58,6 +58,13 @@ export const segmentFieldDefinitions = [
   { field: "external_id", valueType: "text", operators: textOperators, keyRequirement: "none" },
   { field: "stage", valueType: "text", operators: textOperators, keyRequirement: "none" },
   { field: "score", valueType: "number", operators: comparableOperators, keyRequirement: "none" },
+  {
+    // Thirds of a letter from the D baseline: `grade_points >= 3` is "C or better".
+    field: "grade_points",
+    valueType: "number",
+    operators: comparableOperators,
+    keyRequirement: "none",
+  },
   { field: "status", valueType: "text", operators: textOperators, keyRequirement: "none" },
   {
     field: "created_at",

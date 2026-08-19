@@ -102,7 +102,25 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
       title: document.title,
       referrer: document.referrer,
     });
+    stampRedirectLinks();
     if (result?.identified) await loadMessage();
+  }
+
+  // Custom Redirect URLs are shareable and carry no per-recipient token, so the
+  // only way a click made from this page can name the visitor is if we stamp
+  // the id we already hold onto the link before they follow it.
+  function stampRedirectLinks() {
+    if (!visitorId) return;
+    const origin = new URL(endpoint).origin;
+    for (const anchor of document.querySelectorAll('a[href]')) {
+      try {
+        const url = new URL(anchor.href, window.location.href);
+        if (url.origin !== origin || !url.pathname.startsWith("/r/")) continue;
+        if (url.searchParams.get("oe_v") === visitorId) continue;
+        url.searchParams.set("oe_v", visitorId);
+        anchor.href = url.toString();
+      } catch {}
+    }
   }
 
   window.openengage = {
@@ -123,47 +141,37 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
 })();`;
 }
 
+export interface PublicFormRenderOptions {
+  /** Field keys the identified visitor has already answered, for Progressive Profiling. */
+  answered?: ReadonlySet<string>;
+}
+
+interface RenderableField {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options: string[];
+  kind: "standard" | "custom";
+}
+
+const STANDARD_FIELDS = new Map<string, { label: string; type: string; required: boolean }>([
+  ["email", { label: "メールアドレス", type: "email", required: true }],
+  ["firstName", { label: "名", type: "text", required: false }],
+  ["lastName", { label: "姓", type: "text", required: false }],
+  ["phone", { label: "電話番号", type: "tel", required: false }],
+]);
+
+const INPUT_TYPES = new Set(["email", "text", "tel", "url", "number", "date"]);
+
 export function renderPublicForm(
   name: string,
   definition: Record<string, unknown>,
   actionUrl: string,
+  options: PublicFormRenderOptions = {},
 ): string {
-  const configuredFields = Array.isArray(definition["fields"])
-    ? definition["fields"].filter(isRecord)
-    : [];
-  const supported = new Map([
-    ["email", { label: "メールアドレス", type: "email", required: true }],
-    ["firstName", { label: "名", type: "text", required: false }],
-    ["lastName", { label: "姓", type: "text", required: false }],
-    ["phone", { label: "電話番号", type: "tel", required: false }],
-  ]);
-  const fields = configuredFields
-    .map((field) => {
-      const key = typeof field["key"] === "string" ? field["key"] : "";
-      const base = supported.get(key);
-      return base
-        ? {
-            key,
-            ...base,
-            required: key === "email" || field["required"] === true,
-          }
-        : null;
-    })
-    .filter((field): field is NonNullable<typeof field> => field !== null);
-  if (!fields.some((field) => field.key === "email")) {
-    fields.unshift({
-      key: "email",
-      label: "メールアドレス",
-      type: "email",
-      required: true,
-    });
-  }
-  const controls = fields
-    .map(
-      (field) =>
-        `<label>${escapeHtml(field.label)}<input name="${escapeHtml(field.key)}" type="${field.type}"${field.required ? " required" : ""}></label>`,
-    )
-    .join("");
+  const fields = selectFields(definition, options.answered ?? new Set());
+  const controls = fields.map(renderControl).join("");
   const endpoint = escapeHtml(actionUrl.split("?")[0] ?? actionUrl);
   return `<!doctype html>
 <html lang="ja">
@@ -176,7 +184,8 @@ export function renderPublicForm(
     *{box-sizing:border-box}body{margin:0;padding:24px;background:#fff}
     form{display:grid;gap:16px;max-width:520px;margin:auto}
     h1{margin:0;font-size:24px}label{display:grid;gap:6px;font-size:14px;font-weight:600}
-    input{width:100%;height:42px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font:inherit}
+    input,select{width:100%;height:42px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font:inherit}
+    textarea{width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px 12px;font:inherit}
     button{height:42px;border:0;border-radius:8px;background:#111827;color:#fff;font:inherit;font-weight:700;cursor:pointer}
     p{margin:0;color:#4b5563;font-size:14px}.hidden{position:absolute;left:-9999px}
   </style>
@@ -220,11 +229,112 @@ export function renderPublicForm(
 </html>`;
 }
 
-export function formEmbedScript(formUrl: string, formName: string, style: string): string {
+/**
+ * Picks the fields this visit should show. Non-progressive fields always
+ * render; progressive ones drop out once answered, and only a few of the
+ * remaining ones are asked at a time so the form stays short.
+ */
+function selectFields(
+  definition: Record<string, unknown>,
+  answered: ReadonlySet<string>,
+): RenderableField[] {
+  const configured = Array.isArray(definition["fields"])
+    ? definition["fields"].filter(isRecord)
+    : [];
+  const maxProgressive = Math.max(1, Math.trunc(Number(definition["progressiveMaxFields"]) || 3));
+
+  const always: RenderableField[] = [];
+  const progressive: RenderableField[] = [];
+  for (const raw of configured) {
+    const field = toRenderableField(raw);
+    if (!field) continue;
+    if (raw["progressive"] === true) {
+      // Email is the identity key, so it is asked every time regardless.
+      if (field.key !== "email" && answered.has(field.key)) continue;
+      progressive.push(field);
+      continue;
+    }
+    always.push(field);
+  }
+
+  const fields = [...always, ...progressive.slice(0, maxProgressive)];
+  if (!fields.some((field) => field.key === "email")) {
+    fields.unshift({
+      key: "email",
+      label: "メールアドレス",
+      type: "email",
+      required: true,
+      options: [],
+      kind: "standard",
+    });
+  }
+  return fields;
+}
+
+function toRenderableField(raw: Record<string, unknown>): RenderableField | null {
+  const key = typeof raw["key"] === "string" ? raw["key"].trim() : "";
+  if (!key || !/^[A-Za-z0-9_-]+$/.test(key)) return null;
+  const kind = raw["kind"] === "custom" ? "custom" : "standard";
+  const label =
+    typeof raw["label"] === "string" && raw["label"].trim() ? raw["label"].trim() : null;
+
+  if (kind === "standard") {
+    const base = STANDARD_FIELDS.get(key);
+    if (!base) return null;
+    return {
+      key,
+      label: label ?? base.label,
+      type: base.type,
+      required: key === "email" || raw["required"] === true,
+      options: [],
+      kind,
+    };
+  }
+
+  const type = typeof raw["type"] === "string" ? raw["type"] : "text";
+  return {
+    key,
+    label: label ?? key,
+    type: INPUT_TYPES.has(type) || type === "textarea" || type === "select" ? type : "text",
+    required: raw["required"] === true,
+    options: Array.isArray(raw["options"])
+      ? raw["options"].filter((option): option is string => typeof option === "string")
+      : [],
+    kind,
+  };
+}
+
+function renderControl(field: RenderableField): string {
+  const name = escapeHtml(field.kind === "custom" ? `custom:${field.key}` : field.key);
+  const required = field.required ? " required" : "";
+  if (field.type === "textarea") {
+    return `<label>${escapeHtml(field.label)}<textarea name="${name}" rows="4"${required}></textarea></label>`;
+  }
+  if (field.type === "select") {
+    const options = [
+      `<option value="">選択してください</option>`,
+      ...field.options.map(
+        (option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`,
+      ),
+    ].join("");
+    return `<label>${escapeHtml(field.label)}<select name="${name}"${required}>${options}</select></label>`;
+  }
+  return `<label>${escapeHtml(field.label)}<input name="${name}" type="${escapeHtml(field.type)}"${required}></label>`;
+}
+
+export function formEmbedScript(
+  formUrl: string,
+  formName: string,
+  style: string,
+  workspaceSlug: string,
+): string {
   return `(() => {
   const current = document.currentScript;
   const frame = document.createElement("iframe");
-  frame.src = ${JSON.stringify(formUrl)};
+  // Same localStorage key the tracking beacon writes. Passing it through lets
+  // the form drop questions this visitor has already answered.
+  const visitorId = localStorage.getItem("openengage_visitor_" + ${JSON.stringify(workspaceSlug)});
+  frame.src = ${JSON.stringify(formUrl)} + (visitorId ? "?oe_v=" + encodeURIComponent(visitorId) : "");
   frame.title = ${JSON.stringify(formName)};
   frame.loading = "lazy";
   frame.style.cssText = "border:0;background:#fff;width:100%";

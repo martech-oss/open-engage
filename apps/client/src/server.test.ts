@@ -6,7 +6,9 @@ import { isBackendRequest } from "./server";
  * This function decides whether a request reaches the API Worker or the
  * TanStack Start app. A prefix that is too greedy silently swallows a UI route;
  * one that is missing breaks a public endpoint on live installs. The `/a`
- * prefix (public assets) is the sharp edge - `/automations` starts with it.
+ * (public assets) and `/c` (email click redirect) prefixes are the sharp
+ * edges - `/automations`, `/companies`, `/contacts` and `/reports` all start
+ * with one.
  */
 describe("isBackendRequest", () => {
   const backend = [
@@ -17,6 +19,8 @@ describe("isBackendRequest", () => {
     "/api/assets/019f.../raw",
     "/f/acme/contact",
     "/p/acme/spring",
+    "/c/token",
+    "/r/acme/spring-ad",
     "/t/token",
     "/u/token",
     "/preference/token",
@@ -28,6 +32,10 @@ describe("isBackendRequest", () => {
     "/analytics",
     "/apidocs",
     "/assets",
+    "/companies",
+    "/companies/019f...",
+    "/contacts",
+    "/reports",
     "/website/assets",
     "/dashboard",
     "/preferences",

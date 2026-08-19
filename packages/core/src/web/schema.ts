@@ -5,17 +5,53 @@ import { contentDocumentSchema } from "./content";
 export const publishStatusSchema = z.enum(["draft", "published"]);
 export type PublishStatus = z.infer<typeof publishStatusSchema>;
 
+export const STANDARD_FORM_FIELD_KEYS = ["email", "firstName", "lastName", "phone"] as const;
+export const standardFormFieldKeySchema = z.enum(STANDARD_FORM_FIELD_KEYS);
+export type StandardFormFieldKey = z.infer<typeof standardFormFieldKeySchema>;
+
+export const FORM_FIELD_INPUT_TYPES = [
+  "email",
+  "text",
+  "tel",
+  "url",
+  "number",
+  "date",
+  "textarea",
+  "select",
+] as const;
+export const formFieldInputTypeSchema = z.enum(FORM_FIELD_INPUT_TYPES);
+export type FormFieldInputType = z.infer<typeof formFieldInputTypeSchema>;
+
+/**
+ * `standard` keys map onto contact columns; `custom` keys land in
+ * `contacts.custom_fields` under the same key. Definitions written before
+ * custom fields existed omit `kind`, so it defaults to `standard`.
+ */
+export const formFieldSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .min(1)
+    .max(191)
+    .regex(/^[A-Za-z0-9_-]+$/, "英数字、アンダースコア、ハイフンで入力してください"),
+  kind: z.enum(["standard", "custom"]).default("standard"),
+  label: z.string().trim().max(191).optional(),
+  type: formFieldInputTypeSchema.default("text"),
+  required: z.boolean().default(false),
+  options: z.array(z.string().trim().min(1).max(191)).max(50).optional(),
+  /**
+   * Progressive Profiling: once the identified visitor already has a value for
+   * this field, the form drops it and shows the next unanswered one instead.
+   */
+  progressive: z.boolean().default(false),
+});
+export type FormField = z.infer<typeof formFieldSchema>;
+
 export const signupFormDefinitionSchema = z.object({
   style: z.enum(["inline", "floating-bar", "floating-box", "modal"]).optional(),
-  fields: z
-    .array(
-      z.object({
-        key: z.enum(["email", "firstName", "lastName", "phone"]),
-        type: z.enum(["email", "text", "tel"]),
-        required: z.boolean(),
-      }),
-    )
-    .optional(),
+  fields: z.array(formFieldSchema).max(50).optional(),
+  /** Cap on how many progressive fields one visit may ask for. */
+  progressiveMaxFields: z.number().int().min(1).max(10).default(3),
 });
 export type SignupFormDefinition = z.infer<typeof signupFormDefinitionSchema>;
 
@@ -129,3 +165,28 @@ export const siteTrackingWriteSchema = z.object({
   allowedDomains: z.array(z.string()),
 });
 export type SiteTrackingWrite = z.infer<typeof siteTrackingWriteSchema>;
+
+export const customRedirectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  destinationUrl: z.string(),
+  clickCount: z.number().int().nonnegative(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CustomRedirect = z.infer<typeof customRedirectSchema>;
+
+export const customRedirectWriteSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  slug: slugSchema,
+  /** Only http(s): the public route 302s here, so anything else is an open redirect. */
+  destinationUrl: z.url().refine(
+    (value) => {
+      const protocol = URL.parse(value)?.protocol;
+      return protocol === "http:" || protocol === "https:";
+    },
+    { message: "http(s) のURLを入力してください" },
+  ),
+});
+export type CustomRedirectWrite = z.infer<typeof customRedirectWriteSchema>;

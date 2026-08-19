@@ -105,3 +105,18 @@ export const channelMessageSchema = z.discriminatedUnion("kind", [
   webhookChannelMessageSchema,
 ]);
 export type ChannelMessage = z.infer<typeof channelMessageSchema>;
+
+/**
+ * Open/click measurement toggles. Both default to false so a fresh workspace
+ * never rewrites links or embeds a pixel until someone opts in.
+ */
+export const emailTrackingSettingsWriteSchema = z.object({
+  openTrackingEnabled: z.boolean(),
+  clickTrackingEnabled: z.boolean(),
+});
+export type EmailTrackingSettingsWrite = z.infer<typeof emailTrackingSettingsWriteSchema>;
+
+export const emailTrackingSettingsSchema = emailTrackingSettingsWriteSchema.extend({
+  updatedAt: z.string().nullable(),
+});
+export type EmailTrackingSettings = z.infer<typeof emailTrackingSettingsSchema>;

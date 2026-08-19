@@ -29,6 +29,7 @@ export * from "./web/project-brief-query-repository";
 export * from "./web/project-resource-link-repository";
 export * from "./web/project-resource-guard";
 export * from "./web/project-repository";
+export * from "./scoring/repository";
 export * from "./web/repository";
 export * from "./workspaces/repository";
 export * from "./workspaces/settings-repository";

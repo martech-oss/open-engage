@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { orpc } from "@/lib/orpc";
 import type {
   AutomationsReport,
+  CampaignsReport,
   ContactsReport,
   DealsReport,
   EmailsReport,
@@ -10,7 +11,14 @@ import type {
   SiteReport,
 } from "@openengage/core/reports";
 
-export type { AutomationsReport, ContactsReport, DealsReport, EmailsReport, SiteReport };
+export type {
+  AutomationsReport,
+  CampaignsReport,
+  ContactsReport,
+  DealsReport,
+  EmailsReport,
+  SiteReport,
+};
 
 export type ReportView = "overview" | ReportCategory;
 
@@ -28,6 +36,7 @@ export interface ReportWorkspace {
   emails?: EmailsReport;
   deals?: DealsReport;
   site?: SiteReport;
+  campaigns?: CampaignsReport;
 }
 
 const today = new Date();
@@ -48,7 +57,8 @@ function isReportView(value: unknown): value is ReportView {
     value === "automations" ||
     value === "emails" ||
     value === "deals" ||
-    value === "site"
+    value === "site" ||
+    value === "campaigns"
   );
 }
 
@@ -95,6 +105,8 @@ export async function loadReportWorkspace(
       return { view: search.view, deals: await orpc.reports.deals(dealsInput, options) };
     case "site":
       return { view: search.view, site: await orpc.reports.site(range, options) };
+    case "campaigns":
+      return { view: search.view, campaigns: await orpc.reports.campaigns(dealsInput, options) };
   }
 }
 

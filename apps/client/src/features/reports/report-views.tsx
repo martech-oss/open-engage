@@ -1,3 +1,4 @@
+export * from "./report-views/campaigns-report-view";
 export * from "./report-views/automations-report-view";
 export * from "./report-views/contacts-report-view";
 export * from "./report-views/deals-report-view";

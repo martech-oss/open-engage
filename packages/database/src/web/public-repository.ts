@@ -101,24 +101,81 @@ export class PublicFormRepository extends DatabaseRepository {
   public async updateContactFromFormSubmission(
     workspaceId: string,
     contactId: string,
-    input: { firstName: string | null; lastName: string | null; phone: string | null },
+    input: {
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+      customFields?: Record<string, unknown>;
+    },
   ): Promise<void> {
+    const custom = input.customFields ?? {};
     await this.database.orm
       .update(contacts)
       .set({
         firstName: sql`coalesce(${input.firstName}, ${contacts.firstName})`,
         lastName: sql`coalesce(${input.lastName}, ${contacts.lastName})`,
         phone: sql`coalesce(${input.phone}, ${contacts.phone})`,
+        // json_patch merges the submitted keys over the stored object, so a
+        // form that asks for two fields never wipes the other twenty.
+        ...(Object.keys(custom).length > 0
+          ? {
+              customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), ${JSON.stringify(custom)})`,
+            }
+          : {}),
         updatedAt: nowIso(),
       })
       .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)));
+  }
+
+  /**
+   * Progressive Profiling needs to know which fields this visitor has already
+   * answered. Returns the keys that currently hold a value, standard columns
+   * and custom-field keys alike.
+   */
+  public async findAnsweredFieldsByVisitor(
+    workspaceId: string,
+    visitorId: string,
+  ): Promise<Set<string>> {
+    const row = await this.database.orm
+      .select({
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        phone: contacts.phone,
+        customFields: contacts.customFields,
+      })
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.workspaceId, workspaceId),
+          eq(contacts.visitorId, visitorId),
+          eq(contacts.status, "active"),
+        ),
+      )
+      .get();
+    const answered = new Set<string>();
+    if (!row) return answered;
+    if (row.firstName) answered.add("firstName");
+    if (row.lastName) answered.add("lastName");
+    if (row.phone) answered.add("phone");
+    const parsed: unknown = JSON.parse(row.customFields || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [key, value] of Object.entries(parsed)) {
+        if (value !== null && value !== undefined && value !== "") answered.add(key);
+      }
+    }
+    return answered;
   }
 
   public async createContactFromFormSubmission(
     workspaceId: string,
     contactId: string,
     email: string,
-    input: { firstName: string | null; lastName: string | null; phone: string | null },
+    input: {
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+      customFields?: Record<string, unknown>;
+    },
   ): Promise<void> {
     const now = nowIso();
     await this.database.orm.insert(contacts).values({
@@ -131,7 +188,7 @@ export class PublicFormRepository extends DatabaseRepository {
       stage: "lead",
       score: 0,
       status: "active",
-      customFields: "{}",
+      customFields: JSON.stringify(input.customFields ?? {}),
       createdAt: now,
       updatedAt: now,
     });

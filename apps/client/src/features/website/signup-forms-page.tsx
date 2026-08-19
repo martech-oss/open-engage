@@ -28,6 +28,7 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
+import { FormFieldBuilder } from "@/features/website/form-field-builder";
 import { WebsiteResourceListPage } from "@/features/website/resource-page";
 import {
   signupFormsQueryOptions,
@@ -43,6 +44,7 @@ import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
 import { formatDateTime } from "@/lib/format";
 import { slugify } from "@/lib/utils";
+import type { FormField } from "@openengage/core/web";
 
 export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
   const { data: items } = useSuspenseQuery(signupFormsQueryOptions());
@@ -232,6 +234,9 @@ function SignupFormEditor({
       ),
     ),
   );
+  const [customFields, setCustomFields] = useState<FormField[]>(
+    () => item?.definition.fields?.filter((field) => field.kind === "custom") ?? [],
+  );
 
   const createForm = useCreateSignupForm();
   const updateForm = useUpdateSignupForm();
@@ -249,18 +254,19 @@ function SignupFormEditor({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const name = getFormString(formData, "name").trim();
-    const fields: NonNullable<SignupFormDefinition["fields"]> = [
-      { key: "email", type: "email", required: true },
-    ];
-    if (optionalFields.has("firstName")) {
-      fields.push({ key: "firstName", type: "text", required: false });
-    }
-    if (optionalFields.has("lastName")) {
-      fields.push({ key: "lastName", type: "text", required: false });
-    }
-    if (optionalFields.has("phone")) {
-      fields.push({ key: "phone", type: "tel", required: false });
-    }
+    const standard = (key: FormField["key"], type: FormField["type"]): FormField => ({
+      key,
+      kind: "standard",
+      type,
+      required: key === "email",
+      progressive: false,
+    });
+    const fields: FormField[] = [standard("email", "email")];
+    if (optionalFields.has("firstName")) fields.push(standard("firstName", "text"));
+    if (optionalFields.has("lastName")) fields.push(standard("lastName", "text"));
+    if (optionalFields.has("phone")) fields.push(standard("phone", "tel"));
+    // Blank keys are half-finished rows in the builder, not fields to save.
+    fields.push(...customFields.filter((field) => field.key.trim().length > 0));
     const allowedDomains = getFormString(formData, "allowedDomains")
       .split(/[\n,]+/)
       .map((value) => value.trim())
@@ -269,7 +275,11 @@ function SignupFormEditor({
       name,
       slug: getFormString(formData, "slug").trim() || slugify(name),
       status: getFormString(formData, "status") === "published" ? "published" : "draft",
-      definition: { style: readFormStyle(formData), fields },
+      definition: {
+        style: readFormStyle(formData),
+        fields,
+        progressiveMaxFields: Number(getFormString(formData, "progressiveMaxFields")) || 3,
+      },
       allowedDomains,
       turnstileEnabled,
       successMessage: getFormString(formData, "successMessage"),
@@ -333,7 +343,7 @@ function SignupFormEditor({
       <FieldSet>
         <FieldLegend variant="label">取得する項目</FieldLegend>
         <FieldDescription>
-          メールアドレスは必須です。コード定義済みの標準項目だけを追加できます。
+          メールアドレスは必須です。連絡先の標準カラムに保存されます。
         </FieldDescription>
         <FieldGroup className="gap-3 sm:grid sm:grid-cols-2">
           <Field orientation="horizontal" data-disabled>
@@ -358,6 +368,17 @@ function SignupFormEditor({
           ))}
         </FieldGroup>
       </FieldSet>
+
+      <FormFieldBuilder fields={customFields} onChange={setCustomFields} />
+      <FormInput
+        label="1回に質問する段階的項目の上限"
+        name="progressiveMaxFields"
+        type="number"
+        min={1}
+        max={10}
+        defaultValue={item?.definition.progressiveMaxFields ?? 3}
+        description="「段階的に質問」を付けた項目のうち、未回答のものをこの件数まで表示します。"
+      />
 
       <FormTextarea
         label="許可ドメイン"

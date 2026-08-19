@@ -237,3 +237,23 @@ export const inboundEmails = sqliteTable(
     ),
   ],
 );
+
+/**
+ * Open/click measurement is opt-in per workspace: enabling it rewrites links
+ * and injects a pixel into Automation email only, never into the auth mail
+ * Better Auth sends. Mirrors the site_tracking_settings singleton shape.
+ */
+export const emailTrackingSettings = sqliteTable("email_tracking_settings", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  openTrackingEnabled: integer("open_tracking_enabled", { mode: "boolean" })
+    .default(false)
+    .notNull(),
+  clickTrackingEnabled: integer("click_tracking_enabled", { mode: "boolean" })
+    .default(false)
+    .notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

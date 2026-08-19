@@ -23,6 +23,8 @@ describe("public routes", () => {
       "GET /api/public/site-tracking/:workspaceSlug/script.js",
       "POST /api/public/track/:workspaceSlug",
       "GET /t/:token",
+      "GET /c/:token",
+      "GET /r/:workspaceSlug/:redirectSlug",
       "GET /api/public/site-messages/:workspaceSlug",
       "POST /api/public/site-messages/:workspaceSlug/:messageId/events",
       "GET /u/:token",

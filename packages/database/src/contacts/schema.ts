@@ -47,6 +47,8 @@ export const contacts = sqliteTable(
     externalId: text("external_id"),
     stage: text().default("lead").notNull(),
     score: integer().default(0).notNull(),
+    /** Thirds of a letter away from the D baseline; see core's gradeLetter(). */
+    gradePoints: integer("grade_points").default(0).notNull(),
     status: text().default("active").notNull(),
     customFields: text("custom_fields").default("{}").notNull(),
     createdAt: text("created_at").notNull(),

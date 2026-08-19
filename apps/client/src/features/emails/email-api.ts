@@ -5,11 +5,12 @@ import type {
   EmailBrandProfile,
   EmailSegmentOption,
   EmailTemplate,
+  EmailTrackingSettings,
   MessageVariable,
 } from "@openengage/core/messaging";
 
 export type { EmailTemplate, MessageVariable };
-export type { EmailBrandProfile };
+export type { EmailBrandProfile, EmailTrackingSettings };
 
 /** Retained aliases so the table and form components read the same. */
 export type EmailTemplateRow = EmailTemplate;
@@ -22,6 +23,10 @@ export function emailArchivedTemplatesQueryOptions() {
 
 export function emailVariablesListQueryOptions() {
   return orpcQuery.emails.listVariables.queryOptions({ input: { archived: false } });
+}
+
+export function emailTrackingSettingsQueryOptions() {
+  return orpcQuery.emails.getTrackingSettings.queryOptions();
 }
 
 export function emailBrandProfileQueryOptions() {
@@ -116,5 +121,14 @@ export function useUpdateEmailBrandProfile() {
     onSuccess: (profile) => {
       queryClient.setQueryData(orpcQuery.workspace.getEmailBrand.key(), profile);
     },
+  });
+}
+
+export function useUpdateEmailTrackingSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.updateTrackingSettings.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.getTrackingSettings.key() }),
   });
 }

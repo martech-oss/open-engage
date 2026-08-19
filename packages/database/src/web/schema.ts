@@ -203,7 +203,7 @@ export const projectItems = sqliteTable(
     }),
     check(
       "project_items_resource_type_check",
-      sql`${table.resourceType} IN ('automation', 'email', 'form', 'page', 'segment')`,
+      sql`${table.resourceType} IN ('automation', 'email', 'form', 'page', 'redirect', 'segment')`,
     ),
     check(
       "project_items_brief_revision_check",
@@ -421,5 +421,70 @@ export const siteMessages = sqliteTable(
       table.updatedAt,
     ),
     check("site_messages_status_check", sql`${table.status} IN ('draft', 'published', 'archived')`),
+  ],
+);
+
+/**
+ * A named, shareable link whose clicks are attributed. Unlike the per-delivery
+ * click redirect in email, the URL here is stable and public, so it can be
+ * pasted into a landing page, an ad, or a social post and still report back.
+ */
+export const customRedirects = sqliteTable(
+  "custom_redirects",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    slug: text().notNull(),
+    destinationUrl: text("destination_url").notNull(),
+    clickCount: integer("click_count").default(0).notNull(),
+    archivedAt: text("archived_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("custom_redirects_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
+    uniqueIndex("custom_redirects_workspace_slug_unique").on(table.workspaceId, table.slug),
+  ],
+);
+
+/**
+ * One recorded interaction between a contact and a resource that belongs to a
+ * project. Projects already group automations, emails, forms, pages and
+ * segments, so they act as the campaign: this table is what turns that grouping
+ * into attribution without a second campaign concept.
+ */
+export const campaignTouches = sqliteTable(
+  "campaign_touches",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    eventType: text("event_type").notNull(),
+    occurredAt: text("occurred_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("campaign_touches_workspace_contact_idx").on(
+      table.workspaceId,
+      table.contactId,
+      table.occurredAt,
+    ),
+    index("campaign_touches_workspace_project_idx").on(
+      table.workspaceId,
+      table.projectId,
+      table.occurredAt,
+    ),
   ],
 );

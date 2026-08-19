@@ -10,6 +10,7 @@ import { emailsContract } from "./messaging/contract";
 import { contactDataContract, dashboardContract, platformContract } from "./operations/contract";
 import { projectsContract } from "./projects/contract";
 import { reportsContract } from "./reports/contract";
+import { scoringContract } from "./scoring/contract";
 import { segmentsContract } from "./segments/contract";
 import { websiteContract } from "./web/contract";
 import { workspaceContract } from "./workspaces/contract";
@@ -29,5 +30,6 @@ export const contract = {
   projects: projectsContract,
   reports: reportsContract,
   segments: segmentsContract,
+  scoring: scoringContract,
   website: websiteContract,
 };

@@ -20,7 +20,13 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - メール文面・間隔・分岐・終了条件をまとめて下書き化するAI Email Sequence Designer
 - AI Gateway Web SearchとBrowser Runで根拠付き候補を作る会社情報エンリッチメント
 - ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
-- Contact・Automation・Email・Deals・Siteを横断するReporting
+- Automationメールの開封・クリックを自前で計測する、Workspace単位のオプトイン機能
+- 広告・SNS向けの計測用リンク（Custom Redirect）と、URL条件で加点するPage Action
+- 行動スコアのルールエンジン、製品別のカテゴリスコア、属性で決まるA〜Fグレード
+- カスタムフィールドを収集し、既知の項目を出し分けるProgressive Profiling対応フォーム
+- Projectをキャンペーンとして扱い、関与・初回接点・最終接点で受注金額を配分するアトリビューション
+- Topic別購読、グローバル配信停止、Suppressionを扱うPreference Center
+- Contact・Automation・Email・Deals・Site・キャンペーンを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
 - Workspace限定APIキー、TypeScript SDK、Remote MCP endpoint
 - 対話式セットアップ、`doctor`、`backup`、`update` CLI
@@ -36,7 +42,7 @@ OpenEngageはメールの用途を型と実行時検証の両方で分離しま�
 
 Cloudflare Email ServiceはTransactional専用として扱います。Marketing Campaign/BroadcastのAPI・DB・Queue実装はv0.1に含みません。
 
-認証メールはReact Email、WorkspaceのAutomationメールは`ContentDocument`からOpenEngage内でHTMLとplain textを生成します。Automationは公開済みsnapshotだけを使用し、生成済みの件名・HTML・textをDeliveryへ保存してからQueueへ投入します。送信後の`delivered`、`deferred`、`bounced`、`failed`、`rejected`、`complained`はCloudflare QueuesのEmail Sending event subscriptionで取り込みます。`opened`と`clicked`は現時点では計測しません。
+認証メールはReact Email、WorkspaceのAutomationメールは`ContentDocument`からOpenEngage内でHTMLとplain textを生成します。Automationは公開済みsnapshotだけを使用し、生成済みの件名・HTML・textをDeliveryへ保存してからQueueへ投入します。送信後の`delivered`、`deferred`、`bounced`、`failed`、`rejected`、`complained`はCloudflare QueuesのEmail Sending event subscriptionで取り込みます。`opened`と`clicked`はCloudflare側から通知されないため、OpenEngageが自前で計測します。詳細は[開封・クリック計測](#開封クリック計測)を参照してください。
 
 ## アーキテクチャ
 
@@ -645,6 +651,92 @@ Email Routing handlerは次を確認します。
 
 TransactionalメールもBounce、Complaintなどの抑止対象です。Marketing用のグローバル停止、Topic状態、頻度上限モデルは将来用に保持しますが、現在は送信自体を停止しています。
 
+## 開封・クリック計測
+
+Cloudflare Email Sendingは`opened`と`clicked`を通知しないため、OpenEngageが自前で計測します。
+Workspace設定で個別にON/OFFでき、**既定はどちらもOFF**です。
+
+対象は**Automationメールだけ**です。認証・招待・パスワード再設定などBetter Authが送るメールは
+別経路でレンダリングするため、計測対象になりません。
+
+| 設定         | 動作                                             | エンドポイント               |
+| ------------ | ------------------------------------------------ | ---------------------------- |
+| 開封計測     | `</body>`直前に1×1透明GIFを埋め込む              | `GET /t/:token`              |
+| クリック計測 | 本文中の`http(s)`リンクを署名付きURLへ書き換える | `GET /c/:token` → 元URLへ302 |
+
+トークンはHMAC署名済みで、Workspace、Delivery、Contact、有効期限（180日）を含みます。
+クリックトークンは遷移先URLも保持し、リダイレクト前に`http(s)`であることを再検証します。
+
+計測すると、次の3つが同時に動きます。
+
+- レポートの開封率・クリック率・CTOR
+- Automationのdecisionノード（開封待ち・クリック待ち）の`yes`分岐
+- `email_opened` / `email_clicked` のContact Event（Segment条件にも使えます）
+
+### 書き換えないもの
+
+配信停止（`/u/`）、Preference Center（`/preference/`）、公開Asset（`/a/`、`/api/email-images/`）への
+リンクは書き換えません。配信停止の可否を計測基盤に依存させないためです。
+`mailto:`、`tel:`、アンカー、相対URLも対象外です。
+プレーンテキスト版は本文の可読性を優先して書き換えないため、その経路のクリックは記録されません。
+
+### 重複と過大計上
+
+同一Deliveryの開封は初回のみ、クリックは遷移先URLごとに1回だけ記録します
+（`delivery_events`の`(workspace_id, provider, provider_event_id)`一意制約を利用）。
+それでもApple Mailのプライバシー保護による先読みや、企業のリンク検査による自動アクセスは
+排除できません。絶対値ではなく相対比較の指標として扱ってください。
+
+## スコアリングとグレード
+
+Pardotと同じ2軸で連絡先を評価します。行動を測る**スコア**と、属性の合致度を測る**グレード**です。
+
+### スコアリングルール
+
+`page_viewed`、`form_submitted`、`email_opened`、`email_clicked`、`email_replied`、
+`custom_redirect_clicked`、`custom_event`のいずれかを条件に、点数の加減算とタグ付与を行います。
+一致条件は`any`（すべて）、`resource`（対象IDが一致）、`url_exact` / `url_contains` / `url_starts_with`から選びます。
+
+**`page_viewed`＋URL条件のルールがPage Actionです。** 専用の仕組みを別に持たず、同じルールエンジンで扱います。
+
+ルールにカテゴリを指定すると、全体スコアに加えて`contact_category_scores`のカテゴリ別スコアも動きます。
+製品別・関心別にスコアを分けたい場合に使います。
+
+### グレード
+
+グレード条件は連絡先の属性（標準カラムまたはカスタムフィールド）に対する判定で、
+合致するたびにグレードを`steps`（3分の1文字単位）だけ動かします。
+新規の連絡先は基準の`D`から始まり、`F`〜`A+`の13段階に丸められます。
+
+セグメント条件では`grade_points`で絞り込めます。`grade_points >= 3`は「C以上」です。
+
+グレードはスコア対象イベントの発生時に再計算されます。条件を後から変更しても、
+既存の連絡先は次のイベントまで古い値のままです。
+
+## 計測用リンク
+
+`GET /r/:workspaceSlug/:slug`は遷移先へ302で転送し、クリックを記録します。
+広告、SNS、PDFなど、OpenEngageの外に置くリンクの効果測定に使います。
+
+サイトトラッキング済みのページから遷移した場合、埋め込みスクリプトが`?oe_v=`に訪問者IDを付与するため、
+連絡先が特定できればタイムライン・セグメント・スコア・アトリビューションに反映されます。
+IDが無い場合はクリック数だけが増えます。
+
+## キャンペーンとアトリビューション
+
+Projectがキャンペーンです。Projectにメール・フォーム・セグメント・計測用リンクを紐付けると、
+それらへの反応が`campaign_touches`に接点として記録されます。
+
+受注した商談に対して、3つの見方で金額を配分します。
+
+| 指標     | 意味                                                                     |
+| -------- | ------------------------------------------------------------------------ |
+| 関与金額 | 受注前に接触したすべてのキャンペーンに同額を計上（合計は売上を超えます） |
+| 初回接点 | 最初に接触したキャンペーンに全額                                         |
+| 最終接点 | 受注直前に接触したキャンペーンに全額                                     |
+
+3つを足し合わせないでください。関与は意図的に重複計上し、初回・最終はそれぞれ売上を1回だけ配分します。
+
 ## セキュリティ
 
 - 全業務テーブルと主要Indexに`workspace_id`
@@ -703,9 +795,13 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 
 - `wrangler.jsonc`のD1 ID、送信元ドメイン、Reply domainは環境ごとの設定が必要です。
 - Email Sending event subscriptionの作成はCloudflare Dashboardで行う必要があります。
-- Email Serviceの`opened`と`clicked`イベントは現時点で取り込みません。
+- `opened`と`clicked`はCloudflareからは通知されず、OpenEngage自身のピクセルとリンク書き換えで計測します。プレーンテキスト版のリンクは書き換えないため、その経路のクリックは記録されません。
 - 大規模なCSVやSegmentは、実データ分布を使った負荷試験が必要です。
 - D1は唯一の業務DBですが、古い詳細イベントと大容量ファイルはR2へ退避します。
+- 計測用リンクの匿名クリックは、訪問者IDが無いと連絡先に紐付きません。
+- Page Actionはサイトトラッキングが有効なページでのみ発火します。
+- グレードはイベント駆動で再計算するため、条件変更の一括反映ジョブはありません。
+- アトリビューションはProjectに紐付けたリソースへの反応だけを接点として扱います。
 - SMS、LINE、Push、Mautic API/PHPプラグイン互換、SAML/SCIMは対象外です。
 - Cloudflare上の実リソースを必要とするProvider smoke testはCIだけでは完結しません。
 
@@ -713,7 +809,6 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 
 - 管理画面のLanding Page、Project UIの拡充
 - Marketing Campaign再開時のprovider、同意、計測設計
-- Click redirectの完全なリンク書き換え
 - Segment差分評価と大規模データ向けQuery最適化
 - R2アーカイブの復元・検索Tool
 - Provider contract testと負荷試験Fixture

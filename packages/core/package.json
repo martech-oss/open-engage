@@ -15,6 +15,7 @@
     "./platform": "./src/platform/index.ts",
     "./projects": "./src/projects/schema.ts",
     "./reports": "./src/reports/schema.ts",
+    "./scoring": "./src/scoring/index.ts",
     "./segments": "./src/segments/index.ts",
     "./shared": "./src/shared/schema.ts",
     "./web": "./src/web/index.ts",

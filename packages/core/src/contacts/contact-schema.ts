@@ -39,6 +39,8 @@ export const contactSchema = z.object({
   externalId: z.string().nullable(),
   stage: z.string(),
   score: z.number().int(),
+  /** Thirds of a letter from the D baseline; render with gradeLetter(). */
+  gradePoints: z.number().int(),
   status: z.enum(["active", "archived", "anonymous"]),
   archivedAt: z.string().nullable(),
   customFields: z.record(z.string(), z.unknown()),

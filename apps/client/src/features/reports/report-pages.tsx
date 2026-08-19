@@ -7,6 +7,7 @@ import {
   GitBranch,
   Globe2,
   Mail,
+  Megaphone,
   UsersRound,
 } from "lucide-react";
 import { type FormEvent, type ReactNode } from "react";
@@ -32,6 +33,7 @@ import { formatMoney, formatPercent } from "@/lib/format";
 import { reportExport } from "./report-export";
 import {
   AutomationsReportView,
+  CampaignsReportView,
   ContactsReportView,
   EmailsReportView,
   SiteReportView,
@@ -48,6 +50,7 @@ const reportNavigation: Array<{
   { view: "automations", label: "オートメーション", icon: GitBranch },
   { view: "emails", label: "メール", icon: Mail },
   { view: "site", label: "サイト", icon: Globe2 },
+  { view: "campaigns", label: "キャンペーン", icon: Megaphone },
 ];
 
 export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
@@ -92,6 +95,9 @@ export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
       ) : null}
       {data.view === "emails" && data.emails ? <EmailsReportView report={data.emails} /> : null}
       {data.view === "site" && data.site ? <SiteReportView report={data.site} /> : null}
+      {data.view === "campaigns" && data.campaigns ? (
+        <CampaignsReportView report={data.campaigns} />
+      ) : null}
     </PageLayout>
   );
 }

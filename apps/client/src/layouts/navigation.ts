@@ -1,5 +1,14 @@
 import { linkOptions } from "@tanstack/react-router";
-import { BriefcaseBusiness, Gauge, Globe, Mail, Settings, Spline, UsersRound } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  Gauge,
+  Globe,
+  Mail,
+  Settings,
+  Spline,
+  Target,
+  UsersRound,
+} from "lucide-react";
 
 export interface NavLink {
   to: string;
@@ -59,7 +68,17 @@ export const navigationSections: readonly NavSection[] = [
     tabs: linkOptions([
       { to: "/emails/templates", label: "テンプレート" },
       { to: "/emails/variables", label: "メッセージ変数" },
+      { to: "/emails/tracking", label: "計測" },
       { to: "/emails/archive", label: "アーカイブ" },
+    ]),
+  },
+  {
+    to: "/scoring",
+    label: "スコアリング",
+    icon: Target,
+    tabs: linkOptions([
+      { to: "/scoring/rules", label: "ルール" },
+      { to: "/scoring/grading", label: "グレード・カテゴリ" },
     ]),
   },
   {
@@ -71,6 +90,7 @@ export const navigationSections: readonly NavSection[] = [
       { to: "/website/pages", label: "ランディングページ" },
       { to: "/website/assets", label: "アセット" },
       { to: "/website/messages", label: "サイトメッセージ" },
+      { to: "/website/redirects", label: "計測用リンク" },
       { to: "/website/tracking", label: "サイトトラッキング" },
     ]),
   },

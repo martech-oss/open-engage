@@ -14,6 +14,7 @@ const contactColumns: Partial<Record<SegmentCondition["field"], string>> = {
   external_id: "c.external_id",
   stage: "c.stage",
   score: "c.score",
+  grade_points: "c.grade_points",
   status: "c.status",
   created_at: "c.created_at",
   updated_at: "c.updated_at",

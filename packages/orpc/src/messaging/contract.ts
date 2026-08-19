@@ -7,6 +7,8 @@ import {
   emailTemplateSchema,
   emailTemplateUpdateSchema,
   emailTemplateWriteSchema,
+  emailTrackingSettingsSchema,
+  emailTrackingSettingsWriteSchema,
   emailGenerationResultSchema,
   generateEmailImageInputSchema,
   generateEmailInputSchema,
@@ -129,4 +131,16 @@ export const emailsContract = {
     .route({ method: "GET", path: "/emails/options/topics" })
     .errors(workspaceErrors)
     .output(z.array(subscriptionTopicOptionSchema)),
+
+  // Open/click measurement toggles. Off until a workspace opts in, because
+  // enabling them rewrites every link in Automation mail.
+  getTrackingSettings: oc
+    .route({ method: "GET", path: "/emails/tracking" })
+    .errors(workspaceErrors)
+    .output(emailTrackingSettingsSchema),
+  updateTrackingSettings: oc
+    .route({ method: "PUT", path: "/emails/tracking" })
+    .errors(base)
+    .input(emailTrackingSettingsWriteSchema)
+    .output(ackSchema),
 };

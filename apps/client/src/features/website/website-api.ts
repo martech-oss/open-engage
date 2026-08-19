@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpcQuery } from "@/lib/orpc";
 import type {
+  CustomRedirect,
   LandingPage,
   PublishStatus,
   SignupForm,
@@ -10,12 +11,20 @@ import type {
   SiteTracking,
 } from "@openengage/core/web";
 
-export type { LandingPage, PublishStatus, SignupForm, SignupFormDefinition, SiteMessage };
+export type {
+  CustomRedirect,
+  LandingPage,
+  PublishStatus,
+  SignupForm,
+  SignupFormDefinition,
+  SiteMessage,
+};
 
 /** Retained aliases so the page components read the same as before the migration. */
 export type SignupFormRow = SignupForm;
 export type LandingPageRow = LandingPage;
 export type SiteMessageRow = SiteMessage;
+export type CustomRedirectRow = CustomRedirect;
 export type SiteTrackingData = SiteTracking;
 export type TrackingTopPage = SiteTracking["topPages"][number];
 
@@ -29,6 +38,10 @@ export function landingPagesQueryOptions() {
 
 export function siteMessagesQueryOptions() {
   return orpcQuery.website.listMessages.queryOptions();
+}
+
+export function customRedirectsQueryOptions() {
+  return orpcQuery.website.listRedirects.queryOptions();
 }
 
 export function siteTrackingQueryOptions() {
@@ -116,5 +129,33 @@ export function useUpdateSiteTracking() {
     ...orpcQuery.website.updateTracking.mutationOptions(),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: orpcQuery.website.getTracking.key() }),
+  });
+}
+
+function invalidateRedirects(queryClient: ReturnType<typeof useQueryClient>) {
+  return () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listRedirects.key() });
+}
+
+export function useCreateCustomRedirect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.createRedirect.mutationOptions(),
+    onSuccess: invalidateRedirects(queryClient),
+  });
+}
+
+export function useUpdateCustomRedirect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.updateRedirect.mutationOptions(),
+    onSuccess: invalidateRedirects(queryClient),
+  });
+}
+
+export function useArchiveCustomRedirect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.archiveRedirect.mutationOptions(),
+    onSuccess: invalidateRedirects(queryClient),
   });
 }

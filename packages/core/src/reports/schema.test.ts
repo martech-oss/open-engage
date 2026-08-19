@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { reportCategorySchema, reportDateRangeSchema, reportQuerySchema } from "./schema";
 
 describe("report schemas", () => {
-  it("supports the five reporting domains", () => {
+  it("supports the six reporting domains", () => {
     expect(reportCategorySchema.options).toEqual([
       "contacts",
       "automations",
       "emails",
       "deals",
       "site",
+      "campaigns",
     ]);
   });
 

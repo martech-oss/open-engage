@@ -57,6 +57,7 @@ export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
       createdAt: contacts.createdAt,
       updatedAt: contacts.updatedAt,
       score: contacts.score,
+      gradePoints: contacts.gradePoints,
       name: sql<string>`coalesce(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}, '')`,
       email: sql<string>`coalesce(${contacts.email}, '')`,
     }[input.sort ?? "updatedAt"];
@@ -281,6 +282,7 @@ function toContact(row: ContactRow): Contact {
     externalId: row.externalId,
     stage: row.stage,
     score: row.score,
+    gradePoints: row.gradePoints,
     status: row.status,
     archivedAt: row.archivedAt,
     customFields: decodeJson(row.customFields, jsonRecordSchema, "contacts.custom_fields"),

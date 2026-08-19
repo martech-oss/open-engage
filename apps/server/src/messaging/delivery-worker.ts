@@ -4,6 +4,7 @@ import { retryDelaySeconds } from "@openengage/core/platform";
 import {
   ConsentRepository,
   createDatabase,
+  EmailTrackingEventRepository,
   MessagingWorkerRepository,
   uuidv7,
   type AutomationJobRow,
@@ -24,6 +25,7 @@ import {
   EmailTemplateServiceError,
   resolveEmailRenderOptions,
 } from "../messaging/email-template-service";
+import { applyEmailTracking } from "../messaging/email-tracking";
 import { buildReplyAddress } from "../messaging/reply-address";
 import { decryptCredentials } from "../platform/crypto";
 import { renderSubject } from "../rendering/content-renderer";
@@ -79,6 +81,22 @@ export async function createEmailDelivery(
     purpose: "transactional",
     ...renderOptions,
   });
+  // Only Automation mail reaches this function - Better Auth's own transactional
+  // mail is rendered elsewhere - so opt-in open/click measurement applies here
+  // and nowhere else. `text` keeps the un-rewritten links on purpose.
+  const tracking = await new EmailTrackingEventRepository(database).readSettings(job.workspaceId);
+  const html =
+    tracking.openTrackingEnabled || tracking.clickTrackingEnabled
+      ? await applyEmailTracking(rendered.html, {
+          secret: env.TRACKING_SIGNING_SECRET,
+          appUrl: env.APP_URL,
+          workspaceId: job.workspaceId,
+          deliveryId,
+          contactId: job.contactId,
+          openTracking: tracking.openTrackingEnabled,
+          clickTracking: tracking.clickTrackingEnabled,
+        })
+      : rendered.html;
   const replyTo = await buildReplyAddress(env, job.workspaceId, deliveryId, job.contactId);
   const payload: ChannelMessage = {
     kind: "email",
@@ -91,6 +109,7 @@ export async function createEmailDelivery(
     replyTo,
     subject: renderSubject(template.subject, renderContext),
     ...rendered,
+    html,
   };
   const created = await repository.insertQueuedDelivery({
     id: deliveryId,

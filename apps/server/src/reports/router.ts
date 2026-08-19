@@ -1,5 +1,6 @@
 import { authed, requireRole } from "../orpc/base";
 import { automationReport } from "./automations-report";
+import { campaignReport } from "./campaigns-report";
 import { contactReport } from "./contacts-report";
 import { getDashboard } from "./dashboard-service";
 import { dealReport } from "./deals-report";
@@ -57,6 +58,18 @@ export const siteReportProcedure = authed.reports.site.handler(({ context, input
   );
 });
 
+export const campaignsReportProcedure = authed.reports.campaigns.handler(
+  ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    return campaignReport(
+      context.database,
+      context.workspace.workspaceId,
+      toReportRange(input.from, input.to),
+      input.currency ?? "JPY",
+    );
+  },
+);
+
 export const dashboardProcedure = authed.dashboard.get.handler(async ({ context }) => {
   return getDashboard(context.database, context.workspace.workspaceId);
 });
@@ -67,6 +80,7 @@ export const reportProcedures = {
   emails: emailsReportProcedure,
   deals: dealsReportProcedure,
   site: siteReportProcedure,
+  campaigns: campaignsReportProcedure,
 };
 
 export const dashboardProcedures = { get: dashboardProcedure };

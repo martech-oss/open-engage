@@ -2,6 +2,8 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import {
+  customRedirectSchema,
+  customRedirectWriteSchema,
   landingPageSchema,
   landingPageWriteSchema,
   signupFormSchema,
@@ -20,6 +22,11 @@ const created = z.object({ id: z.string() });
 function notFound<const Code extends string>(code: Code, message: string) {
   return { ...authedErrors, ...notFoundError(code, message) } as const;
 }
+
+const redirectNotFound = notFound("REDIRECT_NOT_FOUND", "リンクが見つかりません");
+const redirectSlugTaken = {
+  REDIRECT_SLUG_TAKEN: { status: 409, message: "同じスラッグのリンクが既に存在します" },
+} as const;
 
 export const websiteContract = {
   listForms: oc
@@ -82,6 +89,26 @@ export const websiteContract = {
   archiveMessage: oc
     .route({ method: "POST", path: "/website/messages/{id}/archive" })
     .errors(notFound("SITE_MESSAGE_NOT_FOUND", "サイトメッセージが見つかりません"))
+    .input(idInput)
+    .output(ackSchema),
+
+  listRedirects: oc
+    .route({ method: "GET", path: "/website/redirects" })
+    .errors(workspaceErrors)
+    .output(z.array(customRedirectSchema)),
+  createRedirect: oc
+    .route({ method: "POST", path: "/website/redirects", successStatus: 201 })
+    .errors({ ...authedErrors, ...redirectSlugTaken })
+    .input(customRedirectWriteSchema)
+    .output(created),
+  updateRedirect: oc
+    .route({ method: "PATCH", path: "/website/redirects/{id}" })
+    .errors({ ...redirectNotFound, ...redirectSlugTaken })
+    .input(customRedirectWriteSchema.extend({ id: z.string().min(1) }))
+    .output(ackSchema),
+  archiveRedirect: oc
+    .route({ method: "POST", path: "/website/redirects/{id}/archive" })
+    .errors(redirectNotFound)
     .input(idInput)
     .output(ackSchema),
 

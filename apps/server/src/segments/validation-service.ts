@@ -16,7 +16,9 @@ const SYSTEM_EVENTS = [
   "form_submitted",
   "page_viewed",
   "email_opened",
+  "email_clicked",
   "email_replied",
+  "custom_redirect_clicked",
   "segment_joined",
 ] as const;
 

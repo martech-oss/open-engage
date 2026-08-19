@@ -5,7 +5,9 @@ interface SignedTokenPayload {
   resourceId: string;
   contactId?: string;
   expiresAt: number;
-  purpose: "tracking" | "unsubscribe" | "reply";
+  purpose: "tracking" | "unsubscribe" | "reply" | "click";
+  /** Click tokens carry the original destination; every other purpose omits it. */
+  url?: string;
 }
 
 export async function createSignedToken(
@@ -39,9 +41,23 @@ export async function verifySignedToken(
     ) {
       return null;
     }
+    // A click token is only useful with a destination, and the redirect must
+    // never become an open redirect - re-check the scheme even though the HMAC
+    // already proves we minted this URL ourselves.
+    if (purpose === "click" && !isRedirectableUrl(parsed.url)) return null;
     return parsed as SignedTokenPayload;
   } catch {
     return null;
+  }
+}
+
+export function isRedirectableUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
   }
 }
 

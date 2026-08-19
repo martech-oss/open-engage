@@ -3,6 +3,7 @@ import * as z from "zod";
 
 import {
   automationsReportSchema,
+  campaignsReportSchema,
   contactsReportSchema,
   dealsReportSchema,
   emailsReportSchema,
@@ -53,4 +54,9 @@ export const reportsContract = {
     .errors(analystErrors)
     .input(rangeInput)
     .output(siteReportSchema),
+  campaigns: oc
+    .route({ method: "GET", path: "/reports/campaigns" })
+    .errors(analystErrors)
+    .input(dealsInput)
+    .output(campaignsReportSchema),
 };

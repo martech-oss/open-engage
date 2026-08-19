@@ -90,6 +90,7 @@ export function toPreviewContact(row: Record<string, unknown>): Contact {
     externalId: nullablePrimitiveString(row["external_id"]),
     stage: primitiveString(row["stage"]),
     score: toFiniteNumber(row["score"]),
+    gradePoints: toFiniteNumber(row["grade_points"]),
     status,
     archivedAt: nullablePrimitiveString(row["archived_at"]),
     customFields: parseJsonRecord(row["custom_fields"]),
