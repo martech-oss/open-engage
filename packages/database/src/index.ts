@@ -5,6 +5,7 @@ export * from "./consent/repository";
 export * from "./contacts/company-repository";
 export * from "./contacts/data-job-repository";
 export * from "./contacts/event-repository";
+export * from "./contacts/import-part-execution-repository";
 export * from "./contacts/import-recovery-repository";
 export * from "./contacts/import-reconciliation-repository";
 export * from "./contacts/repository";

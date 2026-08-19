@@ -1,4 +1,5 @@
 import {
+  ContactImportPartExecutionRepository,
   ContactImportRecoveryRepository,
   ContactImportReconciliationRepository,
   createDatabase,
@@ -18,10 +19,10 @@ export async function processContactImport(
   totalParts: number,
   env: RuntimeEnv,
 ): Promise<void> {
-  const repository = new ContactImportRecoveryRepository(createDatabase(env.DB));
-  const reconciliationRepository = new ContactImportReconciliationRepository(
-    createDatabase(env.DB),
-  );
+  const database = createDatabase(env.DB);
+  const repository = new ContactImportRecoveryRepository(database);
+  const executionRepository = new ContactImportPartExecutionRepository(database);
+  const reconciliationRepository = new ContactImportReconciliationRepository(database);
   const now = new Date().toISOString();
   const claim = await repository.claimPart({
     jobId,
@@ -43,7 +44,7 @@ export async function processContactImport(
       const object = await env.ASSETS_BUCKET.get(`${claim.r2Key}/part-${part}.ndjson`);
       if (!object) throw new PermanentChannelError(`Import part ${part} is missing`);
       const lines = (await object.text()).split("\n").filter(Boolean);
-      manifest = await repository.reserveCandidates({
+      manifest = await executionRepository.reserveCandidates({
         jobId,
         part,
         leaseId: claim.leaseId,
@@ -53,7 +54,7 @@ export async function processContactImport(
       });
       if (!manifest) return;
     }
-    const contactIds = await repository.insertReservedCandidates({
+    await executionRepository.persistCandidateInsertPhase({
       jobId,
       part,
       leaseId: claim.leaseId,
@@ -61,17 +62,11 @@ export async function processContactImport(
       now: new Date().toISOString(),
       candidates: manifest.candidates,
     });
-    const completed = await repository.completePart({
+    const completed = await executionRepository.completePersistedPartForLiveLease({
       jobId,
       part,
       totalParts,
       leaseId: claim.leaseId,
-      processed: manifest.processed,
-      succeeded: contactIds.length,
-      // Identifier conflicts and malformed rows are both explicit failures;
-      // therefore processed always equals succeeded + failed.
-      failed: manifest.processed - contactIds.length,
-      contactIds,
       now: new Date().toISOString(),
     });
     if (completed) {
@@ -93,6 +88,20 @@ export async function processContactImport(
       });
     }
   } catch (error) {
+    const completion = {
+      jobId,
+      part,
+      totalParts,
+      leaseId: claim.leaseId,
+      now: new Date().toISOString(),
+    };
+    const recovered =
+      (await executionRepository.completePersistedPartForLiveLease(completion)) ||
+      (await executionRepository.completePersistedPartForExpiredLease({
+        ...completion,
+        now: new Date().toISOString(),
+      }));
+    if (recovered) return;
     const message = error instanceof Error ? error.message.slice(0, 2_000) : String(error);
     if (error instanceof PermanentChannelError || claim.attempts >= 5) {
       await repository.failPartForLease({

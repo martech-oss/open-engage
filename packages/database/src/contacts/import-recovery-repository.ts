@@ -1,23 +1,23 @@
-import { and, asc, eq, exists, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 
 import { changedExactlyOne } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import type { ContactImportRow } from "./data-job-repository";
-import { contactImportParts, contacts, importJobs } from "./schema";
+import { ContactImportPartExecutionRepository } from "./import-part-execution-repository";
+import {
+  activeImportJob,
+  type ContactImportCandidateManifest,
+  databaseTimestamp,
+  decodeCandidateManifest,
+  expiredImportPartLease,
+  IMPORT_ATTEMPT_LIMIT,
+  liveImportPartLease,
+} from "./import-part-state";
+import { contactImportParts, importJobs } from "./schema";
 
-const IMPORT_ATTEMPT_LIMIT = 5;
 const IMPORT_SCAN_LIMIT = 100;
 
-export interface ContactImportCandidate {
-  id: string;
-  row: ContactImportRow;
-}
-
-interface ContactImportCandidateManifest {
-  processed: number;
-  candidates: ContactImportCandidate[];
-}
+export type { ContactImportCandidate, ContactImportCandidateManifest } from "./import-part-state";
 
 export type ImportPartClaim =
   | { kind: "missing" | "unavailable" }
@@ -94,8 +94,14 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
             eq(contactImportParts.status, "pending"),
             and(
               eq(contactImportParts.status, "processing"),
-              lte(contactImportParts.leaseExpiresAt, input.now),
+              lte(contactImportParts.leaseExpiresAt, databaseTimestamp()),
             ),
+          ),
+          exists(
+            this.database.orm
+              .select({ value: sql<number>`1` })
+              .from(importJobs)
+              .where(activeImportJob(input.jobId)),
           ),
         ),
       )
@@ -116,7 +122,7 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
             this.database.orm
               .select({ value: sql<number>`1` })
               .from(contactImportParts)
-              .where(exactPartLease(input.jobId, input.part, leaseId)),
+              .where(liveImportPartLease(input.jobId, input.part, leaseId)),
           ),
         ),
       );
@@ -128,200 +134,6 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
       attempts: claimed.attempts,
       candidates: claimed.candidates ? decodeCandidateManifest(claimed.candidates) : null,
     };
-  }
-
-  public async reserveCandidates(input: {
-    jobId: string;
-    part: number;
-    leaseId: string;
-    now: string;
-    processed: number;
-    rows: ContactImportRow[];
-  }): Promise<ContactImportCandidateManifest | null> {
-    const proposed: ContactImportCandidateManifest = {
-      processed: input.processed,
-      candidates: input.rows.map((row) => ({ id: uuidv7(), row })),
-    };
-    await this.database.orm
-      .update(contactImportParts)
-      .set({ candidates: JSON.stringify(proposed), updatedAt: input.now })
-      .where(
-        and(
-          livePartLease(input.jobId, input.part, input.leaseId, input.now),
-          isNull(contactImportParts.candidates),
-        ),
-      );
-    const row = await this.database.orm
-      .select({ candidates: contactImportParts.candidates })
-      .from(contactImportParts)
-      .where(livePartLease(input.jobId, input.part, input.leaseId, input.now))
-      .get();
-    return row?.candidates ? decodeCandidateManifest(row.candidates) : null;
-  }
-
-  /**
-   * Inserts reserved candidates and returns only ids proven to belong to this
-   * part: ids returned now plus reserved ids already visible after an
-   * ambiguous prior insert commit.
-   */
-  public async insertReservedCandidates(input: {
-    jobId: string;
-    part: number;
-    leaseId: string;
-    workspaceId: string;
-    now: string;
-    candidates: readonly ContactImportCandidate[];
-  }): Promise<string[]> {
-    if (input.candidates.length === 0) return [];
-    const orm = this.database.orm;
-    const candidateIds = input.candidates.map((candidate) => candidate.id);
-    const leaseIsLive = exists(
-      orm
-        .select({ value: sql<number>`1` })
-        .from(contactImportParts)
-        .where(
-          and(
-            livePartLease(input.jobId, input.part, input.leaseId, input.now),
-            exists(
-              orm
-                .select({ value: sql<number>`1` })
-                .from(importJobs)
-                .where(
-                  and(activeImportJob(input.jobId), eq(importJobs.workspaceId, input.workspaceId)),
-                ),
-            ),
-          ),
-        ),
-    );
-    const [first, ...rest] = input.candidates.map(({ id, row }) =>
-      orm
-        .insert(contacts)
-        .select(
-          sql`SELECT
-            ${id}, ${input.workspaceId}, NULL, ${row.email}, ${row.firstName}, ${row.lastName},
-            ${row.phone}, ${row.externalId}, ${row.stage}, 0, 0, 'active',
-            ${JSON.stringify(row.customFields)}, ${input.now}, ${input.now}, NULL
-          WHERE ${leaseIsLive}`,
-        )
-        .onConflictDoNothing()
-        .returning({ id: contacts.id }),
-    );
-    if (first) await orm.batch([first, ...rest]);
-    const owned = await orm
-      .select({ id: contacts.id })
-      .from(contacts)
-      .where(
-        and(
-          eq(contacts.workspaceId, input.workspaceId),
-          inArray(contacts.id, candidateIds),
-          leaseIsLive,
-        ),
-      );
-    return candidateIds.filter((id) => owned.some((contact) => contact.id === id));
-  }
-
-  public async completePart(input: {
-    jobId: string;
-    part: number;
-    totalParts: number;
-    leaseId: string;
-    processed: number;
-    succeeded: number;
-    failed: number;
-    contactIds: string[];
-    now: string;
-  }): Promise<boolean> {
-    const finished = input.part + 1 === input.totalParts;
-    const exactLease = unexpiredPartLease(input.jobId, input.part, input.leaseId, input.now);
-    const guardedJob = and(
-      activeImportJob(input.jobId),
-      exists(
-        this.database.orm
-          .select({ value: sql<number>`1` })
-          .from(contactImportParts)
-          .where(exactLease),
-      ),
-    );
-    const orm = this.database.orm;
-    const completedJobState = and(
-      eq(importJobs.id, input.jobId),
-      eq(importJobs.kind, "contact_import"),
-      eq(importJobs.status, finished ? "completed" : "processing"),
-      eq(importJobs.updatedAt, input.now),
-    );
-    const completionWasAuthorized = and(
-      exactLease,
-      exists(
-        orm
-          .select({ value: sql<number>`1` })
-          .from(importJobs)
-          .where(completedJobState),
-      ),
-    );
-    const jobUpdate = orm
-      .update(importJobs)
-      .set({
-        status: finished ? "completed" : "processing",
-        cursor: JSON.stringify({ part: input.part + 1, totalParts: input.totalParts }),
-        processed: sql`${importJobs.processed} + ${input.processed}`,
-        succeeded: sql`${importJobs.succeeded} + ${input.succeeded}`,
-        failed: sql`${importJobs.failed} + ${input.failed}`,
-        updatedAt: input.now,
-      })
-      .where(guardedJob);
-    const partUpdate = orm
-      .update(contactImportParts)
-      .set({
-        status: "completed",
-        reconciliationContactIds: JSON.stringify(input.contactIds),
-        reconciliationPublishedAt: input.contactIds.length === 0 ? input.now : null,
-        processed: input.processed,
-        succeeded: input.succeeded,
-        failed: input.failed,
-        leaseId: null,
-        leaseExpiresAt: null,
-        completedAt: input.now,
-        updatedAt: input.now,
-      })
-      .where(completionWasAuthorized);
-    const results = finished
-      ? await orm.batch([jobUpdate, partUpdate])
-      : await orm.batch([
-          jobUpdate,
-          orm
-            .insert(contactImportParts)
-            .select(
-              orm
-                .select({
-                  jobId: contactImportParts.jobId,
-                  part: sql<number>`${input.part + 1}`.as("part"),
-                  totalParts: contactImportParts.totalParts,
-                  status: sql<string>`'pending'`.as("status"),
-                  attempts: sql<number>`0`.as("attempts"),
-                  leaseId: sql<string | null>`NULL`.as("lease_id"),
-                  leaseExpiresAt: sql<string | null>`NULL`.as("lease_expires_at"),
-                  candidates: sql<string | null>`NULL`.as("candidates"),
-                  reconciliationContactIds: sql<string | null>`NULL`.as(
-                    "reconciliation_contact_ids",
-                  ),
-                  reconciliationPublishedAt: sql<string | null>`NULL`.as(
-                    "reconciliation_published_at",
-                  ),
-                  processed: sql<number>`0`.as("processed"),
-                  succeeded: sql<number>`0`.as("succeeded"),
-                  failed: sql<number>`0`.as("failed"),
-                  lastError: sql<string | null>`NULL`.as("last_error"),
-                  createdAt: sql<string>`${input.now}`.as("created_at"),
-                  updatedAt: sql<string>`${input.now}`.as("updated_at"),
-                  completedAt: sql<string | null>`NULL`.as("completed_at"),
-                })
-                .from(contactImportParts)
-                .where(completionWasAuthorized),
-            )
-            .onConflictDoNothing(),
-          partUpdate,
-        ]);
-    return changedExactlyOne(results[0] as D1Result);
   }
 
   public async returnPartToPending(input: {
@@ -342,8 +154,9 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
       })
       .where(
         and(
-          exactPartLease(input.jobId, input.part, input.leaseId),
+          liveImportPartLease(input.jobId, input.part, input.leaseId),
           lt(contactImportParts.attempts, IMPORT_ATTEMPT_LIMIT),
+          isNull(contactImportParts.reconciliationContactIds),
         ),
       );
     return changedExactlyOne(result);
@@ -356,23 +169,32 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
     error: string;
     now: string;
   }): Promise<boolean> {
-    const exactLease = exactPartLease(input.jobId, input.part, input.leaseId);
+    return this.failPart(input, "live");
+  }
+
+  private async failPart(
+    input: {
+      jobId: string;
+      part: number;
+      leaseId: string;
+      error: string;
+      now: string;
+    },
+    authority: "live" | "expired",
+  ): Promise<boolean> {
+    const leaseAuthority =
+      authority === "live"
+        ? liveImportPartLease(input.jobId, input.part, input.leaseId)
+        : expiredImportPartLease(input.jobId, input.part, input.leaseId);
     const orm = this.database.orm;
-    const [jobResult, partResult] = await orm.batch([
-      orm
-        .update(importJobs)
-        .set({ status: "failed", updatedAt: input.now })
-        .where(
-          and(
-            eq(importJobs.id, input.jobId),
-            exists(
-              orm
-                .select({ value: sql<number>`1` })
-                .from(contactImportParts)
-                .where(exactLease),
-            ),
-          ),
-        ),
+    const terminalPart = and(
+      eq(contactImportParts.jobId, input.jobId),
+      eq(contactImportParts.part, input.part),
+      eq(contactImportParts.status, "failed"),
+      eq(contactImportParts.lastError, input.error),
+      eq(contactImportParts.updatedAt, input.now),
+    );
+    const [partResult, jobResult] = await orm.batch([
       orm
         .update(contactImportParts)
         .set({
@@ -382,7 +204,21 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
           lastError: input.error,
           updatedAt: input.now,
         })
-        .where(exactLease),
+        .where(and(leaseAuthority, isNull(contactImportParts.reconciliationContactIds))),
+      orm
+        .update(importJobs)
+        .set({ status: "failed", updatedAt: input.now })
+        .where(
+          and(
+            activeImportJob(input.jobId),
+            exists(
+              orm
+                .select({ value: sql<number>`1` })
+                .from(contactImportParts)
+                .where(terminalPart),
+            ),
+          ),
+        ),
     ]);
     return changedExactlyOne(jobResult) && changedExactlyOne(partResult);
   }
@@ -392,6 +228,7 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
       .select({
         jobId: contactImportParts.jobId,
         part: contactImportParts.part,
+        totalParts: contactImportParts.totalParts,
         attempts: contactImportParts.attempts,
         leaseId: contactImportParts.leaseId,
       })
@@ -399,22 +236,34 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
       .where(
         and(
           eq(contactImportParts.status, "processing"),
-          lte(contactImportParts.leaseExpiresAt, now),
+          lte(contactImportParts.leaseExpiresAt, databaseTimestamp()),
         ),
       )
       .limit(IMPORT_SCAN_LIMIT);
+    const execution = new ContactImportPartExecutionRepository(this.database);
     for (const part of expired) {
       if (!part.leaseId) continue;
+      const completed = await execution.completePersistedPartForExpiredLease({
+        jobId: part.jobId,
+        part: part.part,
+        totalParts: part.totalParts,
+        leaseId: part.leaseId,
+        now,
+      });
+      if (completed) continue;
       if (part.attempts >= IMPORT_ATTEMPT_LIMIT) {
-        await this.failPartForLease({
-          jobId: part.jobId,
-          part: part.part,
-          leaseId: part.leaseId,
-          error: "attempts_exhausted",
-          now,
-        });
+        await this.failPart(
+          {
+            jobId: part.jobId,
+            part: part.part,
+            leaseId: part.leaseId,
+            error: "attempts_exhausted",
+            now,
+          },
+          "expired",
+        );
       } else {
-        await this.returnPartToPending({
+        await this.returnExpiredPartToPending({
           jobId: part.jobId,
           part: part.part,
           leaseId: part.leaseId,
@@ -423,6 +272,32 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
         });
       }
     }
+  }
+
+  private async returnExpiredPartToPending(input: {
+    jobId: string;
+    part: number;
+    leaseId: string;
+    error: string;
+    now: string;
+  }): Promise<boolean> {
+    const result = await this.database.orm
+      .update(contactImportParts)
+      .set({
+        status: "pending",
+        leaseId: null,
+        leaseExpiresAt: null,
+        lastError: input.error,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          expiredImportPartLease(input.jobId, input.part, input.leaseId),
+          lt(contactImportParts.attempts, IMPORT_ATTEMPT_LIMIT),
+          isNull(contactImportParts.reconciliationContactIds),
+        ),
+      );
+    return changedExactlyOne(result);
   }
 
   public async scanPendingParts(): Promise<
@@ -487,50 +362,4 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
         .where(eligible),
     ]);
   }
-}
-
-function exactPartLease(jobId: string, part: number, leaseId: string) {
-  return and(
-    eq(contactImportParts.jobId, jobId),
-    eq(contactImportParts.part, part),
-    eq(contactImportParts.status, "processing"),
-    eq(contactImportParts.leaseId, leaseId),
-  );
-}
-
-function unexpiredPartLease(jobId: string, part: number, leaseId: string, now: string) {
-  return and(exactPartLease(jobId, part, leaseId), gt(contactImportParts.leaseExpiresAt, now));
-}
-
-function livePartLease(jobId: string, part: number, leaseId: string, now: string) {
-  return and(
-    unexpiredPartLease(jobId, part, leaseId, now),
-    sql`EXISTS (
-      SELECT 1 FROM ${importJobs}
-      WHERE ${activeImportJob(jobId)}
-    )`,
-  );
-}
-
-function activeImportJob(jobId: string) {
-  return and(
-    eq(importJobs.id, jobId),
-    eq(importJobs.kind, "contact_import"),
-    inArray(importJobs.status, ["pending", "processing"]),
-  );
-}
-
-function decodeCandidateManifest(value: string): ContactImportCandidateManifest {
-  const parsed: unknown = JSON.parse(value);
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    !("processed" in parsed) ||
-    typeof parsed.processed !== "number" ||
-    !("candidates" in parsed) ||
-    !Array.isArray(parsed.candidates)
-  ) {
-    throw new Error("contact_import_parts.candidates is malformed");
-  }
-  return parsed as ContactImportCandidateManifest;
 }

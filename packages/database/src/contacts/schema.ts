@@ -342,7 +342,7 @@ export const contactImportParts = sqliteTable(
     leaseExpiresAt: text("lease_expires_at"),
     /** Stable candidate ids and normalized rows reserved before any insert. */
     candidates: text(),
-    /** Completed-part outbox payload; only exact-live completion may populate it. */
+    /** Non-null proves insert phase completion; completed parts expose it as the outbox payload. */
     reconciliationContactIds: text("reconciliation_contact_ids"),
     reconciliationPublishedAt: text("reconciliation_published_at"),
     processed: integer().default(0).notNull(),
