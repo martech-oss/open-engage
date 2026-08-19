@@ -80,13 +80,13 @@ async function seedTurnstileForm(): Promise<{
 }
 
 describe("public form Turnstile", () => {
-  it("catches an idempotent replay consuming the single-use token or revalidating its changed body", async () => {
+  it("catches forwarding a non-UUID public replay key directly to Siteverify", async () => {
     const form = await seedTurnstileForm();
     const runtime = bindings({
       TURNSTILE_SITE_KEY: "site-test",
       TURNSTILE_SECRET: "secret-test",
     });
-    const idempotencyKey = crypto.randomUUID();
+    const idempotencyKey = "checkout/order:2026-08-20#alpha";
     const verificationKeys: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = init?.body;
@@ -120,7 +120,10 @@ describe("public form Turnstile", () => {
     });
     expect(replay.status).toBe(202);
     expect(await replay.json()).toEqual({ data: { accepted: true, duplicate: true } });
-    expect(verificationKeys).toEqual([idempotencyKey]);
+    expect(verificationKeys).toEqual(["6471d2fb-f0c0-5b59-96aa-2a25d443e086"]);
+    expect(verificationKeys[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
 
     const contact = await env.DB.prepare(
       "SELECT email, first_name AS firstName FROM contacts WHERE email = 'replay@example.com'",
