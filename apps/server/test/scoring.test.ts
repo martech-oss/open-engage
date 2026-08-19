@@ -48,6 +48,47 @@ async function countRows(sql: string, ...binds: string[]): Promise<number> {
   return row?.count ?? 0;
 }
 
+/**
+ * Recreates the pre-0009 table shape so the repository's defense-in-depth
+ * workspace joins are exercised against legacy cross-workspace references.
+ */
+async function restoreLegacyScoringRulesTable(): Promise<void> {
+  await env.DB.prepare(
+    `CREATE TABLE legacy_scoring_rules (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text NOT NULL,
+      name text NOT NULL,
+      event_type text NOT NULL,
+      match_type text DEFAULT 'any' NOT NULL,
+      match_value text,
+      points integer DEFAULT 0 NOT NULL,
+      category_id text,
+      tag_id text,
+      enabled integer DEFAULT true NOT NULL,
+      archived_at text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL,
+      FOREIGN KEY (workspace_id) REFERENCES organization(id) ON DELETE cascade,
+      FOREIGN KEY (category_id) REFERENCES scoring_categories(id) ON DELETE set null,
+      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE set null
+    )`,
+  ).run();
+  await env.DB.prepare(
+    `INSERT INTO legacy_scoring_rules
+      (id, workspace_id, name, event_type, match_type, match_value, points,
+       category_id, tag_id, enabled, archived_at, created_at, updated_at)
+     SELECT id, workspace_id, name, event_type, match_type, match_value, points,
+            category_id, tag_id, enabled, archived_at, created_at, updated_at
+     FROM scoring_rules`,
+  ).run();
+  await env.DB.prepare("DROP TABLE scoring_rules").run();
+  await env.DB.prepare("ALTER TABLE legacy_scoring_rules RENAME TO scoring_rules").run();
+  await env.DB.prepare(
+    `CREATE INDEX scoring_rules_workspace_event_idx
+     ON scoring_rules (workspace_id, event_type, enabled)`,
+  ).run();
+}
+
 async function insertLegacyRule(input: {
   workspaceId: string;
   categoryId: string | null;
@@ -238,6 +279,78 @@ describe("scoring rules", () => {
         categoryName: "Local category",
       }),
     ]);
+  });
+
+  it("does not leak foreign category or tag names from a legacy rule", async () => {
+    const local = await seed("foreign-list-local@example.com");
+    const foreign = await seed("foreign-list-owner@example.com");
+    const foreignCategory = await foreign.scoring.createCategory({
+      name: "Foreign category secret",
+      slug: "foreign-category-secret",
+    });
+    const foreignTagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+      id: foreignTagId,
+      name: "Foreign tag secret",
+      slug: "foreign-tag-secret",
+      color: "#64748b",
+    });
+    await restoreLegacyScoringRulesTable();
+    await insertLegacyRule({
+      workspaceId: local.workspaceId,
+      categoryId: foreignCategory.id,
+      tagId: foreignTagId,
+      points: 10,
+    });
+
+    await expect(local.scoring.listRules()).resolves.toEqual([
+      expect.objectContaining({
+        categoryId: null,
+        categoryName: null,
+        tagId: null,
+        tagName: null,
+      }),
+    ]);
+  });
+
+  it("does not score or attach foreign category and tag resources from a legacy rule", async () => {
+    const local = await seed("foreign-execution-local@example.com");
+    const foreign = await seed("foreign-execution-owner@example.com");
+    const foreignCategory = await foreign.scoring.createCategory({
+      name: "Foreign execution category",
+      slug: "foreign-execution-category",
+    });
+    const foreignTagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+      id: foreignTagId,
+      name: "Foreign execution tag",
+      slug: "foreign-execution-tag",
+      color: "#64748b",
+    });
+    await restoreLegacyScoringRulesTable();
+    await insertLegacyRule({
+      workspaceId: local.workspaceId,
+      categoryId: foreignCategory.id,
+      tagId: foreignTagId,
+      points: 10,
+    });
+
+    await expect(emit(local, "page_viewed", "https://example.com/")).resolves.toMatchObject({
+      enrollmentCount: 0,
+    });
+    await expect(readContact(local.contactId)).resolves.toMatchObject({ score: 0 });
+    await expect(
+      countRows("SELECT COUNT(*) AS count FROM score_events WHERE contact_id = ?", local.contactId),
+    ).resolves.toBe(0);
+    await expect(
+      countRows(
+        "SELECT COUNT(*) AS count FROM contact_category_scores WHERE contact_id = ?",
+        local.contactId,
+      ),
+    ).resolves.toBe(0);
+    await expect(
+      countRows("SELECT COUNT(*) AS count FROM contact_tags WHERE contact_id = ?", local.contactId),
+    ).resolves.toBe(0);
   });
 
   it("does not expose an archived category from a legacy malformed rule", async () => {
