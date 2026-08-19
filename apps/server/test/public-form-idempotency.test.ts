@@ -1,9 +1,14 @@
 import { createExecutionContext, createScheduledController } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MaintenanceRepository } from "@openengage/database";
+
+import { runDailyMaintenance } from "../src/platform/maintenance-worker";
 import { scheduled } from "../src/runtime/dispatch";
 import { seedWorkspaceClient } from "./factory";
+
+afterEach(() => vi.restoreAllMocks());
 
 function publicCall(path: string, body: Record<string, unknown>): Promise<Response> {
   return exports.default.fetch(
@@ -36,6 +41,97 @@ async function createPublicForm(slugSuffix: string) {
 }
 
 describe("public form atomic idempotency", () => {
+  it("catches due-work queries scanning accumulated processed rows instead of partial indexes", async () => {
+    const { workspaceId } = await seedWorkspaceClient(env.DB);
+    const now = new Date().toISOString();
+    const eventPrefix = `${workspaceId}-query-plan-`;
+    await env.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         SELECT 1 UNION ALL SELECT value + 1 FROM sequence WHERE value < 502
+       )
+       INSERT INTO contact_events (id, workspace_id, type, properties, occurred_at, created_at)
+       SELECT ? || value, ?, 'form_submitted', '{}', ?, ? FROM sequence`,
+    )
+      .bind(eventPrefix, workspaceId, now, now)
+      .run();
+    await env.DB.prepare(
+      `WITH RECURSIVE sequence(value) AS (
+         SELECT 1 UNION ALL SELECT value + 1 FROM sequence WHERE value < 502
+       )
+       INSERT INTO contact_event_outbox
+         (event_id, workspace_id, status, next_attempt_at, lease_id, lease_expires_at,
+          created_at, processed_at)
+       SELECT ? || value, ?,
+         CASE value WHEN 501 THEN 'pending' WHEN 502 THEN 'processing' ELSE 'processed' END,
+         CASE value WHEN 501 THEN ? ELSE NULL END,
+         CASE value WHEN 502 THEN 'expired-lease' ELSE NULL END,
+         CASE value WHEN 502 THEN ? ELSE NULL END,
+         ?, CASE WHEN value <= 500 THEN ? ELSE NULL END
+       FROM sequence`,
+    )
+      .bind(eventPrefix, workspaceId, now, "2000-01-01T00:00:00.000Z", now, now)
+      .run();
+    await env.DB.exec("ANALYZE contact_event_outbox");
+    const plan = await env.DB.prepare(
+      `EXPLAIN QUERY PLAN
+       SELECT event_id FROM contact_event_outbox
+       WHERE (status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?))
+          OR (status = 'processing' AND lease_expires_at <= ?)
+       ORDER BY created_at
+       LIMIT 50`,
+    )
+      .bind(now, now)
+      .all<{ detail: string }>();
+    const detail = plan.results.map((row) => row.detail).join("\n");
+
+    expect(detail).toContain("contact_event_outbox_pending_due_idx");
+    expect(detail).toContain("contact_event_outbox_processing_lease_idx");
+  });
+
+  it("catches daily maintenance retaining processed public-form work beyond seven days", async () => {
+    // Keep the outbox purge real while isolating unrelated daily jobs. The
+    // existing metrics rollup is outside this regression's behavior.
+    vi.spyOn(MaintenanceRepository.prototype, "findEventsToArchive").mockResolvedValue([]);
+    vi.spyOn(MaintenanceRepository.prototype, "rollupDailyMetrics").mockResolvedValue();
+    vi.spyOn(MaintenanceRepository.prototype, "purgeExpiredIdempotencyKeys").mockResolvedValue();
+    vi.spyOn(MaintenanceRepository.prototype, "reconcileContactScores").mockResolvedValue(0);
+    const form = await createPublicForm("processed-retention");
+    const response = await publicCall(form.path, {
+      email: "retention@example.com",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(response.status).toBe(202);
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare(
+      `UPDATE contact_event_outbox SET processed_at = ?
+       WHERE event_id IN (
+         SELECT id FROM contact_events WHERE workspace_id = ? AND type = 'contact_created'
+       )`,
+    )
+      .bind(eightDaysAgo, form.workspaceId)
+      .run();
+    await env.DB.prepare(
+      `UPDATE contact_event_outbox SET processed_at = ?
+       WHERE event_id IN (
+         SELECT id FROM contact_events WHERE workspace_id = ? AND type = 'form_submitted'
+       )`,
+    )
+      .bind(sixDaysAgo, form.workspaceId)
+      .run();
+
+    await runDailyMaintenance(env);
+
+    const remaining = await env.DB.prepare(
+      `SELECT e.type FROM contact_event_outbox o
+       JOIN contact_events e ON e.id = o.event_id
+       WHERE o.workspace_id = ? ORDER BY e.type`,
+    )
+      .bind(form.workspaceId)
+      .all<{ type: string }>();
+    expect(remaining.results).toEqual([{ type: "form_submitted" }]);
+  });
+
   it("catches a duplicate key with different payload mutating the existing contact", async () => {
     const form = await createPublicForm("duplicate");
     const idempotencyKey = crypto.randomUUID();

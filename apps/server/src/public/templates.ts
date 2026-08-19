@@ -274,7 +274,7 @@ export function selectPublicFormFields(
   }
 
   const fields = [...always, ...progressive.slice(0, maxProgressive)];
-  if (!fields.some((field) => field.key === "email")) {
+  if (!fields.some((field) => field.kind === "standard" && field.key === "email")) {
     fields.unshift({
       key: "email",
       label: "メールアドレス",

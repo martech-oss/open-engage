@@ -4,6 +4,7 @@ export interface WorkerConfigInput {
   databaseId: string;
   transactionalFromEmail: string;
   transactionalFromName: string;
+  turnstileSiteKey: string;
   server: string;
   agent: string;
   client: string;
@@ -60,6 +61,10 @@ export function rewriteWorkerConfigs(input: WorkerConfigInput): {
       .replaceAll(
         '"TRANSACTIONAL_FROM_NAME": "OpenEngage"',
         `"TRANSACTIONAL_FROM_NAME": ${JSON.stringify(input.transactionalFromName)}`,
+      )
+      .replaceAll(
+        '"TURNSTILE_SITE_KEY": ""',
+        `"TURNSTILE_SITE_KEY": ${JSON.stringify(input.turnstileSiteKey)}`,
       )
       .replaceAll('"APP_URL": "http://localhost:5173"', `"APP_URL": "${input.appUrl}"`),
     agent: input.agent

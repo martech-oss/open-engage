@@ -131,6 +131,20 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
     const body = await safeJson(context);
     if (!isRecord(body)) return apiError(context, 422, "invalid_payload", "入力が不正です");
     if (body["_website"]) return context.json({ data: { accepted: true } }, 202);
+    const idempotencyKey =
+      context.req.header("idempotency-key") ?? primitiveString(body["idempotencyKey"]);
+    if (idempotencyKey.length < 8 || idempotencyKey.length > 191) {
+      return apiError(context, 422, "idempotency_key_required", "Idempotency-Keyが必要です");
+    }
+    if (
+      await repository.submissionExists({
+        workspaceId: form.workspaceId,
+        formId: form.id,
+        idempotencyKey,
+      })
+    ) {
+      return context.json({ data: { accepted: true, duplicate: true } }, 202);
+    }
     const visitorId = primitiveString(body["oe_v"]);
     const answered = visitorId
       ? await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitorId)
@@ -147,16 +161,18 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         context.env.TURNSTILE_SECRET ?? "",
         primitiveString(body["cf-turnstile-response"]) || primitiveString(body["turnstileToken"]),
         context.req.header("cf-connecting-ip"),
+        idempotencyKey,
       ))
     ) {
       return apiError(context, 422, "turnstile_failed", "Turnstile検証に失敗しました");
     }
-    const idempotencyKey =
-      context.req.header("idempotency-key") ?? primitiveString(body["idempotencyKey"]);
-    if (idempotencyKey.length < 8 || idempotencyKey.length > 191) {
-      return apiError(context, 422, "idempotency_key_required", "Idempotency-Keyが必要です");
+    const submittedEmail = body["email"];
+    if (typeof submittedEmail !== "string") {
+      return apiError(context, 422, "invalid_form_fields", "入力項目が不正です", {
+        fields: [{ field: "email", reason: "required" }],
+      });
     }
-    const email = String(body["email"]).trim().toLowerCase();
+    const email = submittedEmail.trim().toLowerCase();
     const now = new Date().toISOString();
     const contactCreatedEventId = uuidv7();
     const formSubmittedEventId = uuidv7();

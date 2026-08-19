@@ -184,10 +184,12 @@ cp .dev.vars.example apps/server/.dev.vars
 BETTER_AUTH_SECRET=32文字以上のランダム値
 CREDENTIAL_ENCRYPTION_KEY=32バイト相当のランダム値
 TRACKING_SIGNING_SECRET=32文字以上のランダム値
-TURNSTILE_SECRET=任意
+TURNSTILE_SITE_KEY=Turnstileの公開サイトキー（任意）
+TURNSTILE_SECRET=Turnstileのシークレット（任意）
 ```
 
 `CREDENTIAL_ENCRYPTION_KEY`は、Outbound Webhookの署名資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
+Turnstileをフォームで有効にする場合は、`TURNSTILE_SITE_KEY`と`TURNSTILE_SECRET`の両方が必要です。片方だけの設定では公開フォームはfail closedになります。
 Email SendingはAPI keyやSecretを使わず、Server Workerの`EMAIL` bindingを利用します。ローカル設定は`remote: true`を指定していないため、メールを実送信せずWranglerのシミュレーターが受け取ります。
 
 ### 3. D1 migration
@@ -282,6 +284,8 @@ ServerとAgentを再デプロイしてください。通常HTMLを先に取得�
 初期状態のD1 `database_id` はプレースホルダーです。実際のD1 IDへ置き換えてください。
 
 ### Secret登録
+
+Turnstileを使う場合は、`apps/server/wrangler.jsonc`の`vars.TURNSTILE_SITE_KEY`へ公開サイトキーを設定します。`create-openengage`を使う初回セットアップではサイトキーとシークレットが順にpromptされ、サイトキーはWorker設定へ、シークレットはSecretへ登録されます。
 
 ```bash
 cd apps/server

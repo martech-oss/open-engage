@@ -78,6 +78,13 @@
       "when": 1787161029411,
       "tag": "0010_giant_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1787162456096,
+      "tag": "0011_condemned_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

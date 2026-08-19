@@ -254,6 +254,12 @@ export const contactEventOutbox = sqliteTable(
       table.status,
       table.createdAt,
     ),
+    index("contact_event_outbox_pending_due_idx")
+      .on(table.nextAttemptAt, table.createdAt)
+      .where(sql`${table.status} = 'pending'`),
+    index("contact_event_outbox_processing_lease_idx")
+      .on(table.leaseExpiresAt)
+      .where(sql`${table.status} = 'processing'`),
     check(
       "contact_event_outbox_status_check",
       sql`${table.status} IN ('pending', 'processing', 'processed')`,

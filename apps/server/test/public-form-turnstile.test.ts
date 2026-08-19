@@ -62,7 +62,12 @@ async function seedTurnstileForm(): Promise<{
     name: "Protected form",
     slug: "protected",
     status: "published",
-    definition: { fields: [{ key: "email", type: "email", required: true }] },
+    definition: {
+      fields: [
+        { key: "email", type: "email", required: true },
+        { key: "firstName", type: "text" },
+      ],
+    },
     allowedDomains: [],
     turnstileEnabled: true,
     successMessage: "Thanks",
@@ -75,6 +80,54 @@ async function seedTurnstileForm(): Promise<{
 }
 
 describe("public form Turnstile", () => {
+  it("catches an idempotent replay consuming the single-use token or revalidating its changed body", async () => {
+    const form = await seedTurnstileForm();
+    const runtime = bindings({
+      TURNSTILE_SITE_KEY: "site-test",
+      TURNSTILE_SECRET: "secret-test",
+    });
+    const idempotencyKey = crypto.randomUUID();
+    const verificationKeys: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = init?.body;
+      if (!(body instanceof FormData)) throw new Error("Siteverify must receive FormData");
+      const verificationKey = body.get("idempotency_key");
+      if (typeof verificationKey !== "string") throw new Error("Siteverify key is missing");
+      verificationKeys.push(verificationKey);
+      return Response.json({ success: verificationKeys.length === 1 });
+    });
+
+    const accepted = await appCall(form.path, runtime, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "replay@example.com",
+        firstName: "Original",
+        "cf-turnstile-response": "single-use-token",
+        idempotencyKey,
+      }),
+    });
+    expect(accepted.status).toBe(202);
+
+    const replay = await appCall(form.path, runtime, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        firstName: "Mutated",
+        "cf-turnstile-response": "single-use-token",
+        idempotencyKey,
+      }),
+    });
+    expect(replay.status).toBe(202);
+    expect(await replay.json()).toEqual({ data: { accepted: true, duplicate: true } });
+    expect(verificationKeys).toEqual([idempotencyKey]);
+
+    const contact = await env.DB.prepare(
+      "SELECT email, first_name AS firstName FROM contacts WHERE email = 'replay@example.com'",
+    ).first<{ email: string; firstName: string }>();
+    expect(contact).toEqual({ email: "replay@example.com", firstName: "Original" });
+  });
+
   it("catches hosted GET/POST accepting an enabled form with incomplete configuration", async () => {
     const form = await seedTurnstileForm();
     const siteKeyOnly = bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined });

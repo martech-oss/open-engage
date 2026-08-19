@@ -155,6 +155,11 @@ async function provision(
       projectDirectory,
     );
   }
+  const turnstileSiteKey = await text({
+    message: "Turnstile site key (optional)",
+    placeholder: "0x4AAAA...",
+  });
+  if (isCancel(turnstileSiteKey)) return abort();
   const serverConfigPath = resolve(projectDirectory, "apps/server/wrangler.jsonc");
   const clientConfigPath = resolve(projectDirectory, "apps/client/wrangler.jsonc");
   const agentConfigPath = resolve(projectDirectory, "apps/agent/wrangler.jsonc");
@@ -164,6 +169,7 @@ async function provision(
     databaseId,
     transactionalFromEmail: email.fromEmail,
     transactionalFromName: email.fromName,
+    turnstileSiteKey: String(turnstileSiteKey),
     server: await readFile(serverConfigPath, "utf8"),
     agent: await readFile(agentConfigPath, "utf8"),
     client: await readFile(clientConfigPath, "utf8"),

@@ -14,8 +14,51 @@ function publicCall(path: string, body: Record<string, unknown>): Promise<Respon
 }
 
 describe("public form definition validation", () => {
-  it("catches removal of implicit required-email and undeclared-field validation", async () => {
+  it("catches a custom email field suppressing the implicit required contact email", async () => {
     const { client, slug } = await seedWorkspaceClient(env.DB);
+    await client.website.createForm({
+      name: "Custom email field",
+      slug: "custom-email-field",
+      status: "published",
+      definition: {
+        fields: [{ key: "email", kind: "custom", type: "email", required: true }],
+      },
+      allowedDomains: [],
+      turnstileEnabled: false,
+      successMessage: "Thanks",
+    });
+
+    const hosted = await exports.default.fetch(
+      `http://localhost:8787/f/${slug}/custom-email-field`,
+    );
+    const html = await hosted.text();
+    expect(html).toContain('name="email"');
+    expect(html).toContain('name="custom:email"');
+
+    const missingStandardEmail = await publicCall(`/f/${slug}/custom-email-field`, {
+      "custom:email": "custom@example.com",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(missingStandardEmail.status).toBe(422);
+    const undefinedContacts = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM contacts WHERE email = 'undefined'",
+    ).first<{ count: number }>();
+    expect(undefinedContacts?.count).toBe(0);
+
+    const valid = await publicCall(`/f/${slug}/custom-email-field`, {
+      email: "contact@example.com",
+      "custom:email": "custom@example.com",
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(valid.status).toBe(202);
+    const contact = await env.DB.prepare("SELECT email FROM contacts WHERE email = ?")
+      .bind("contact@example.com")
+      .first<{ email: string }>();
+    expect(contact).toEqual({ email: "contact@example.com" });
+  });
+
+  it("catches removal of implicit required-email and undeclared-field validation", async () => {
+    const { client, slug, workspaceId } = await seedWorkspaceClient(env.DB);
     await client.website.createForm({
       name: "Definition gate",
       slug: "definition-gate",
@@ -39,8 +82,10 @@ describe("public form definition validation", () => {
     expect(undeclared.status).toBe(422);
 
     const counts = await env.DB.prepare(
-      "SELECT (SELECT COUNT(*) FROM contacts) AS contacts, (SELECT COUNT(*) FROM form_submissions) AS submissions",
-    ).first<{ contacts: number; submissions: number }>();
+      "SELECT (SELECT COUNT(*) FROM contacts WHERE workspace_id = ?) AS contacts, (SELECT COUNT(*) FROM form_submissions WHERE workspace_id = ?) AS submissions",
+    )
+      .bind(workspaceId, workspaceId)
+      .first<{ contacts: number; submissions: number }>();
     expect(counts).toEqual({ contacts: 0, submissions: 0 });
   });
 

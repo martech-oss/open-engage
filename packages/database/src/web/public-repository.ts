@@ -377,7 +377,7 @@ export class PublicFormRepository extends DatabaseRepository {
     });
   }
 
-  private async submissionExists(
+  public async submissionExists(
     input: Pick<PersistPublicFormSubmissionInput, "workspaceId" | "formId" | "idempotencyKey">,
   ): Promise<boolean> {
     const row = await this.database.orm
