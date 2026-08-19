@@ -1,6 +1,7 @@
 import {
   contactEvents,
   ContactResourceRepository,
+  PublicFormRepository,
   type OpenEngageDatabase,
   uuidv7,
 } from "@openengage/database";
@@ -41,6 +42,62 @@ export async function recordContactEvent(
     occurredAt,
     createdAt: new Date().toISOString(),
   });
+  return applyContactEventSideEffects(database, { ...input, id: eventId, occurredAt });
+}
+
+export async function processPendingPublicFormEvent(
+  database: OpenEngageDatabase,
+  eventId: string,
+  queue?: Queue,
+): Promise<void> {
+  const repository = new PublicFormRepository(database);
+  const startedAt = new Date();
+  const leaseId = uuidv7();
+  const event = await repository.claimContactEvent(
+    eventId,
+    startedAt.toISOString(),
+    leaseId,
+    new Date(startedAt.getTime() + 30_000).toISOString(),
+  );
+  if (!event) return;
+  try {
+    await applyContactEventSideEffects(database, { ...event, ...(queue ? { queue } : {}) });
+    await repository.markContactEventProcessed(eventId, leaseId);
+  } catch (error) {
+    await repository.markContactEventFailed(
+      eventId,
+      leaseId,
+      error,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+    throw error;
+  }
+}
+
+export async function retryPendingPublicFormEvents(
+  database: OpenEngageDatabase,
+  queue: Queue,
+  limit = 50,
+): Promise<Array<{ eventId: string; error: unknown }>> {
+  const repository = new PublicFormRepository(database);
+  const eventIds = await repository.listDueContactEventIds(new Date().toISOString(), limit);
+  const failures: Array<{ eventId: string; error: unknown }> = [];
+  for (const eventId of eventIds) {
+    try {
+      await processPendingPublicFormEvent(database, eventId, queue);
+    } catch (error) {
+      failures.push({ eventId, error });
+    }
+  }
+  return failures;
+}
+
+async function applyContactEventSideEffects(
+  database: OpenEngageDatabase,
+  input: ContactEventInput & { id: string; occurredAt: string },
+): Promise<{ eventId: string; enrollmentCount: number }> {
+  const eventId = input.id;
+  const occurredAt = input.occurredAt;
   if (!input.contactId) return { eventId, enrollmentCount: 0 };
   const activeContactId = await new ContactResourceRepository(database, {
     workspaceId: input.workspaceId,

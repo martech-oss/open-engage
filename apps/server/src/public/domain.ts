@@ -50,6 +50,9 @@ export function pagePatternMatches(pageUrl: string, pattern: string): boolean {
 export function redactFormPayload(value: Record<string, unknown>): Record<string, unknown> {
   const result = { ...value };
   delete result["turnstileToken"];
+  delete result["cf-turnstile-response"];
+  delete result["idempotencyKey"];
+  delete result["oe_v"];
   delete result["_website"];
   return result;
 }

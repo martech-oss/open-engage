@@ -8,6 +8,7 @@ import type {
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   CompanyRepository,
+  isConstraintError,
   writeAuditLog,
   type OpenEngageDatabase,
   type CompanySummary as RepositoryAccountSummary,
@@ -64,6 +65,7 @@ export async function createCompany(
   try {
     company = await new CompanyRepository(database, workspace).createCompany(input);
   } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new CompanyConflictError(error);
   }
   background.waitUntil(
@@ -85,6 +87,7 @@ export async function updateCompany(
   try {
     return await new CompanyRepository(database, workspace).updateCompany(id, input);
   } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new CompanyConflictError(error);
   }
 }

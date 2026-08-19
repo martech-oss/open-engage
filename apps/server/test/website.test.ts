@@ -39,7 +39,10 @@ describe("Website center", () => {
       status: "published",
       definition: {
         style: "inline",
-        fields: [{ key: "email", type: "email", required: true }],
+        fields: [
+          { key: "email", type: "email", required: true },
+          { key: "firstName", type: "text" },
+        ],
       },
       allowedDomains: ["example.com"],
       turnstileEnabled: false,

@@ -5,7 +5,7 @@ import { subscriptionTopicRowSchema, type SubscriptionTopicRow } from "@openenga
 
 import { contacts } from "../contacts/schema";
 import { deliveries } from "../messaging/schema";
-import { nowIso } from "../shared/database-utils";
+import { isConstraintError, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { consentEvents, contactSubscriptions, subscriptionTopics, suppressions } from "./schema";
@@ -62,7 +62,8 @@ export class ConsentRepository extends WorkspaceRepository {
         createdAt: now,
         updatedAt: now,
       });
-    } catch {
+    } catch (error) {
+      if (!isConstraintError(error)) throw error;
       // The only constraint on this insert is unique(workspace_id, slug).
       return { kind: "conflict" };
     }

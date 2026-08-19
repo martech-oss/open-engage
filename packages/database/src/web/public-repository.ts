@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { stringArraySchema } from "@openengage/core/shared";
 import {
@@ -9,11 +9,12 @@ import {
 } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import { contacts } from "../contacts/schema";
-import { nowIso } from "../shared/database-utils";
+import { contactEventOutbox, contactEvents, contacts } from "../contacts/schema";
+import { isConstraintError, nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { dueContactEventWork, isContactEmailConstraintError } from "./public-form-persistence";
 import {
   assets,
   forms,
@@ -42,6 +43,36 @@ export interface PublicFormRecord {
   allowedDomains: string[];
   turnstileEnabled: boolean;
   successMessage: string;
+}
+
+export interface PublicFormContactEvent {
+  id: string;
+  workspaceId: string;
+  contactId: string | null;
+  type: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  properties: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface PersistPublicFormSubmissionInput {
+  workspaceId: string;
+  formId: string;
+  email: string;
+  idempotencyKey: string;
+  contactFields: {
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    customFields: Record<string, unknown>;
+  };
+  payload: Record<string, unknown>;
+  ipHash: string | null;
+  occurredAt: string;
+  submissionId: string;
+  contactCreatedEventId: string;
+  formSubmittedEventId: string;
 }
 
 /**
@@ -96,6 +127,137 @@ export class PublicFormRepository extends DatabaseRepository {
       .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.email, email)))
       .get();
     return row?.id ?? null;
+  }
+
+  /**
+   * Accepts one submission in a single D1 transaction. The form submission's
+   * unique key is part of the same batch as contact mutation and event work,
+   * so a duplicate race rolls every earlier statement back.
+   */
+  public async persistSubmission(
+    input: PersistPublicFormSubmissionInput,
+  ): Promise<"accepted" | "duplicate"> {
+    if (await this.submissionExists(input)) return "duplicate";
+    let retriedEmailRace = false;
+
+    for (;;) {
+      const existingContactId = await this.findContactIdByEmail(input.workspaceId, input.email);
+      try {
+        await this.persistSubmissionBatch(input, existingContactId);
+        return "accepted";
+      } catch (error) {
+        if (!isConstraintError(error)) throw error;
+        if (await this.submissionExists(input)) return "duplicate";
+        if (
+          !retriedEmailRace &&
+          existingContactId === null &&
+          isContactEmailConstraintError(error) &&
+          (await this.findContactIdByEmail(input.workspaceId, input.email))
+        ) {
+          retriedEmailRace = true;
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  public async listDueContactEventIds(now: string, limit = 50): Promise<string[]> {
+    const rows = await this.database.orm
+      .select({ eventId: contactEventOutbox.eventId })
+      .from(contactEventOutbox)
+      .where(dueContactEventWork(now))
+      .orderBy(asc(contactEventOutbox.createdAt))
+      .limit(limit);
+    return rows.map((row) => row.eventId);
+  }
+
+  public async claimContactEvent(
+    eventId: string,
+    now: string,
+    leaseId: string,
+    leaseExpiresAt: string,
+  ): Promise<PublicFormContactEvent | null> {
+    const claimed = await this.database.orm
+      .update(contactEventOutbox)
+      .set({
+        status: "processing",
+        attemptCount: sql`${contactEventOutbox.attemptCount} + 1`,
+        leaseId,
+        leaseExpiresAt,
+      })
+      .where(and(eq(contactEventOutbox.eventId, eventId), dueContactEventWork(now)))
+      .returning({ eventId: contactEventOutbox.eventId })
+      .get();
+    if (!claimed) return null;
+    const row = await this.database.orm
+      .select({
+        id: contactEvents.id,
+        workspaceId: contactEvents.workspaceId,
+        contactId: contactEvents.contactId,
+        type: contactEvents.type,
+        resourceType: contactEvents.resourceType,
+        resourceId: contactEvents.resourceId,
+        properties: contactEvents.properties,
+        occurredAt: contactEvents.occurredAt,
+      })
+      .from(contactEventOutbox)
+      .innerJoin(contactEvents, eq(contactEvents.id, contactEventOutbox.eventId))
+      .where(and(eq(contactEventOutbox.eventId, eventId), eq(contactEventOutbox.leaseId, leaseId)))
+      .get();
+    if (!row) return null;
+    const properties: unknown = JSON.parse(row.properties);
+    return {
+      ...row,
+      properties:
+        properties && typeof properties === "object" && !Array.isArray(properties)
+          ? (properties as Record<string, unknown>)
+          : {},
+    };
+  }
+
+  public async markContactEventProcessed(eventId: string, leaseId: string): Promise<void> {
+    await this.database.orm
+      .update(contactEventOutbox)
+      .set({
+        status: "processed",
+        leaseId: null,
+        leaseExpiresAt: null,
+        nextAttemptAt: null,
+        lastError: null,
+        processedAt: nowIso(),
+      })
+      .where(
+        and(
+          eq(contactEventOutbox.eventId, eventId),
+          eq(contactEventOutbox.status, "processing"),
+          eq(contactEventOutbox.leaseId, leaseId),
+        ),
+      );
+  }
+
+  public async markContactEventFailed(
+    eventId: string,
+    leaseId: string,
+    error: unknown,
+    nextAttemptAt: string,
+  ): Promise<void> {
+    await this.database.orm
+      .update(contactEventOutbox)
+      .set({
+        status: "pending",
+        leaseId: null,
+        leaseExpiresAt: null,
+        nextAttemptAt,
+        lastError: (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
+      })
+      .where(
+        and(
+          eq(contactEventOutbox.eventId, eventId),
+          eq(contactEventOutbox.status, "processing"),
+          eq(contactEventOutbox.leaseId, leaseId),
+        ),
+      );
   }
 
   public async updateContactFromFormSubmission(
@@ -213,6 +375,115 @@ export class PublicFormRepository extends DatabaseRepository {
       ipHash: input.ipHash,
       createdAt: nowIso(),
     });
+  }
+
+  private async submissionExists(
+    input: Pick<PersistPublicFormSubmissionInput, "workspaceId" | "formId" | "idempotencyKey">,
+  ): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: formSubmissions.id })
+      .from(formSubmissions)
+      .where(
+        and(
+          eq(formSubmissions.workspaceId, input.workspaceId),
+          eq(formSubmissions.formId, input.formId),
+          eq(formSubmissions.idempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .get();
+    return Boolean(row);
+  }
+
+  private async persistSubmissionBatch(
+    input: PersistPublicFormSubmissionInput,
+    existingContactId: string | null,
+  ): Promise<void> {
+    const orm = this.database.orm;
+    const contactId = existingContactId ?? uuidv7();
+    const contactMutation = existingContactId
+      ? orm
+          .update(contacts)
+          .set({
+            firstName: sql`coalesce(${input.contactFields.firstName}, ${contacts.firstName})`,
+            lastName: sql`coalesce(${input.contactFields.lastName}, ${contacts.lastName})`,
+            phone: sql`coalesce(${input.contactFields.phone}, ${contacts.phone})`,
+            ...(Object.keys(input.contactFields.customFields).length > 0
+              ? {
+                  customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), ${JSON.stringify(input.contactFields.customFields)})`,
+                }
+              : {}),
+            updatedAt: input.occurredAt,
+          })
+          .where(and(eq(contacts.workspaceId, input.workspaceId), eq(contacts.id, contactId)))
+      : orm.insert(contacts).values({
+          id: contactId,
+          workspaceId: input.workspaceId,
+          email: input.email,
+          firstName: input.contactFields.firstName,
+          lastName: input.contactFields.lastName,
+          phone: input.contactFields.phone,
+          stage: "lead",
+          score: 0,
+          status: "active",
+          customFields: JSON.stringify(input.contactFields.customFields),
+          createdAt: input.occurredAt,
+          updatedAt: input.occurredAt,
+        });
+    const submission = orm.insert(formSubmissions).values({
+      id: input.submissionId,
+      workspaceId: input.workspaceId,
+      formId: input.formId,
+      contactId,
+      idempotencyKey: input.idempotencyKey,
+      payload: JSON.stringify(input.payload),
+      ipHash: input.ipHash,
+      createdAt: input.occurredAt,
+    });
+    const formSubmittedEvent = orm.insert(contactEvents).values({
+      id: input.formSubmittedEventId,
+      workspaceId: input.workspaceId,
+      contactId,
+      type: "form_submitted",
+      resourceType: "form",
+      resourceId: input.formId,
+      properties: JSON.stringify({ formId: input.formId }),
+      occurredAt: input.occurredAt,
+      createdAt: input.occurredAt,
+    });
+    const formSubmittedWork = orm.insert(contactEventOutbox).values({
+      eventId: input.formSubmittedEventId,
+      workspaceId: input.workspaceId,
+      status: "pending",
+      createdAt: input.occurredAt,
+    });
+
+    if (existingContactId) {
+      await orm.batch([contactMutation, submission, formSubmittedEvent, formSubmittedWork]);
+      return;
+    }
+    await orm.batch([
+      contactMutation,
+      submission,
+      orm.insert(contactEvents).values({
+        id: input.contactCreatedEventId,
+        workspaceId: input.workspaceId,
+        contactId,
+        type: "contact_created",
+        resourceType: "contact",
+        resourceId: contactId,
+        properties: "{}",
+        occurredAt: input.occurredAt,
+        createdAt: input.occurredAt,
+      }),
+      orm.insert(contactEventOutbox).values({
+        eventId: input.contactCreatedEventId,
+        workspaceId: input.workspaceId,
+        status: "pending",
+        createdAt: input.occurredAt,
+      }),
+      formSubmittedEvent,
+      formSubmittedWork,
+    ]);
   }
 }
 

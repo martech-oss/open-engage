@@ -7,6 +7,7 @@ import type {
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   ConsentRepository,
+  isConstraintError,
   MessagingRepository,
   SegmentRepository,
   type OpenEngageDatabase,
@@ -31,7 +32,8 @@ export async function createMessageVariable(
 ): Promise<{ id: string }> {
   try {
     return await new MessagingRepository(database, workspace).createMessageVariable(input);
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new VariableConflictError();
   }
 }
@@ -44,7 +46,8 @@ export async function updateMessageVariable(
 ): Promise<boolean> {
   try {
     return await new MessagingRepository(database, workspace).updateMessageVariable(id, input);
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new VariableConflictError();
   }
 }

@@ -228,6 +228,39 @@ export const contactEvents = sqliteTable(
   ],
 );
 
+/** Durable retry marker for contact-event side effects accepted with a public form. */
+export const contactEventOutbox = sqliteTable(
+  "contact_event_outbox",
+  {
+    eventId: text("event_id")
+      .primaryKey()
+      .notNull()
+      .references(() => contactEvents.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    status: text().default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: text("next_attempt_at"),
+    leaseId: text("lease_id"),
+    leaseExpiresAt: text("lease_expires_at"),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull(),
+    processedAt: text("processed_at"),
+  },
+  (table) => [
+    index("contact_event_outbox_workspace_status_idx").on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "contact_event_outbox_status_check",
+      sql`${table.status} IN ('pending', 'processing', 'processed')`,
+    ),
+  ],
+);
+
 export const importJobs = sqliteTable(
   "import_jobs",
   {

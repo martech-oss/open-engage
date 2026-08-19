@@ -5,6 +5,7 @@ export interface RuntimeSecrets {
   BETTER_AUTH_SECRET: string;
   CREDENTIAL_ENCRYPTION_KEY: string;
   TRACKING_SIGNING_SECRET: string;
+  TURNSTILE_SITE_KEY?: string;
   TURNSTILE_SECRET?: string;
 }
 

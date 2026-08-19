@@ -11,6 +11,7 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   ContactRepository,
   ContactResourceRepository,
+  isConstraintError,
   uuidv7,
   type OpenEngageDatabase,
 } from "@openengage/database";
@@ -104,7 +105,8 @@ export async function createTag(
       name: input.name,
       color: input.color,
     });
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new ResourceConflictError("tag");
   }
   return { id, slug, name: input.name, color: input.color };
@@ -123,7 +125,8 @@ export async function updateTag(
       name: input.name,
       color: input.color,
     });
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new ResourceConflictError("tag");
   }
 }

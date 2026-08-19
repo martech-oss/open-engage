@@ -144,9 +144,13 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
 export interface PublicFormRenderOptions {
   /** Field keys the identified visitor has already answered, for Progressive Profiling. */
   answered?: ReadonlySet<string>;
+  /** Visitor transport used to derive the same Progressive Profiling view on POST. */
+  visitorId?: string;
+  /** Public key for the Cloudflare Turnstile widget when protection is enabled. */
+  turnstileSiteKey?: string;
 }
 
-interface RenderableField {
+export interface RenderableField {
   key: string;
   label: string;
   type: string;
@@ -170,8 +174,17 @@ export function renderPublicForm(
   actionUrl: string,
   options: PublicFormRenderOptions = {},
 ): string {
-  const fields = selectFields(definition, options.answered ?? new Set());
+  const fields = selectPublicFormFields(definition, options.answered ?? new Set());
   const controls = fields.map(renderControl).join("");
+  const visitorTransport = options.visitorId
+    ? `<input type="hidden" name="oe_v" value="${escapeHtml(options.visitorId)}">`
+    : "";
+  const turnstile = options.turnstileSiteKey
+    ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(options.turnstileSiteKey)}"></div>`
+    : "";
+  const turnstileScript = options.turnstileSiteKey
+    ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>'
+    : "";
   const endpoint = escapeHtml(actionUrl.split("?")[0] ?? actionUrl);
   return `<!doctype html>
 <html lang="ja">
@@ -194,7 +207,9 @@ export function renderPublicForm(
   <form id="signup-form">
     <h1>${escapeHtml(name)}</h1>
     ${controls}
+    ${visitorTransport}
     <label class="hidden" aria-hidden="true">Website<input name="_website" tabindex="-1" autocomplete="off"></label>
+    ${turnstile}
     <button type="submit">送信する</button>
     <p id="result" role="status"></p>
   </form>
@@ -225,6 +240,7 @@ export function renderPublicForm(
       }
     });
   </script>
+  ${turnstileScript}
 </body>
 </html>`;
 }
@@ -234,7 +250,7 @@ export function renderPublicForm(
  * render; progressive ones drop out once answered, and only a few of the
  * remaining ones are asked at a time so the form stays short.
  */
-function selectFields(
+export function selectPublicFormFields(
   definition: Record<string, unknown>,
   answered: ReadonlySet<string>,
 ): RenderableField[] {

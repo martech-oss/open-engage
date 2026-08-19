@@ -9,6 +9,7 @@ import {
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";
 import { PermanentChannelError } from "../channels";
+import { retryPendingPublicFormEvents } from "../contacts/event-service";
 import { processContactExport, processContactImport } from "../contacts/worker";
 import { type RuntimeEnv } from "../env";
 import { processCloudflareEmailEvent } from "../messaging/cloudflare-events";
@@ -36,6 +37,10 @@ export async function scheduled(
     return;
   }
   const database = createDatabase(env.DB);
+  const publicFormEventFailures = await retryPendingPublicFormEvents(database, env.JOBS_QUEUE);
+  for (const failure of publicFormEventFailures) {
+    logError("public_form.event_retry_failed", failure.error, { eventId: failure.eventId });
+  }
   await enrollInactiveContacts(database);
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
