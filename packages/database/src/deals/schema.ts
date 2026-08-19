@@ -20,6 +20,9 @@ export const dealPipelines = sqliteTable(
   (table) => [
     index("deal_pipelines_workspace_archived_idx").on(table.workspaceId, table.archivedAt),
     uniqueIndex("deal_pipelines_workspace_name_unique").on(table.workspaceId, table.name),
+    uniqueIndex("deal_pipelines_workspace_default_unique")
+      .on(table.workspaceId)
+      .where(sql`${table.isDefault} = 1 AND ${table.archivedAt} IS NULL`),
   ],
 );
 

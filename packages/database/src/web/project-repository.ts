@@ -1,6 +1,6 @@
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 
-import type { ProjectRow } from "@openengage/core/projects";
+import type { ProjectResourceType, ProjectRow } from "@openengage/core/projects";
 
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
@@ -57,7 +57,7 @@ export class ProjectRepository extends WorkspaceRepository {
 
   public async addItem(input: {
     projectId: string;
-    resourceType: string;
+    resourceType: ProjectResourceType;
     resourceId: string;
   }): Promise<ProjectItemOutcome> {
     const project = await this.database.orm

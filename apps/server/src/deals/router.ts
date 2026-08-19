@@ -59,6 +59,7 @@ export const updatePipelineProcedure = authed.deals.updatePipeline.handler(
     );
     if (outcome.kind === "not_found") throw errors.DEAL_PIPELINE_NOT_FOUND();
     if (outcome.kind === "conflict") throw errors.DEAL_PIPELINE_CONFLICT();
+    if (outcome.kind === "default_required") throw errors.DEFAULT_DEAL_PIPELINE_REQUIRED();
     if (outcome.kind === "stage_in_use") throw errors.DEAL_STAGE_IN_USE();
     return outcome.pipeline;
   },

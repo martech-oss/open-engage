@@ -209,7 +209,7 @@ describe("Email sequence drafts", () => {
 
     const first = await repository.apply(proposal, link);
     await env.DB.prepare(
-      "DELETE FROM project_items WHERE workspace_id = ? AND project_id = ? AND resource_type = 'email' AND resource_id = ?",
+      "DELETE FROM project_items WHERE workspace_id = ? AND project_id = ? AND resource_type = 'email_sequence' AND resource_id = ?",
     )
       .bind(owner.workspaceId, brief.id, proposal.emails[1]!.templateId)
       .run();

@@ -47,6 +47,7 @@ export type DealTaskOutcome =
 export type PipelineCreateOutcome = { kind: "conflict" } | { kind: "ok"; pipeline: DealPipeline };
 export type PipelineWriteOutcome =
   | { kind: "conflict" }
+  | { kind: "default_required" }
   | { kind: "not_found" }
   | { kind: "stage_in_use" }
   | { kind: "ok"; pipeline: DealPipeline };

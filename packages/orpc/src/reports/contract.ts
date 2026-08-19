@@ -1,5 +1,4 @@
 import { oc } from "@orpc/contract";
-import * as z from "zod";
 
 import {
   automationsReportSchema,
@@ -8,6 +7,7 @@ import {
   dealsReportSchema,
   emailsReportSchema,
   reportDateRangeSchema,
+  reportQuerySchema,
   siteReportSchema,
 } from "@openengage/core/reports";
 
@@ -17,16 +17,6 @@ import { authedErrors } from "../shared/errors";
 const analystErrors = authedErrors;
 
 const rangeInput = reportDateRangeSchema;
-const dealsInput = z.object({
-  from: z.iso.date(),
-  to: z.iso.date(),
-  currency: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z]{3}$/)
-    .optional(),
-});
 
 export const reportsContract = {
   contacts: oc
@@ -47,7 +37,7 @@ export const reportsContract = {
   deals: oc
     .route({ method: "GET", path: "/reports/deals" })
     .errors(analystErrors)
-    .input(dealsInput)
+    .input(reportQuerySchema)
     .output(dealsReportSchema),
   site: oc
     .route({ method: "GET", path: "/reports/site" })
@@ -57,6 +47,6 @@ export const reportsContract = {
   campaigns: oc
     .route({ method: "GET", path: "/reports/campaigns" })
     .errors(analystErrors)
-    .input(dealsInput)
+    .input(reportQuerySchema)
     .output(campaignsReportSchema),
 };

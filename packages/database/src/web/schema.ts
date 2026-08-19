@@ -10,6 +10,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
+import { PROJECT_RESOURCE_TYPES } from "@openengage/core/projects";
 import {
   ASSET_CHECKSUM_ALGORITHMS,
   ASSET_KINDS,
@@ -201,10 +202,7 @@ export const projectItems = sqliteTable(
       columns: [table.workspaceId, table.projectId, table.resourceType, table.resourceId],
       name: "project_items_workspace_id_project_id_resource_type_resource_id_pk",
     }),
-    check(
-      "project_items_resource_type_check",
-      sql`${table.resourceType} IN ('automation', 'email', 'form', 'page', 'redirect', 'segment')`,
-    ),
+    checkEnum("project_items_resource_type_check", table.resourceType, PROJECT_RESOURCE_TYPES),
     check(
       "project_items_brief_revision_check",
       sql`${table.briefRevision} IS NULL OR ${table.briefRevision} >= 1`,

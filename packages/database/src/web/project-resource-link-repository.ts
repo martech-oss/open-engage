@@ -1,16 +1,4 @@
-import {
-  and,
-  desc,
-  eq,
-  exists,
-  inArray,
-  isNull,
-  ne,
-  notExists,
-  sql,
-  type SQL,
-  type SQLWrapper,
-} from "drizzle-orm";
+import { and, desc, eq, exists, inArray, isNull, notExists, sql } from "drizzle-orm";
 
 import {
   projectLinkedResourceSchema,
@@ -20,18 +8,14 @@ import {
 import type { WorkspaceContext } from "@openengage/core/shared";
 
 import { member } from "../auth/schema";
-import { automations } from "../automations/schema";
-import { emailTemplates } from "../messaging/schema";
-import { segments } from "../segments/schema";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { conditionalProjectAudit, uniqueOperationIso } from "./project-brief-persistence";
-import { forms, landingPages, projectBriefs, projectItems, projects } from "./schema";
-
-interface ResolvedResource {
-  name: string;
-  status: string | null;
-  availability: "available" | "archived" | "missing";
-}
+import {
+  createProjectResourceResolverRegistry,
+  projectResourceKey,
+  resolveProjectResources,
+} from "./project-resource-resolvers";
+import { projectBriefs, projectItems, projects } from "./schema";
 
 export type ProjectResourceLinkOutcome =
   | { kind: "done"; changed: boolean }
@@ -50,11 +34,11 @@ export class ProjectResourceLinkRepository extends WorkspaceRepository<Workspace
       .from(projectItems)
       .where(and(this.inWorkspace(projectItems), eq(projectItems.projectId, projectId)))
       .orderBy(desc(projectItems.createdAt));
-    const resources = await this.resolveResources(rows);
+    const resources = await resolveProjectResources(this.resourceResolvers(), rows);
     return rows.map((row) =>
       projectLinkedResourceSchema.parse({
         ...row,
-        ...(resources.get(resourceKey(row.resourceType, row.resourceId)) ?? {
+        ...(resources.get(projectResourceKey(row.resourceType, row.resourceId)) ?? {
           name: row.resourceId,
           status: null,
           availability: "missing" as const,
@@ -65,7 +49,7 @@ export class ProjectResourceLinkRepository extends WorkspaceRepository<Workspace
   }
 
   public async isAvailable(type: ProjectResourceType, id: string): Promise<boolean> {
-    return Boolean(await this.readAvailable(type, id));
+    return Boolean(await this.resourceResolvers()[type].readAvailable(id));
   }
 
   public async addApproved(input: {
@@ -107,7 +91,7 @@ export class ProjectResourceLinkRepository extends WorkspaceRepository<Workspace
           eq(projectBriefs.projectId, input.projectId),
           exists(base),
           notExists(currentLink),
-          this.availableCondition(input.resourceType, input.resourceId),
+          this.resourceResolvers()[input.resourceType].availableCondition(input.resourceId),
         ),
       );
     const marker = this.database.orm
@@ -346,65 +330,6 @@ export class ProjectResourceLinkRepository extends WorkspaceRepository<Workspace
     )`;
   }
 
-  private availableCondition(type: ProjectResourceType, id: string): SQL {
-    if (type === "automation") {
-      return exists(
-        this.database.orm
-          .select({ id: automations.id })
-          .from(automations)
-          .where(
-            and(
-              this.inWorkspace(automations),
-              eq(automations.id, id),
-              ne(automations.status, "archived"),
-            ),
-          ),
-      );
-    }
-    if (type === "email") {
-      return exists(
-        this.database.orm
-          .select({ id: emailTemplates.id })
-          .from(emailTemplates)
-          .where(
-            and(
-              this.inWorkspace(emailTemplates),
-              eq(emailTemplates.id, id),
-              isNull(emailTemplates.archivedAt),
-            ),
-          ),
-      );
-    }
-    if (type === "segment") {
-      return exists(
-        this.database.orm
-          .select({ id: segments.id })
-          .from(segments)
-          .where(and(this.inWorkspace(segments), eq(segments.id, id))),
-      );
-    }
-    if (type === "form") {
-      return exists(
-        this.database.orm
-          .select({ id: forms.id })
-          .from(forms)
-          .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived"))),
-      );
-    }
-    return exists(
-      this.database.orm
-        .select({ id: landingPages.id })
-        .from(landingPages)
-        .where(
-          and(
-            this.inWorkspace(landingPages),
-            eq(landingPages.id, id),
-            ne(landingPages.status, "archived"),
-          ),
-        ),
-    );
-  }
-
   private async linkExists(input: {
     projectId: string;
     resourceType: ProjectResourceType;
@@ -426,172 +351,7 @@ export class ProjectResourceLinkRepository extends WorkspaceRepository<Workspace
     );
   }
 
-  private async readAvailable(type: ProjectResourceType, id: string): Promise<unknown> {
-    if (type === "automation") {
-      return this.database.orm
-        .select({ id: automations.id })
-        .from(automations)
-        .where(
-          and(
-            this.inWorkspace(automations),
-            eq(automations.id, id),
-            ne(automations.status, "archived"),
-          ),
-        )
-        .get();
-    }
-    if (type === "email") {
-      return this.database.orm
-        .select({ id: emailTemplates.id })
-        .from(emailTemplates)
-        .where(
-          and(
-            this.inWorkspace(emailTemplates),
-            eq(emailTemplates.id, id),
-            isNull(emailTemplates.archivedAt),
-          ),
-        )
-        .get();
-    }
-    if (type === "segment") {
-      return this.database.orm
-        .select({ id: segments.id })
-        .from(segments)
-        .where(and(this.inWorkspace(segments), eq(segments.id, id)))
-        .get();
-    }
-    if (type === "form") {
-      return this.database.orm
-        .select({ id: forms.id })
-        .from(forms)
-        .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived")))
-        .get();
-    }
-    return this.database.orm
-      .select({ id: landingPages.id })
-      .from(landingPages)
-      .where(
-        and(
-          this.inWorkspace(landingPages),
-          eq(landingPages.id, id),
-          ne(landingPages.status, "archived"),
-        ),
-      )
-      .get();
+  private resourceResolvers() {
+    return createProjectResourceResolverRegistry(this.database, this.context.workspaceId);
   }
-
-  private async resolveResources(
-    rows: Array<{ resourceType: string; resourceId: string }>,
-  ): Promise<Map<string, ResolvedResource>> {
-    const ids = (type: ProjectResourceType) =>
-      rows.filter((row) => row.resourceType === type).map((row) => row.resourceId);
-    const [automationRows, emailRows, segmentRows, formRows, pageRows] = await Promise.all([
-      this.resolveAutomations(ids("automation")),
-      this.resolveEmails(ids("email")),
-      this.resolveSegments(ids("segment")),
-      this.resolveForms(ids("form")),
-      this.resolvePages(ids("page")),
-    ]);
-    return new Map(
-      [...automationRows, ...emailRows, ...segmentRows, ...formRows, ...pageRows].map((item) => [
-        resourceKey(item.type, item.id),
-        item.resource,
-      ]),
-    );
-  }
-
-  private async resolveAutomations(ids: string[]) {
-    if (ids.length === 0) return [];
-    const rows = await this.database.orm
-      .select({ id: automations.id, name: automations.name, status: automations.status })
-      .from(automations)
-      .where(and(this.inWorkspace(automations), inJsonIds(automations.id, ids)));
-    return rows.map((row) => ({
-      type: "automation" as const,
-      id: row.id,
-      resource: {
-        name: row.name,
-        status: row.status,
-        availability: row.status === "archived" ? ("archived" as const) : ("available" as const),
-      },
-    }));
-  }
-
-  private async resolveEmails(ids: string[]) {
-    if (ids.length === 0) return [];
-    const rows = await this.database.orm
-      .select({
-        id: emailTemplates.id,
-        name: emailTemplates.name,
-        archivedAt: emailTemplates.archivedAt,
-        publishedAt: emailTemplates.publishedAt,
-      })
-      .from(emailTemplates)
-      .where(and(this.inWorkspace(emailTemplates), inJsonIds(emailTemplates.id, ids)));
-    return rows.map((row) => ({
-      type: "email" as const,
-      id: row.id,
-      resource: {
-        name: row.name,
-        status: row.archivedAt ? "archived" : row.publishedAt ? "published" : "draft",
-        availability: row.archivedAt ? ("archived" as const) : ("available" as const),
-      },
-    }));
-  }
-
-  private async resolveSegments(ids: string[]) {
-    if (ids.length === 0) return [];
-    const rows = await this.database.orm
-      .select({ id: segments.id, name: segments.name, status: segments.evaluationStatus })
-      .from(segments)
-      .where(and(this.inWorkspace(segments), inJsonIds(segments.id, ids)));
-    return rows.map((row) => ({
-      type: "segment" as const,
-      id: row.id,
-      resource: { name: row.name, status: row.status, availability: "available" as const },
-    }));
-  }
-
-  private async resolveForms(ids: string[]) {
-    if (ids.length === 0) return [];
-    const rows = await this.database.orm
-      .select({ id: forms.id, name: forms.name, status: forms.status })
-      .from(forms)
-      .where(and(this.inWorkspace(forms), inJsonIds(forms.id, ids)));
-    return rows.map((row) => ({
-      type: "form" as const,
-      id: row.id,
-      resource: {
-        name: row.name,
-        status: row.status,
-        availability: row.status === "archived" ? ("archived" as const) : ("available" as const),
-      },
-    }));
-  }
-
-  private async resolvePages(ids: string[]) {
-    if (ids.length === 0) return [];
-    const rows = await this.database.orm
-      .select({ id: landingPages.id, name: landingPages.name, status: landingPages.status })
-      .from(landingPages)
-      .where(and(this.inWorkspace(landingPages), inJsonIds(landingPages.id, ids)));
-    return rows.map((row) => ({
-      type: "page" as const,
-      id: row.id,
-      resource: {
-        name: row.name,
-        status: row.status,
-        availability: row.status === "archived" ? ("archived" as const) : ("available" as const),
-      },
-    }));
-  }
-}
-
-function resourceKey(type: string, id: string): string {
-  return `${type}:${id}`;
-}
-
-/** D1 caps bound parameters at 100; JSON1 keeps each resource-type lookup to one bind. */
-function inJsonIds(column: SQLWrapper, ids: string[]): SQL {
-  return sql`${column} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`;
 }

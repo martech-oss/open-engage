@@ -450,7 +450,7 @@ function sequenceResources(proposal: EmailSequenceProposal) {
   return [
     { resourceType: "automation" as const, resourceId: proposal.automationId },
     ...proposal.emails.map((email) => ({
-      resourceType: "email" as const,
+      resourceType: "email_sequence" as const,
       resourceId: email.templateId,
     })),
   ];

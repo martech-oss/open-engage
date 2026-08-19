@@ -1,15 +1,37 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { uuidv7 } from "@openengage/database";
+import { SegmentRepository, uuidv7 } from "@openengage/database";
 import { contract } from "@openengage/orpc";
 
 import { createFixtureClient, seedWorkspaceClient } from "./factory";
 
 type Client = ContractRouterClient<typeof contract>;
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("oRPC mutations", () => {
+  it("maps a wrapped segment constraint to the slug conflict contract", async () => {
+    const { client } = await seedWorkspaceClient(env.DB);
+    vi.spyOn(SegmentRepository.prototype, "createSegment").mockRejectedValueOnce(
+      new Error("wrapped database write", {
+        cause: new Error(
+          "SQLITE_CONSTRAINT: UNIQUE constraint failed: segments.workspace_id, segments.slug",
+        ),
+      }),
+    );
+
+    await expect(
+      client.segments.create({
+        name: "Duplicate segment",
+        slug: "duplicate-segment",
+        kind: "static",
+        membershipSource: "Manual",
+      }),
+    ).rejects.toMatchObject({ code: "SEGMENT_CONFLICT", status: 409 });
+  });
+
   it("manages subscription topics", async () => {
     const { client } = await seedWorkspaceClient(env.DB);
     const created = await client.consent.createTopic({

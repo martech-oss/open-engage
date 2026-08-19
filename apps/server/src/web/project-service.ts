@@ -1,4 +1,4 @@
-import type { ProjectRow } from "@openengage/core/projects";
+import type { ProjectResourceType, ProjectRow } from "@openengage/core/projects";
 import {
   ProjectRepository,
   type OpenEngageDatabase,
@@ -25,7 +25,7 @@ export type { ProjectItemOutcome } from "@openengage/database";
 export async function addProjectItem(
   database: OpenEngageDatabase,
   workspaceId: string,
-  input: { projectId: string; resourceType: string; resourceId: string },
+  input: { projectId: string; resourceType: ProjectResourceType; resourceId: string },
 ): Promise<ProjectItemOutcome> {
   return new ProjectRepository(database, { workspaceId }).addItem(input);
 }

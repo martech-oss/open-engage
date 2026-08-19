@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as z from "zod";
 
 import { contactListInputSchema, contactListResultSchema } from "@openengage/core/contacts";
 import { workspaceSchema } from "@openengage/core/workspaces";
@@ -6,6 +7,21 @@ import { workspaceSchema } from "@openengage/core/workspaces";
 import { contract } from "./contract";
 
 describe("oRPC contract schemas", () => {
+  it.each(["deals", "campaigns"] as const)(
+    "keeps the shared report range refinements on %s input",
+    (endpoint) => {
+      const schema = contract.reports[endpoint]["~orpc"].inputSchema as z.ZodType;
+
+      expect(schema.safeParse({ from: "2026-02-02", to: "2026-02-01" }).success).toBe(false);
+      expect(schema.safeParse({ from: "2025-01-01", to: "2026-01-02" }).success).toBe(false);
+      expect(schema.parse({ from: "2026-01-01", to: "2026-12-31", currency: "jpy" })).toEqual({
+        from: "2026-01-01",
+        to: "2026-12-31",
+        currency: "JPY",
+      });
+    },
+  );
+
   it("accepts contact search input", () => {
     expect(
       contactListInputSchema.parse({

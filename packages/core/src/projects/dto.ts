@@ -59,14 +59,15 @@ export const projectBriefAuditEventSchema = z.object({
 });
 export type ProjectBriefAuditEvent = z.infer<typeof projectBriefAuditEventSchema>;
 
-export const projectResourceTypeSchema = z.enum([
+export const PROJECT_RESOURCE_TYPES = [
   "automation",
-  "email",
-  "form",
-  "page",
-  "redirect",
+  "email_sequence",
   "segment",
-]);
+  "form",
+  "landing_page",
+  "redirect",
+] as const;
+export const projectResourceTypeSchema = z.enum(PROJECT_RESOURCE_TYPES);
 export type ProjectResourceType = z.infer<typeof projectResourceTypeSchema>;
 
 export const PROJECT_RESOURCE_AVAILABILITIES = ["available", "archived", "missing"] as const;

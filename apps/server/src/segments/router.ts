@@ -1,6 +1,7 @@
 import {
   ProjectBriefLinkConflictError,
   SegmentRepository,
+  isConstraintError,
   writeAuditLog,
 } from "@openengage/database";
 import { ack } from "@openengage/orpc";
@@ -70,7 +71,7 @@ export const createSegmentProcedure = authed.segments.create.handler(
       if (error instanceof ProjectBriefLinkConflictError) {
         throw errors.BRIEF_REVISION_CONFLICT();
       }
-      if (isSegmentSlugConflict(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isConstraintError(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
       throw error;
     }
     if (input.kind === "dynamic") {
@@ -121,7 +122,7 @@ export const updateSegmentProcedure = authed.segments.update.handler(
         ...(filter ? { filter } : {}),
       });
     } catch (error) {
-      if (isSegmentSlugConflict(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isConstraintError(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
       throw error;
     }
     if (!updated) throw errors.SEGMENT_NOT_FOUND();
@@ -230,9 +231,3 @@ export const segmentProcedures = {
   refresh: refreshSegmentProcedure,
   preview: previewSegmentProcedure,
 };
-
-/** Only the workspace/slug unique key is a user-facing name conflict. */
-function isSegmentSlugConflict(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unique constraint failed:\s*segments\.workspace_id,\s*segments\.slug/i.test(message);
-}

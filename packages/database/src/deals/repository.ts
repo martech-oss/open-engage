@@ -46,7 +46,12 @@ import { dealPipelines, dealStages, deals, dealTasks } from "./schema";
 const DEAL_OPTION_LIST_LIMIT = 500;
 
 export type PipelineCreateResult = { kind: "conflict" } | { kind: "ok"; id: string };
-export type PipelineUpdateResult = "not_found" | "conflict" | "stage_in_use" | "ok";
+export type PipelineUpdateResult =
+  | "not_found"
+  | "conflict"
+  | "default_required"
+  | "stage_in_use"
+  | "ok";
 export type PipelineArchiveResult = "not_found" | "last" | "in_use" | "ok";
 
 /**
@@ -128,10 +133,18 @@ export class DealRepository extends WorkspaceRepository {
     const existing = await this.findDefaultPipeline();
     if (existing) return existing.id;
 
+    const candidate = await this.findOldestActivePipeline();
+    if (candidate) {
+      await this.promoteDefaultPipeline(candidate.id);
+      const repaired = await this.findDefaultPipeline();
+      if (repaired) return repaired.id;
+    }
+
     const pipelineId = uuidv7();
     const now = nowIso();
     const orm = this.database.orm;
     const statements = [
+      this.clearDefaultFlag(now),
       orm.insert(dealPipelines).values({
         id: pipelineId,
         workspaceId,
@@ -159,7 +172,8 @@ export class DealRepository extends WorkspaceRepository {
       if (!first) throw new Error("no seed statements");
       await orm.batch([first, ...rest]);
       return pipelineId;
-    } catch {
+    } catch (error) {
+      if (!isConstraintError(error)) throw error;
       const raced = await this.findDefaultPipeline();
       if (raced) return raced.id;
       throw new Error("デフォルトの商談パイプラインを作成できませんでした");
@@ -613,17 +627,27 @@ export class DealRepository extends WorkspaceRepository {
   public async createPipeline(input: DealPipelineCreate): Promise<PipelineCreateResult> {
     if (await this.activePipelineNameTaken(input.name)) return { kind: "conflict" };
 
+    let existingDefault = await this.findDefaultPipeline();
+    if (!existingDefault) {
+      const candidate = await this.findOldestActivePipeline();
+      if (candidate) {
+        await this.promoteDefaultPipeline(candidate.id);
+        existingDefault = await this.findDefaultPipeline();
+      }
+    }
+
     const pipelineId = uuidv7();
     const now = nowIso();
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
+    const makeDefault = input.isDefault || !existingDefault;
     const statements = [
-      ...(input.isDefault ? [this.clearDefaultFlag(now)] : []),
+      ...(makeDefault ? [this.clearDefaultFlag(now)] : []),
       orm.insert(dealPipelines).values({
         id: pipelineId,
         workspaceId,
         name: input.name,
-        isDefault: input.isDefault,
+        isDefault: makeDefault,
         createdAt: now,
         updatedAt: now,
       }),
@@ -658,6 +682,7 @@ export class DealRepository extends WorkspaceRepository {
   ): Promise<PipelineUpdateResult> {
     const current = await this.getPipelineWithStages(id);
     if (!current) return "not_found";
+    if (input.isDefault === false && current.pipeline.isDefault) return "default_required";
     if (input.name && (await this.activePipelineNameTaken(input.name, id))) return "conflict";
     if (input.stages) {
       const incomingIds = new Set(input.stages.flatMap((stage) => (stage.id ? [stage.id] : [])));
@@ -670,12 +695,12 @@ export class DealRepository extends WorkspaceRepository {
     const now = nowIso();
     const orm = this.database.orm;
     const statements = [
-      ...(input.isDefault === true ? [this.clearDefaultFlag(now, id)] : []),
+      ...(input.isDefault === true ? [this.clearDefaultFlag(now, id, id)] : []),
       orm
         .update(dealPipelines)
         .set({
           ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
+          ...(input.isDefault === true ? { isDefault: true } : {}),
           updatedAt: now,
         })
         .where(
@@ -703,6 +728,7 @@ export class DealRepository extends WorkspaceRepository {
   }
 
   public async archivePipeline(id: string): Promise<PipelineArchiveResult> {
+    await this.repairMissingDefaultPipeline();
     const current = await this.getPipelineWithStages(id);
     if (!current) return "not_found";
     if ((await this.countActivePipelines()) <= 1) return "last";
@@ -711,21 +737,6 @@ export class DealRepository extends WorkspaceRepository {
     const now = nowIso();
     const suffix = ` [archived ${id.slice(0, 8)}]`;
     const archivedName = `${current.pipeline.name.slice(0, Math.max(0, 191 - suffix.length))}${suffix}`;
-    const fallback = current.pipeline.isDefault
-      ? await this.database.orm
-          .select({ id: dealPipelines.id })
-          .from(dealPipelines)
-          .where(
-            and(
-              this.inWorkspace(dealPipelines),
-              isNull(dealPipelines.archivedAt),
-              ne(dealPipelines.id, id),
-            ),
-          )
-          .orderBy(asc(dealPipelines.createdAt))
-          .limit(1)
-          .get()
-      : null;
     const statements = [
       this.database.orm
         .update(dealPipelines)
@@ -740,20 +751,51 @@ export class DealRepository extends WorkspaceRepository {
             this.inWorkspace(dealPipelines),
             eq(dealPipelines.id, id),
             isNull(dealPipelines.archivedAt),
+            this.anotherActivePipelineExists(id),
+            this.noActivePipelineDeals(id),
           ),
         ),
-      ...(fallback
-        ? [
-            this.database.orm
-              .update(dealPipelines)
-              .set({ isDefault: true, updatedAt: now })
-              .where(and(this.inWorkspace(dealPipelines), eq(dealPipelines.id, fallback.id))),
-          ]
-        : []),
+      this.database.orm
+        .update(dealPipelines)
+        .set({ isDefault: true, updatedAt: now })
+        .where(
+          and(
+            this.inWorkspace(dealPipelines),
+            isNull(dealPipelines.archivedAt),
+            eq(
+              dealPipelines.id,
+              sql<string>`(
+                SELECT fallback.id
+                FROM deal_pipelines fallback
+                WHERE fallback.workspace_id = ${this.context.workspaceId}
+                  AND fallback.archived_at IS NULL
+                ORDER BY fallback.created_at, fallback.id
+                LIMIT 1
+              )`,
+            ),
+            sql`NOT EXISTS (
+              SELECT 1 FROM deal_pipelines active_default
+              WHERE active_default.workspace_id = ${this.context.workspaceId}
+                AND active_default.archived_at IS NULL
+                AND active_default.is_default = 1
+            )`,
+            sql`EXISTS (
+              SELECT 1 FROM deal_pipelines archived_target
+              WHERE archived_target.workspace_id = ${this.context.workspaceId}
+                AND archived_target.id = ${id}
+                AND archived_target.archived_at = ${now}
+            )`,
+          ),
+        ),
     ];
     const [first, ...rest] = statements;
     if (!first) return "not_found";
-    await this.database.orm.batch([first, ...rest]);
+    const [archiveResult] = await this.database.orm.batch([first, ...rest]);
+    if (archiveResult.meta.changes !== 1) {
+      if ((await this.countActivePipelines()) <= 1) return "last";
+      if ((await this.countPipelineDeals(id)) > 0) return "in_use";
+      return "not_found";
+    }
     return "ok";
   }
 
@@ -761,11 +803,51 @@ export class DealRepository extends WorkspaceRepository {
     const row = await this.database.orm
       .select({ id: dealPipelines.id })
       .from(dealPipelines)
-      .where(and(this.inWorkspace(dealPipelines), isNull(dealPipelines.archivedAt)))
-      .orderBy(desc(dealPipelines.isDefault), asc(dealPipelines.createdAt))
+      .where(
+        and(
+          this.inWorkspace(dealPipelines),
+          isNull(dealPipelines.archivedAt),
+          eq(dealPipelines.isDefault, true),
+        ),
+      )
+      .orderBy(asc(dealPipelines.createdAt), asc(dealPipelines.id))
       .limit(1)
       .get();
     return row ?? null;
+  }
+
+  private async findOldestActivePipeline(): Promise<{ id: string } | null> {
+    const row = await this.database.orm
+      .select({ id: dealPipelines.id })
+      .from(dealPipelines)
+      .where(and(this.inWorkspace(dealPipelines), isNull(dealPipelines.archivedAt)))
+      .orderBy(asc(dealPipelines.createdAt), asc(dealPipelines.id))
+      .limit(1)
+      .get();
+    return row ?? null;
+  }
+
+  private async repairMissingDefaultPipeline(): Promise<void> {
+    if (await this.findDefaultPipeline()) return;
+    const candidate = await this.findOldestActivePipeline();
+    if (candidate) await this.promoteDefaultPipeline(candidate.id);
+  }
+
+  private async promoteDefaultPipeline(id: string): Promise<void> {
+    const now = nowIso();
+    await this.database.orm.batch([
+      this.clearDefaultFlag(now, id, id),
+      this.database.orm
+        .update(dealPipelines)
+        .set({ isDefault: true, updatedAt: now })
+        .where(
+          and(
+            this.inWorkspace(dealPipelines),
+            eq(dealPipelines.id, id),
+            isNull(dealPipelines.archivedAt),
+          ),
+        ),
+    ]);
   }
 
   private async listPipelineStages(pipelineId: string): Promise<DealStageRow[]> {
@@ -833,7 +915,7 @@ export class DealRepository extends WorkspaceRepository {
     return row !== undefined;
   }
 
-  private clearDefaultFlag(now: string, exceptId?: string) {
+  private clearDefaultFlag(now: string, exceptId?: string, requiredActiveId?: string) {
     return this.database.orm
       .update(dealPipelines)
       .set({ isDefault: false, updatedAt: now })
@@ -842,8 +924,34 @@ export class DealRepository extends WorkspaceRepository {
           this.inWorkspace(dealPipelines),
           isNull(dealPipelines.archivedAt),
           ...(exceptId ? [ne(dealPipelines.id, exceptId)] : []),
+          requiredActiveId === undefined
+            ? undefined
+            : sql`EXISTS (
+                SELECT 1 FROM deal_pipelines promotion_target
+                WHERE promotion_target.workspace_id = ${this.context.workspaceId}
+                  AND promotion_target.id = ${requiredActiveId}
+                  AND promotion_target.archived_at IS NULL
+              )`,
         ),
       );
+  }
+
+  private anotherActivePipelineExists(id: string): SQL {
+    return sql`EXISTS (
+      SELECT 1 FROM deal_pipelines archive_fallback
+      WHERE archive_fallback.workspace_id = ${this.context.workspaceId}
+        AND archive_fallback.id != ${id}
+        AND archive_fallback.archived_at IS NULL
+    )`;
+  }
+
+  private noActivePipelineDeals(id: string): SQL {
+    return sql`NOT EXISTS (
+      SELECT 1 FROM deals pipeline_deals
+      WHERE pipeline_deals.workspace_id = ${this.context.workspaceId}
+        AND pipeline_deals.pipeline_id = ${id}
+        AND pipeline_deals.archived_at IS NULL
+    )`;
   }
 
   private replaceStageStatements(
