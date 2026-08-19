@@ -11,6 +11,7 @@ import {
   type ContactImportCandidateManifest,
   decodeCandidateManifest,
   decodeReconciliationContactIds,
+  exactImportInsertPhase,
   expiredImportPartLease,
   liveImportPartLease,
 } from "./import-part-state";
@@ -39,12 +40,20 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
         and(
           liveImportPartLease(input.jobId, input.part, input.leaseId),
           isNull(contactImportParts.candidates),
+          isNull(contactImportParts.insertPhaseToken),
+          isNull(contactImportParts.reconciliationContactIds),
         ),
       );
     const row = await this.database.orm
       .select({ candidates: contactImportParts.candidates })
       .from(contactImportParts)
-      .where(liveImportPartLease(input.jobId, input.part, input.leaseId))
+      .where(
+        and(
+          liveImportPartLease(input.jobId, input.part, input.leaseId),
+          isNull(contactImportParts.insertPhaseToken),
+          isNull(contactImportParts.reconciliationContactIds),
+        ),
+      )
       .get();
     return row?.candidates ? decodeCandidateManifest(row.candidates) : null;
   }
@@ -63,23 +72,30 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
   }): Promise<void> {
     const orm = this.database.orm;
     const candidateIds = input.candidates.map((candidate) => candidate.id);
-    const leaseIsLive = exists(
+    const insertPhaseToken = uuidv7();
+    const matchingWorkspace = exists(
+      orm
+        .select({ value: sql<number>`1` })
+        .from(importJobs)
+        .where(and(activeImportJob(input.jobId), eq(importJobs.workspaceId, input.workspaceId))),
+    );
+    const acquirePhase = orm
+      .update(contactImportParts)
+      .set({ insertPhaseToken, updatedAt: input.now })
+      .where(
+        and(
+          liveImportPartLease(input.jobId, input.part, input.leaseId),
+          isNotNull(contactImportParts.candidates),
+          isNull(contactImportParts.insertPhaseToken),
+          isNull(contactImportParts.reconciliationContactIds),
+          matchingWorkspace,
+        ),
+      );
+    const phaseIsOwned = exists(
       orm
         .select({ value: sql<number>`1` })
         .from(contactImportParts)
-        .where(
-          and(
-            liveImportPartLease(input.jobId, input.part, input.leaseId),
-            exists(
-              orm
-                .select({ value: sql<number>`1` })
-                .from(importJobs)
-                .where(
-                  and(activeImportJob(input.jobId), eq(importJobs.workspaceId, input.workspaceId)),
-                ),
-            ),
-          ),
-        ),
+        .where(exactImportInsertPhase(input.jobId, input.part, input.leaseId, insertPhaseToken)),
     );
     const inserts = input.candidates.map(({ id, row }) =>
       orm
@@ -89,7 +105,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
             ${id}, ${input.workspaceId}, NULL, ${row.email}, ${row.firstName}, ${row.lastName},
             ${row.phone}, ${row.externalId}, ${row.stage}, 0, 0, 'active',
             ${JSON.stringify(row.customFields)}, ${input.now}, ${input.now}, NULL
-          WHERE ${leaseIsLive}`,
+          WHERE ${phaseIsOwned}`,
         )
         .onConflictDoNothing(),
     );
@@ -111,19 +127,11 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
       .set({ reconciliationContactIds: verifiedIds, updatedAt: input.now })
       .where(
         and(
-          liveImportPartLease(input.jobId, input.part, input.leaseId),
+          exactImportInsertPhase(input.jobId, input.part, input.leaseId, insertPhaseToken),
           isNull(contactImportParts.reconciliationContactIds),
-          exists(
-            orm
-              .select({ value: sql<number>`1` })
-              .from(importJobs)
-              .where(
-                and(activeImportJob(input.jobId), eq(importJobs.workspaceId, input.workspaceId)),
-              ),
-          ),
         ),
       );
-    const statements: BatchItem<"sqlite">[] = [...inserts, phaseUpdate];
+    const statements: BatchItem<"sqlite">[] = [acquirePhase, ...inserts, phaseUpdate];
     await orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
   }
 
@@ -151,7 +159,9 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
           leaseAuthority,
           eq(contactImportParts.totalParts, input.totalParts),
           isNotNull(contactImportParts.candidates),
+          isNotNull(contactImportParts.insertPhaseToken),
           isNotNull(contactImportParts.reconciliationContactIds),
+          isNull(contactImportParts.completionToken),
         ),
       )
       .get();
@@ -162,9 +172,11 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
     if (contactIds.some((id) => !candidateIds.has(id)) || contactIds.length > manifest.processed) {
       throw new Error("contact import insert-phase evidence is inconsistent");
     }
+    const completionToken = uuidv7();
     return this.completePart(
       input,
       authority,
+      completionToken,
       manifest.processed,
       contactIds.length,
       manifest.processed - contactIds.length,
@@ -175,6 +187,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
   private async completePart(
     input: CompletionInput,
     authority: CompletionAuthority,
+    completionToken: string,
     processed: number,
     succeeded: number,
     failed: number,
@@ -186,7 +199,9 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
       leaseAuthority,
       eq(contactImportParts.totalParts, input.totalParts),
       isNotNull(contactImportParts.candidates),
+      isNotNull(contactImportParts.insertPhaseToken),
       isNotNull(contactImportParts.reconciliationContactIds),
+      isNull(contactImportParts.completionToken),
     );
     const orm = this.database.orm;
     const completedPartState = and(
@@ -194,10 +209,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
       eq(contactImportParts.part, input.part),
       eq(contactImportParts.totalParts, input.totalParts),
       eq(contactImportParts.status, "completed"),
-      eq(contactImportParts.completedAt, input.now),
-      eq(contactImportParts.processed, processed),
-      eq(contactImportParts.succeeded, succeeded),
-      eq(contactImportParts.failed, failed),
+      eq(contactImportParts.completionToken, completionToken),
     );
     const partUpdate = orm
       .update(contactImportParts)
@@ -207,6 +219,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
         processed,
         succeeded,
         failed,
+        completionToken,
         leaseId: null,
         leaseExpiresAt: null,
         completedAt: input.now,
@@ -252,12 +265,14 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
                   leaseId: sql<string | null>`NULL`.as("lease_id"),
                   leaseExpiresAt: sql<string | null>`NULL`.as("lease_expires_at"),
                   candidates: sql<string | null>`NULL`.as("candidates"),
+                  insertPhaseToken: sql<string | null>`NULL`.as("insert_phase_token"),
                   reconciliationContactIds: sql<string | null>`NULL`.as(
                     "reconciliation_contact_ids",
                   ),
                   reconciliationPublishedAt: sql<string | null>`NULL`.as(
                     "reconciliation_published_at",
                   ),
+                  completionToken: sql<string | null>`NULL`.as("completion_token"),
                   processed: sql<number>`0`.as("processed"),
                   succeeded: sql<number>`0`.as("succeeded"),
                   failed: sql<number>`0`.as("failed"),

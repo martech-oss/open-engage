@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2a84a187-a9ff-47aa-97b3-5cdd7e4bfad7",
+  "id": "6a000d36-d164-4c71-be09-e7586b45ce13",
   "prevId": "510ef75b-5b25-4c2e-93ea-0cea9f7683d2",
   "tables": {
     "agent_conversations": {
@@ -1487,6 +1487,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "insert_phase_token": {
+          "name": "insert_phase_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "reconciliation_contact_ids": {
           "name": "reconciliation_contact_ids",
           "type": "text",
@@ -1496,6 +1503,13 @@
         },
         "reconciliation_published_at": {
           "name": "reconciliation_published_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completion_token": {
+          "name": "completion_token",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

@@ -29,6 +29,18 @@ export function exactImportPartLease(jobId: string, part: number, leaseId: strin
   );
 }
 
+export function exactImportInsertPhase(
+  jobId: string,
+  part: number,
+  leaseId: string,
+  insertPhaseToken: string,
+) {
+  return and(
+    exactImportPartLease(jobId, part, leaseId),
+    eq(contactImportParts.insertPhaseToken, insertPhaseToken),
+  );
+}
+
 export function liveImportPartLease(jobId: string, part: number, leaseId: string) {
   return and(
     exactImportPartLease(jobId, part, leaseId),

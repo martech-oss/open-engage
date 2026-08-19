@@ -342,9 +342,13 @@ export const contactImportParts = sqliteTable(
     leaseExpiresAt: text("lease_expires_at"),
     /** Stable candidate ids and normalized rows reserved before any insert. */
     candidates: text(),
+    /** Unique authority acquired once before the candidate-insert batch mutates contacts. */
+    insertPhaseToken: text("insert_phase_token"),
     /** Non-null proves insert phase completion; completed parts expose it as the outbox payload. */
     reconciliationContactIds: text("reconciliation_contact_ids"),
     reconciliationPublishedAt: text("reconciliation_published_at"),
+    /** Unique completion winner consumed by parent counters and next-part creation. */
+    completionToken: text("completion_token"),
     processed: integer().default(0).notNull(),
     succeeded: integer().default(0).notNull(),
     failed: integer().default(0).notNull(),

@@ -1,4 +1,17 @@
-import { and, asc, eq, exists, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { changedExactlyOne } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
@@ -90,6 +103,8 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
           eq(contactImportParts.part, input.part),
           eq(contactImportParts.totalParts, input.totalParts),
           lt(contactImportParts.attempts, IMPORT_ATTEMPT_LIMIT),
+          isNull(contactImportParts.insertPhaseToken),
+          isNull(contactImportParts.reconciliationContactIds),
           or(
             eq(contactImportParts.status, "pending"),
             and(
@@ -156,6 +171,7 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
         and(
           liveImportPartLease(input.jobId, input.part, input.leaseId),
           lt(contactImportParts.attempts, IMPORT_ATTEMPT_LIMIT),
+          isNull(contactImportParts.insertPhaseToken),
           isNull(contactImportParts.reconciliationContactIds),
         ),
       );
@@ -204,7 +220,13 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
           lastError: input.error,
           updatedAt: input.now,
         })
-        .where(and(leaseAuthority, isNull(contactImportParts.reconciliationContactIds))),
+        .where(
+          and(
+            leaseAuthority,
+            isNull(contactImportParts.insertPhaseToken),
+            isNull(contactImportParts.reconciliationContactIds),
+          ),
+        ),
       orm
         .update(importJobs)
         .set({ status: "failed", updatedAt: input.now })
@@ -294,6 +316,7 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
         and(
           expiredImportPartLease(input.jobId, input.part, input.leaseId),
           lt(contactImportParts.attempts, IMPORT_ATTEMPT_LIMIT),
+          isNull(contactImportParts.insertPhaseToken),
           isNull(contactImportParts.reconciliationContactIds),
         ),
       );
@@ -314,6 +337,8 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
       .where(
         and(
           eq(contactImportParts.status, "pending"),
+          isNull(contactImportParts.insertPhaseToken),
+          isNull(contactImportParts.reconciliationContactIds),
           inArray(importJobs.status, ["pending", "processing"]),
         ),
       )
@@ -328,11 +353,42 @@ export class ContactImportRecoveryRepository extends DatabaseRepository {
     error: string;
     now: string;
   }): Promise<void> {
+    const phase = await this.database.orm
+      .select({ leaseId: contactImportParts.leaseId })
+      .from(contactImportParts)
+      .where(
+        and(
+          eq(contactImportParts.jobId, input.jobId),
+          eq(contactImportParts.part, input.part),
+          eq(contactImportParts.totalParts, input.totalParts),
+          eq(contactImportParts.status, "processing"),
+          isNotNull(contactImportParts.leaseId),
+          isNotNull(contactImportParts.insertPhaseToken),
+          isNotNull(contactImportParts.reconciliationContactIds),
+        ),
+      )
+      .get();
+    if (phase?.leaseId) {
+      const execution = new ContactImportPartExecutionRepository(this.database);
+      const completion = {
+        jobId: input.jobId,
+        part: input.part,
+        totalParts: input.totalParts,
+        leaseId: phase.leaseId,
+        now: input.now,
+      };
+      const completed =
+        (await execution.completePersistedPartForLiveLease(completion)) ||
+        (await execution.completePersistedPartForExpiredLease(completion));
+      if (completed) return;
+    }
     const eligible = and(
       eq(contactImportParts.jobId, input.jobId),
       eq(contactImportParts.part, input.part),
       eq(contactImportParts.totalParts, input.totalParts),
       ne(contactImportParts.status, "completed"),
+      isNull(contactImportParts.insertPhaseToken),
+      isNull(contactImportParts.reconciliationContactIds),
     );
     const orm = this.database.orm;
     await orm.batch([
