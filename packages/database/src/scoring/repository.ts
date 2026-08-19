@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, exists, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import type {
   GradingCriterion,
@@ -73,34 +73,44 @@ export class ScoringRepository extends WorkspaceRepository {
         matchType: scoringRules.matchType,
         matchValue: scoringRules.matchValue,
         points: scoringRules.points,
-        categoryId: scoringRules.categoryId,
+        categoryId: scoringCategories.id,
         categoryName: scoringCategories.name,
-        tagId: scoringRules.tagId,
+        tagId: tags.id,
         tagName: tags.name,
         enabled: scoringRules.enabled,
         createdAt: scoringRules.createdAt,
         updatedAt: scoringRules.updatedAt,
       })
       .from(scoringRules)
-      .leftJoin(scoringCategories, eq(scoringCategories.id, scoringRules.categoryId))
-      .leftJoin(tags, eq(tags.id, scoringRules.tagId))
+      .leftJoin(
+        scoringCategories,
+        and(
+          eq(scoringCategories.workspaceId, scoringRules.workspaceId),
+          eq(scoringCategories.id, scoringRules.categoryId),
+          isNull(scoringCategories.archivedAt),
+        ),
+      )
+      .leftJoin(
+        tags,
+        and(eq(tags.workspaceId, scoringRules.workspaceId), eq(tags.id, scoringRules.tagId)),
+      )
       .where(and(this.inWorkspace(scoringRules), isNull(scoringRules.archivedAt)))
       .orderBy(asc(scoringRules.eventType), asc(scoringRules.name))
       .limit(UNPAGINATED_LIST_LIMIT);
     return rows as ScoringRule[];
   }
 
-  public async createRule(input: ScoringRuleWrite): Promise<{ id: string }> {
+  public async createRule(input: ScoringRuleWrite): Promise<{ id: string } | null> {
     const now = nowIso();
     const id = uuidv7();
-    await this.database.orm.insert(scoringRules).values({
-      id,
-      workspaceId: this.context.workspaceId,
-      ...ruleColumns(input),
-      createdAt: now,
-      updatedAt: now,
-    });
-    return { id };
+    const result = await this.database.orm.insert(scoringRules).select(
+      sql`SELECT
+        ${id}, ${this.context.workspaceId}, ${input.name}, ${input.eventType},
+        ${input.matchType}, ${input.matchValue}, ${input.points}, ${input.categoryId},
+        ${input.tagId}, ${input.enabled}, NULL, ${now}, ${now}
+      WHERE ${this.ruleReferencesAreValid(input)}`,
+    );
+    return result.meta.changes === 1 ? { id } : null;
   }
 
   public async updateRule(id: string, input: ScoringRuleWrite): Promise<boolean> {
@@ -112,6 +122,7 @@ export class ScoringRepository extends WorkspaceRepository {
           this.inWorkspace(scoringRules),
           eq(scoringRules.id, id),
           isNull(scoringRules.archivedAt),
+          this.ruleReferencesAreValid(input),
         ),
       )
       .run();
@@ -185,6 +196,35 @@ export class ScoringRepository extends WorkspaceRepository {
       )
       .run();
     return changedExactlyOne(result);
+  }
+
+  private ruleReferencesAreValid(input: ScoringRuleWrite) {
+    const workspaceId = this.context.workspaceId;
+    const categoryIsValid =
+      input.categoryId === null
+        ? sql<boolean>`true`
+        : exists(
+            this.database.orm
+              .select({ id: scoringCategories.id })
+              .from(scoringCategories)
+              .where(
+                and(
+                  eq(scoringCategories.workspaceId, workspaceId),
+                  eq(scoringCategories.id, input.categoryId),
+                  isNull(scoringCategories.archivedAt),
+                ),
+              ),
+          );
+    const tagIsValid =
+      input.tagId === null
+        ? sql<boolean>`true`
+        : exists(
+            this.database.orm
+              .select({ id: tags.id })
+              .from(tags)
+              .where(and(eq(tags.workspaceId, workspaceId), eq(tags.id, input.tagId))),
+          );
+    return and(categoryIsValid, tagIsValid);
   }
 }
 
@@ -260,16 +300,30 @@ export class ScoringEngineRepository extends DatabaseRepository {
         matchType: scoringRules.matchType,
         matchValue: scoringRules.matchValue,
         points: scoringRules.points,
-        categoryId: scoringRules.categoryId,
-        tagId: scoringRules.tagId,
+        categoryId: scoringCategories.id,
+        tagId: tags.id,
       })
       .from(scoringRules)
+      .leftJoin(
+        scoringCategories,
+        and(
+          eq(scoringCategories.workspaceId, scoringRules.workspaceId),
+          eq(scoringCategories.id, scoringRules.categoryId),
+          isNull(scoringCategories.archivedAt),
+        ),
+      )
+      .leftJoin(
+        tags,
+        and(eq(tags.workspaceId, scoringRules.workspaceId), eq(tags.id, scoringRules.tagId)),
+      )
       .where(
         and(
           eq(scoringRules.workspaceId, workspaceId),
           eq(scoringRules.eventType, eventType),
           eq(scoringRules.enabled, true),
           isNull(scoringRules.archivedAt),
+          or(isNull(scoringRules.categoryId), isNotNull(scoringCategories.id)),
+          or(isNull(scoringRules.tagId), isNotNull(tags.id)),
         ),
       )
       .limit(UNPAGINATED_LIST_LIMIT);
@@ -285,6 +339,18 @@ export class ScoringEngineRepository extends DatabaseRepository {
     now: string;
   }): Promise<void> {
     const orm = this.database.orm;
+    const activeContact = await orm
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.workspaceId, input.workspaceId),
+          eq(contacts.id, input.contactId),
+          ne(contacts.status, "archived"),
+        ),
+      )
+      .get();
+    if (!activeContact) return;
     const statements = [];
     if (input.total !== 0) {
       statements.push(
@@ -292,7 +358,11 @@ export class ScoringEngineRepository extends DatabaseRepository {
           .update(contacts)
           .set({ score: sql`${contacts.score} + ${input.total}`, updatedAt: input.now })
           .where(
-            and(eq(contacts.workspaceId, input.workspaceId), eq(contacts.id, input.contactId)),
+            and(
+              eq(contacts.workspaceId, input.workspaceId),
+              eq(contacts.id, input.contactId),
+              ne(contacts.status, "archived"),
+            ),
           ),
       );
     }
@@ -379,7 +449,13 @@ export class ScoringEngineRepository extends DatabaseRepository {
         customFields: contacts.customFields,
       })
       .from(contacts)
-      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)))
+      .where(
+        and(
+          eq(contacts.workspaceId, workspaceId),
+          eq(contacts.id, contactId),
+          ne(contacts.status, "archived"),
+        ),
+      )
       .get();
     return row ?? null;
   }
@@ -392,7 +468,13 @@ export class ScoringEngineRepository extends DatabaseRepository {
     await this.database.orm
       .update(contacts)
       .set({ gradePoints })
-      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)))
+      .where(
+        and(
+          eq(contacts.workspaceId, workspaceId),
+          eq(contacts.id, contactId),
+          ne(contacts.status, "archived"),
+        ),
+      )
       .run();
   }
 }

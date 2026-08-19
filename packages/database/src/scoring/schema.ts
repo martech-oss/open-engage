@@ -1,4 +1,5 @@
 import {
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -37,6 +38,7 @@ export const scoringCategories = sqliteTable(
   },
   (table) => [
     uniqueIndex("scoring_categories_workspace_slug_unique").on(table.workspaceId, table.slug),
+    uniqueIndex("scoring_categories_workspace_id_unique").on(table.workspaceId, table.id),
   ],
 );
 
@@ -74,6 +76,16 @@ export const scoringRules = sqliteTable(
     ),
     checkEnum("scoring_rules_event_type_check", table.eventType, SCORING_EVENT_TYPES),
     checkEnum("scoring_rules_match_type_check", table.matchType, SCORING_MATCH_TYPES),
+    foreignKey({
+      columns: [table.workspaceId, table.categoryId],
+      foreignColumns: [scoringCategories.workspaceId, scoringCategories.id],
+      name: "scoring_rules_workspace_category_fk",
+    }),
+    foreignKey({
+      columns: [table.workspaceId, table.tagId],
+      foreignColumns: [tags.workspaceId, tags.id],
+      name: "scoring_rules_workspace_tag_fk",
+    }),
   ],
 );
 
@@ -102,6 +114,16 @@ export const contactCategoryScores = sqliteTable(
       columns: [table.workspaceId, table.contactId, table.categoryId],
       name: "contact_category_scores_workspace_id_contact_id_category_id_pk",
     }),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "contact_category_scores_workspace_contact_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.categoryId],
+      foreignColumns: [scoringCategories.workspaceId, scoringCategories.id],
+      name: "contact_category_scores_workspace_category_fk",
+    }).onDelete("cascade"),
   ],
 );
 

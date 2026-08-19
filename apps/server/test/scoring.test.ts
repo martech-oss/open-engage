@@ -2,11 +2,17 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { gradeLetter } from "@openengage/core/scoring";
-import { ContactRepository, createDatabase, ScoringRepository } from "@openengage/database";
+import {
+  ContactRepository,
+  ContactResourceRepository,
+  createDatabase,
+  ScoringRepository,
+  uuidv7,
+} from "@openengage/database";
 
 import { recordContactEvent } from "../src/contacts/event-service";
 import { recomputeContactGrade } from "../src/scoring/engine";
-import { seedWorkspace } from "./factory";
+import { seedWorkspace, seedWorkspaceClient } from "./factory";
 
 interface Fixture {
   workspaceId: string;
@@ -35,6 +41,32 @@ async function readContact(id: string): Promise<{ score: number; grade_points: n
   return row ?? { score: 0, grade_points: 0 };
 }
 
+async function countRows(sql: string, ...binds: string[]): Promise<number> {
+  const row = await env.DB.prepare(sql)
+    .bind(...binds)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+async function insertLegacyRule(input: {
+  workspaceId: string;
+  categoryId: string | null;
+  tagId: string | null;
+  points: number;
+}): Promise<string> {
+  const id = uuidv7();
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO scoring_rules
+      (id, workspace_id, name, event_type, match_type, match_value, points,
+       category_id, tag_id, enabled, created_at, updated_at)
+     VALUES (?, ?, 'legacy rule', 'page_viewed', 'any', NULL, ?, ?, ?, 1, ?, ?)`,
+  )
+    .bind(id, input.workspaceId, input.points, input.categoryId, input.tagId, now, now)
+    .run();
+  return id;
+}
+
 function emit(
   fixture: Fixture,
   type: string,
@@ -51,6 +83,232 @@ function emit(
 }
 
 describe("scoring rules", () => {
+  it("returns the same not-found error for foreign references on create and update", async () => {
+    const local = await seedWorkspaceClient(env.DB);
+    const foreign = await seedWorkspaceClient(env.DB);
+    const localScoring = new ScoringRepository(env.DB, { workspaceId: local.workspaceId });
+    const foreignCategory = await new ScoringRepository(env.DB, {
+      workspaceId: foreign.workspaceId,
+    }).createCategory({ name: "Foreign API category", slug: "foreign-api-category" });
+    const created = await local.client.scoring.createRule({
+      name: "Local API rule",
+      eventType: "page_viewed",
+      matchType: "any",
+      matchValue: null,
+      points: 5,
+      categoryId: null,
+      tagId: null,
+      enabled: true,
+    });
+    expect(created.id).toBeTruthy();
+    const foreignInput = {
+      name: "Foreign reference",
+      eventType: "page_viewed" as const,
+      matchType: "any" as const,
+      matchValue: null,
+      points: 5,
+      categoryId: foreignCategory.id,
+      tagId: null,
+      enabled: true,
+    };
+
+    await expect(local.client.scoring.createRule(foreignInput)).rejects.toMatchObject({
+      code: "SCORING_RULE_NOT_FOUND",
+      status: 404,
+    });
+    await expect(
+      local.client.scoring.updateRule({ id: created.id, ...foreignInput }),
+    ).rejects.toMatchObject({ code: "SCORING_RULE_NOT_FOUND", status: 404 });
+    await expect(localScoring.listRules()).resolves.toEqual([
+      expect.objectContaining({ id: created.id, name: "Local API rule", categoryId: null }),
+    ]);
+  });
+
+  it("rejects foreign, missing, and archived rule references without writing a rule", async () => {
+    const local = await seed("tenant-safe-create@example.com");
+    const foreign = await seed("foreign-create@example.com");
+    const foreignCategory = await foreign.scoring.createCategory({
+      name: "Foreign category",
+      slug: "foreign-category",
+    });
+    const archivedCategory = await local.scoring.createCategory({
+      name: "Archived category",
+      slug: "archived-category",
+    });
+    await local.scoring.archiveCategory(archivedCategory.id);
+    const foreignTagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+      id: foreignTagId,
+      name: "Foreign tag",
+      slug: "foreign-tag",
+      color: "#64748b",
+    });
+    const base = {
+      name: "Tenant-safe rule",
+      eventType: "page_viewed" as const,
+      matchType: "any" as const,
+      matchValue: null,
+      points: 10,
+      tagId: null,
+      enabled: true,
+    };
+
+    await expect(
+      local.scoring.createRule({ ...base, categoryId: foreignCategory.id }),
+    ).resolves.toBeNull();
+    await expect(
+      local.scoring.createRule({ ...base, categoryId: "missing-category" }),
+    ).resolves.toBeNull();
+    await expect(
+      local.scoring.createRule({ ...base, categoryId: archivedCategory.id }),
+    ).resolves.toBeNull();
+    await expect(
+      local.scoring.createRule({ ...base, categoryId: null, tagId: foreignTagId }),
+    ).resolves.toBeNull();
+    await expect(
+      local.scoring.createRule({ ...base, categoryId: null, tagId: "missing-tag" }),
+    ).resolves.toBeNull();
+    await expect(local.scoring.listRules()).resolves.toEqual([]);
+  });
+
+  it("rejects foreign or archived references on update and preserves the existing rule", async () => {
+    const local = await seed("tenant-safe-update@example.com");
+    const foreign = await seed("foreign-update@example.com");
+    const localCategory = await local.scoring.createCategory({
+      name: "Local category",
+      slug: "local-category",
+    });
+    const foreignCategory = await foreign.scoring.createCategory({
+      name: "Foreign category",
+      slug: "foreign-update-category",
+    });
+    const archivedCategory = await local.scoring.createCategory({
+      name: "Archived category",
+      slug: "archived-update-category",
+    });
+    await local.scoring.archiveCategory(archivedCategory.id);
+    const foreignTagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+      id: foreignTagId,
+      name: "Foreign update tag",
+      slug: "foreign-update-tag",
+      color: "#64748b",
+    });
+    const created = await local.scoring.createRule({
+      name: "Original rule",
+      eventType: "page_viewed",
+      matchType: "any",
+      matchValue: null,
+      points: 4,
+      categoryId: localCategory.id,
+      tagId: null,
+      enabled: true,
+    });
+    expect(created).not.toBeNull();
+    if (!created) throw new Error("Expected the local scoring rule to be created");
+    const changed = {
+      name: "Changed rule",
+      eventType: "page_viewed" as const,
+      matchType: "any" as const,
+      matchValue: null,
+      points: 99,
+      tagId: null,
+      enabled: true,
+    };
+
+    await expect(
+      local.scoring.updateRule(created.id, { ...changed, categoryId: foreignCategory.id }),
+    ).resolves.toBe(false);
+    await expect(
+      local.scoring.updateRule(created.id, { ...changed, categoryId: archivedCategory.id }),
+    ).resolves.toBe(false);
+    await expect(
+      local.scoring.updateRule(created.id, {
+        ...changed,
+        categoryId: null,
+        tagId: foreignTagId,
+      }),
+    ).resolves.toBe(false);
+    await expect(local.scoring.listRules()).resolves.toEqual([
+      expect.objectContaining({
+        id: created.id,
+        name: "Original rule",
+        points: 4,
+        categoryId: localCategory.id,
+        categoryName: "Local category",
+      }),
+    ]);
+  });
+
+  it("does not expose an archived category from a legacy malformed rule", async () => {
+    const local = await seed("tenant-safe-list@example.com");
+    const category = await local.scoring.createCategory({
+      name: "Archived category",
+      slug: "archived-list-category",
+    });
+    await local.scoring.archiveCategory(category.id);
+    const tagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId: local.workspaceId }).createTag({
+      id: tagId,
+      name: "Local tag",
+      slug: "local-list-tag",
+      color: "#64748b",
+    });
+    await insertLegacyRule({
+      workspaceId: local.workspaceId,
+      categoryId: category.id,
+      tagId,
+      points: 10,
+    });
+
+    await expect(local.scoring.listRules()).resolves.toEqual([
+      expect.objectContaining({
+        categoryId: null,
+        categoryName: null,
+        tagId,
+        tagName: "Local tag",
+      }),
+    ]);
+  });
+
+  it("does not execute a legacy rule that references an archived category", async () => {
+    const local = await seed("tenant-safe-execution@example.com");
+    const category = await local.scoring.createCategory({
+      name: "Archived execution category",
+      slug: "archived-execution-category",
+    });
+    await local.scoring.archiveCategory(category.id);
+    const tagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId: local.workspaceId }).createTag({
+      id: tagId,
+      name: "Local execution tag",
+      slug: "local-execution-tag",
+      color: "#64748b",
+    });
+    await insertLegacyRule({
+      workspaceId: local.workspaceId,
+      categoryId: category.id,
+      tagId,
+      points: 10,
+    });
+
+    await emit(local, "page_viewed", "https://example.com/");
+
+    await expect(readContact(local.contactId)).resolves.toMatchObject({ score: 0 });
+    await expect(
+      countRows("SELECT COUNT(*) AS count FROM score_events WHERE contact_id = ?", local.contactId),
+    ).resolves.toBe(0);
+    await expect(
+      countRows(
+        "SELECT COUNT(*) AS count FROM contact_category_scores WHERE contact_id = ?",
+        local.contactId,
+      ),
+    ).resolves.toBe(0);
+    await expect(
+      countRows("SELECT COUNT(*) AS count FROM contact_tags WHERE contact_id = ?", local.contactId),
+    ).resolves.toBe(0);
+  });
+
   it("adds points when a page view matches the URL rule (Page Action)", async () => {
     const fixture = await seed("page@example.com");
     await fixture.scoring.createRule({
@@ -147,6 +405,115 @@ describe("scoring rules", () => {
       .bind(fixture.contactId)
       .first<{ count: number }>();
     expect(events?.count).toBe(1);
+  });
+});
+
+describe("archived contact events", () => {
+  it("keeps the audit event without scoring, grading, tagging, enrollment, or reconciliation", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const contact = await client.contacts.create({
+      email: "archived-tracking@example.com",
+      customFields: { tier: "enterprise" },
+    });
+    const scoring = new ScoringRepository(env.DB, { workspaceId });
+    const category = await scoring.createCategory({ name: "Product", slug: "product" });
+    const tagId = uuidv7();
+    await new ContactResourceRepository(env.DB, { workspaceId }).createTag({
+      id: tagId,
+      name: "Engaged",
+      slug: "engaged",
+      color: "#64748b",
+    });
+    await scoring.createRule({
+      name: "Tracked event",
+      eventType: "custom_event",
+      matchType: "any",
+      matchValue: null,
+      points: 25,
+      categoryId: category.id,
+      tagId,
+      enabled: true,
+    });
+    await scoring.createCriterion({
+      name: "Enterprise",
+      field: "custom_field",
+      fieldKey: "tier",
+      operator: "eq",
+      value: "enterprise",
+      steps: 6,
+      enabled: true,
+    });
+    const automation = await client.automations.create({
+      name: "Archived event flow",
+      description: "",
+      timezone: "UTC",
+      nodes: [
+        {
+          id: "source",
+          type: "source",
+          position: { x: 0, y: 0 },
+          config: { source: "api_event", eventName: "custom_event", reentry: "every_time" },
+        },
+        {
+          id: "score",
+          type: "action",
+          position: { x: 200, y: 0 },
+          config: { action: "change_score", amount: 1 },
+        },
+      ],
+      edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
+    });
+    await client.automations.publish({ id: automation.id });
+    await new ContactRepository(env.DB, {
+      workspaceId,
+      userId: "scoring-owner",
+      role: "owner",
+    }).archiveContact(contact.id);
+    const failOnReconciliation = {
+      send: async () => {
+        throw new Error("Archived contacts must not enqueue segment reconciliation");
+      },
+      sendBatch: async () => {
+        throw new Error("Archived contacts must not enqueue segment reconciliation");
+      },
+    } as unknown as Queue;
+
+    const recorded = await recordContactEvent(createDatabase(env.DB), {
+      workspaceId,
+      contactId: contact.id,
+      type: "custom_event",
+      resourceId: "archive-then-track",
+      queue: failOnReconciliation,
+    });
+    expect(recorded.enrollmentCount).toBe(0);
+
+    await expect(readContact(contact.id)).resolves.toEqual({ score: 0, grade_points: 0 });
+    await expect(
+      countRows(
+        `SELECT COUNT(*) AS count FROM contact_events
+         WHERE id = ? AND contact_id = ? AND type = 'custom_event'`,
+        recorded.eventId,
+        contact.id,
+      ),
+    ).resolves.toBe(1);
+    await expect(
+      countRows("SELECT COUNT(*) AS count FROM score_events WHERE contact_id = ?", contact.id),
+    ).resolves.toBe(0);
+    await expect(
+      countRows(
+        "SELECT COUNT(*) AS count FROM contact_category_scores WHERE contact_id = ?",
+        contact.id,
+      ),
+    ).resolves.toBe(0);
+    await expect(
+      countRows("SELECT COUNT(*) AS count FROM contact_tags WHERE contact_id = ?", contact.id),
+    ).resolves.toBe(0);
+    await expect(
+      countRows(
+        "SELECT COUNT(*) AS count FROM automation_enrollments WHERE contact_id = ?",
+        contact.id,
+      ),
+    ).resolves.toBe(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { foreignKey, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
 import { automationEnrollments } from "../automations/schema";
@@ -33,5 +33,10 @@ export const scoreEvents = sqliteTable(
       table.contactId,
       table.createdAt,
     ),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "score_events_workspace_contact_fk",
+    }).onDelete("cascade"),
   ],
 );

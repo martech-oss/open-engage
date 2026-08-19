@@ -36,9 +36,13 @@ export const listRulesProcedure = authed.scoring.listRules.handler(({ context })
 );
 
 export const createRuleProcedure = authed.scoring.createRule.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    return new ScoringRepository(context.database, context.workspace).createRule(input);
+    const created = await new ScoringRepository(context.database, context.workspace).createRule(
+      input,
+    );
+    if (!created) throw errors.SCORING_RULE_NOT_FOUND();
+    return created;
   },
 );
 

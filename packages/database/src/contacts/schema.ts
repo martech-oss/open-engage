@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -73,6 +74,7 @@ export const contacts = sqliteTable(
     uniqueIndex("contacts_workspace_email_unique")
       .on(table.workspaceId, table.email)
       .where(sql`${table.email} IS NOT NULL`),
+    uniqueIndex("contacts_workspace_id_unique").on(table.workspaceId, table.id),
     check("contacts_status_check", sql`${table.status} IN ('active', 'archived', 'anonymous')`),
   ],
 );
@@ -146,7 +148,10 @@ export const tags = sqliteTable(
     color: text().default("#64748b").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => [uniqueIndex("tags_workspace_slug_unique").on(table.workspaceId, table.slug)],
+  (table) => [
+    uniqueIndex("tags_workspace_slug_unique").on(table.workspaceId, table.slug),
+    uniqueIndex("tags_workspace_id_unique").on(table.workspaceId, table.id),
+  ],
 );
 
 export const contactTags = sqliteTable(
@@ -169,6 +174,16 @@ export const contactTags = sqliteTable(
       columns: [table.workspaceId, table.contactId, table.tagId],
       name: "contact_tags_workspace_id_contact_id_tag_id_pk",
     }),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "contact_tags_workspace_contact_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.tagId],
+      foreignColumns: [tags.workspaceId, tags.id],
+      name: "contact_tags_workspace_tag_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -205,6 +220,11 @@ export const contactEvents = sqliteTable(
       table.contactId,
       table.occurredAt,
     ),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "contact_events_workspace_contact_fk",
+    }),
   ],
 );
 

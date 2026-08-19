@@ -1,4 +1,9 @@
-import { contactEvents, type OpenEngageDatabase, uuidv7 } from "@openengage/database";
+import {
+  contactEvents,
+  ContactResourceRepository,
+  type OpenEngageDatabase,
+  uuidv7,
+} from "@openengage/database";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 import { applyScoringForEvent, recomputeContactGrade } from "../scoring/engine";
@@ -37,6 +42,10 @@ export async function recordContactEvent(
     createdAt: new Date().toISOString(),
   });
   if (!input.contactId) return { eventId, enrollmentCount: 0 };
+  const activeContactId = await new ContactResourceRepository(database, {
+    workspaceId: input.workspaceId,
+  }).findActiveContactId(input.contactId);
+  if (!activeContactId) return { eventId, enrollmentCount: 0 };
   // Scoring runs before enrollment so an automation that branches on score sees
   // the value this very event produced, and the grade follows the field changes
   // a form submission may have just written.

@@ -64,6 +64,13 @@
       "when": 1787154960810,
       "tag": "0008_polite_pete_wisdom",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1787158706688,
+      "tag": "0009_chemical_loki",
+      "breakpoints": true
     }
   ]
 }
