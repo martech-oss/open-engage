@@ -1,7 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod";
 
-import { ContactRepository, AutomationRepository } from "@openengage/database";
+import { AutomationRepository } from "@openengage/database/automations";
+import { ContactRepository } from "@openengage/database/contacts";
 
 import { hasWorkspaceRole } from "../../auth/authorization";
 import { enrollContactManually } from "../../automations/enrollment";

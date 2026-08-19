@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { ConsentRepository, createDatabase } from "@openengage/database";
+import { ConsentRepository, createDatabase } from "@openengage/database/testing";
 
 import { CompanyConflictError, createCompany } from "../src/contacts/company-service";
 import { createTag, ResourceConflictError } from "../src/contacts/resource-service";

@@ -13,7 +13,7 @@ import {
   projects,
   scoringRules,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { processPendingPublicFormEvent, recordContactEvent } from "../src/contacts/event-service";
 import { seedWorkspace } from "./factory";

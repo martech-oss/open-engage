@@ -8,13 +8,9 @@ import type {
   TagUpdate,
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  ContactRepository,
-  ContactResourceRepository,
-  isConstraintError,
-  uuidv7,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
+import { isConstraintError, uuidv7 } from "@openengage/database/shared";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { resourceSlug } from "../platform/values";

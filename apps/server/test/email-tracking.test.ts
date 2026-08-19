@@ -10,7 +10,7 @@ import {
   projectItems,
   projects,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { applyEmailTracking } from "../src/messaging/email-tracking";
 import { seedWorkspace } from "./factory";

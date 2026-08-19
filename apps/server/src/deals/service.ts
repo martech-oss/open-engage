@@ -15,12 +15,10 @@ import type {
   DealUpdate,
 } from "@openengage/core/deals";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  DealRepository,
-  ensureLoaded,
-  writeAuditLog,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { DealRepository } from "@openengage/database/deals";
+import { writeAuditLog } from "@openengage/database/platform";
+import { ensureLoaded } from "@openengage/database/shared";
 
 import {
   serializeDeal,

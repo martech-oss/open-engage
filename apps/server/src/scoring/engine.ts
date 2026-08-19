@@ -4,12 +4,12 @@ import {
   SCORING_EVENT_TYPES,
   type ScoringEventType,
 } from "@openengage/core/scoring";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   ScoringEngineRepository,
   type GradingContactRow,
-  type OpenEngageDatabase,
   type ScoringRuleMatch,
-} from "@openengage/database";
+} from "@openengage/database/scoring";
 
 import { isRecord, primitiveString } from "../platform/values";
 

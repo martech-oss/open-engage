@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 import type { ProjectBriefMutation } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { createDatabase, member, user, uuidv7 } from "@openengage/database";
+import { createDatabase, member, user, uuidv7 } from "@openengage/database/testing";
 
 export async function addProjectBriefMember(
   workspace: WorkspaceContext,

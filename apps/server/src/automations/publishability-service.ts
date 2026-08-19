@@ -4,7 +4,8 @@ import {
   validateAutomation,
 } from "@openengage/core/automations";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { MessagingRepository, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { MessagingRepository } from "@openengage/database/messaging";
 
 import { loadAutomationResourceContext, validateAutomationResources } from "./resource-validation";
 

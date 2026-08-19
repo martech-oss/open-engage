@@ -10,14 +10,14 @@ import {
   ProjectBriefLinkConflictError,
   user,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import {
   createProjectBrief,
   reopenProjectBrief,
   reviewProjectBrief,
   submitProjectBrief,
-} from "../src/web/project-brief-service";
+} from "../src/projects/project-brief-service";
 import { seedWorkspaceClient, seedWorkspaceContext } from "./factory";
 
 describe("Email sequence drafts", () => {

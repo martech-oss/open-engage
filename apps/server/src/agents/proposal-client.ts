@@ -1,6 +1,6 @@
 import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
 
-import { uuidv7 } from "@openengage/database";
+import { uuidv7 } from "@openengage/database/shared";
 
 import type { RuntimeEnv } from "../env";
 

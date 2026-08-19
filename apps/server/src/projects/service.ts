@@ -1,9 +1,6 @@
 import type { ProjectResourceType, ProjectRow } from "@openengage/core/projects";
-import {
-  ProjectRepository,
-  type OpenEngageDatabase,
-  type ProjectItemOutcome,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ProjectRepository, type ProjectItemOutcome } from "@openengage/database/projects";
 
 export async function listProjects(
   database: OpenEngageDatabase,
@@ -20,7 +17,7 @@ export async function createProject(
   return new ProjectRepository(database, { workspaceId }).create(input);
 }
 
-export type { ProjectItemOutcome } from "@openengage/database";
+export type { ProjectItemOutcome } from "@openengage/database/projects";
 
 export async function addProjectItem(
   database: OpenEngageDatabase,

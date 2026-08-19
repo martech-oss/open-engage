@@ -1,12 +1,12 @@
 import type { Hono } from "hono";
 
-import { ConsentRepository } from "@openengage/database";
+import { ConsentRepository } from "@openengage/database/consent";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
 import { verifySignedToken } from "../platform/crypto";
+import { escapeHtml } from "../rendering/html";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
-import { escapeHtml } from "./html";
 
 export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/u/:token", async (context) => {

@@ -7,11 +7,8 @@ import type {
   ContactTimelineEvent,
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  ContactRepository,
-  ContactResourceRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
 
 import { recordContactEvent } from "../contacts/event-service";
 

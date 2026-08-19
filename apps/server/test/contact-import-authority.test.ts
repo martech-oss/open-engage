@@ -2,7 +2,7 @@ import { createExecutionContext, createScheduledController } from "cloudflare:te
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { contacts, createDatabase, DataJobRepository, uuidv7 } from "@openengage/database";
+import { contacts, createDatabase, DataJobRepository, uuidv7 } from "@openengage/database/testing";
 
 import { processContactImport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";

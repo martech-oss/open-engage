@@ -21,10 +21,10 @@ import {
   contacts,
   tags,
 } from "./contacts/schema";
-import { scoreEvents } from "./contacts/score-schema";
 import { dealPipelines, dealStages, dealTasks, deals } from "./deals/schema";
 import { deliveries, deliveryEvents, emailTemplates, inboundEmails } from "./messaging/schema";
 import { auditLogs } from "./platform/schema";
+import { scoreEvents } from "./scoring/schema";
 import { segmentMemberships, segments } from "./segments/schema";
 import { formSubmissions, forms, landingPageVersions, landingPages } from "./web/schema";
 import { apiKeys, webhookDeliveries, webhookEndpoints } from "./workspaces/schema";
@@ -288,8 +288,9 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   apiKey: one(apiKeys, { fields: [auditLogs.apiKeyId], references: [apiKeys.id] }),
 }));
 
-// Workspace-scoped tables with no relation to another business table beyond
-// workspaceId (out of scope, see above): custom_field_definitions,
-// import_jobs, assets, projects/project_items, site_tracking_settings,
-// site_messages, message_variables, provider_configs, idempotency_keys,
-// dead_letters, daily_metrics.
+// Tables intentionally left out of this relational graph are still registered
+// once through their owning schema modules (for example assets/schema.ts and
+// projects/schema.ts). They are queried with explicit workspace-scoped joins:
+// custom_field_definitions, import_jobs, assets, projects/project_items,
+// site_tracking_settings, site_messages, message_variables, provider_configs,
+// idempotency_keys, dead_letters, daily_metrics.

@@ -43,7 +43,8 @@
       "files": [
         "apps/server/**/*.ts",
         "apps/server/**/*.tsx",
-        "packages/channels/**/*.ts",
+        "apps/agent/**/*.ts",
+        "apps/agent/**/*.tsx",
         "packages/database/**/*.ts"
       ],
       "env": {
@@ -51,7 +52,7 @@
       }
     },
     {
-      "files": ["packages/create-openengage/**/*.ts", "packages/mcp-server/**/*.ts"],
+      "files": ["packages/create-openengage/**/*.ts"],
       "env": {
         "node": true
       }

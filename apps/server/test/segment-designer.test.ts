@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { createDatabase } from "@openengage/database";
+import { createDatabase } from "@openengage/database/testing";
 
 import { reconcileContactSegmentMemberships } from "../src/segments/membership-service";
 import { seedWorkspaceClient } from "./factory";

@@ -1,4 +1,4 @@
-import { writeAuditLog } from "@openengage/database";
+import { writeAuditLog } from "@openengage/database/platform";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -22,7 +22,7 @@ import {
   updateProjectBrief,
   withdrawProjectBrief,
 } from "./project-brief-service";
-import { addProjectItem, createProject, listProjects } from "./project-service";
+import { addProjectItem, createProject, listProjects } from "./service";
 
 export const listProjectsProcedure = authed.projects.list.handler(({ context }) =>
   listProjects(context.database, context.workspace.workspaceId),

@@ -7,10 +7,11 @@ import { automationEnrollments, automations } from "../automations/schema";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
 import { dealStages, dealTasks, deals } from "../deals/schema";
 import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema";
+import { projectBriefs, projects } from "../projects/schema";
 import { segmentMemberships, segments } from "../segments/schema";
 import { nowIso } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
-import { formSubmissions, forms, projectBriefs, projects, siteMessages } from "../web/schema";
+import { formSubmissions, forms, siteMessages } from "../web/schema";
 
 /**
  * Every report query in this repository is composed with drizzle's `sql`

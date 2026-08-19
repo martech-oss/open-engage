@@ -7,19 +7,19 @@ import {
 
 import { contacts } from "../contacts/schema";
 import { deliveries, emailTemplates } from "../messaging/schema";
-import { changedExactlyOne, didChange, isConstraintError, nowIso } from "../shared/database-utils";
-import { defineJsonCodec } from "../shared/json-codec";
-import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
-import { WorkspaceRepository } from "../shared/repository-base";
-import { uuidv7 } from "../shared/uuid";
-import { conditionalAudit } from "../web/project-brief-persistence";
+import { conditionalAudit } from "../projects/project-brief-persistence";
 import {
   authenticatedProjectActorId,
   approvedProjectLinkPrecondition,
   ProjectBriefLinkConflictError,
   type ApprovedProjectLink,
-} from "../web/project-resource-guard";
-import { projectBriefs, projectItems } from "../web/schema";
+} from "../projects/project-resource-guard";
+import { projectBriefs, projectItems } from "../projects/schema";
+import { changedExactlyOne, didChange, isConstraintError, nowIso } from "../shared/database-utils";
+import { defineJsonCodec } from "../shared/json-codec";
+import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
+import { WorkspaceRepository } from "../shared/repository-base";
+import { uuidv7 } from "../shared/uuid";
 import {
   automationEnrollments,
   automationJobs,

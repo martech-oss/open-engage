@@ -1,17 +1,16 @@
 import type { AutomationNode } from "@openengage/core/automations";
 import { evaluateSendEligibility } from "@openengage/core/consent";
 import { retryDelaySeconds } from "@openengage/core/platform";
+import { type AutomationJobRow } from "@openengage/database/automations";
+import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
+import { ConsentRepository } from "@openengage/database/consent";
 import {
-  ConsentRepository,
-  createDatabase,
   DeliveryRecoveryRepository,
   EmailTrackingEventRepository,
   MessagingWorkerRepository,
-  uuidv7,
-  type AutomationJobRow,
   type DeliveryLeaseRecord,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+} from "@openengage/database/messaging";
+import { uuidv7 } from "@openengage/database/shared";
 
 import {
   OutboundWebhookAdapter,

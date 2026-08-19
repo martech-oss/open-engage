@@ -1,15 +1,13 @@
 import { validateAutomation } from "@openengage/core/automations";
 import type { AutomationDefinition } from "@openengage/core/automations";
-import {
-  AutomationRepository,
-  ProjectBriefLinkConflictError,
-  uuidv7,
-  writeAuditLog,
-} from "@openengage/database";
+import { AutomationRepository } from "@openengage/database/automations";
+import { writeAuditLog } from "@openengage/database/platform";
+import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
+import { uuidv7 } from "@openengage/database/shared";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { resolveApprovedProjectBriefContext } from "../web/project-brief-context";
+import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
 import { getAutomationAnalytics } from "./analytics-service";
 import {
   applyEmailSequence,

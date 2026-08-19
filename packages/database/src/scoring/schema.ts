@@ -15,7 +15,8 @@ import {
 } from "@openengage/core/scoring";
 
 import { organization } from "../auth/schema";
-import { contacts, tags } from "../contacts/schema";
+import { automationEnrollments } from "../automations/schema";
+import { contactEvents, contacts, tags } from "../contacts/schema";
 import { checkEnum } from "../shared/enum-check";
 
 /**
@@ -152,5 +153,49 @@ export const gradingCriteria = sqliteTable(
   (table) => [
     index("grading_criteria_workspace_idx").on(table.workspaceId, table.enabled),
     checkEnum("grading_criteria_operator_check", table.operator, GRADING_OPERATORS),
+  ],
+);
+
+/** Score mutations and their automation/contact-event provenance. */
+export const scoreEvents = sqliteTable(
+  "score_events",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    delta: integer().notNull(),
+    reason: text().notNull(),
+    automationEnrollmentId: text("automation_enrollment_id").references(
+      () => automationEnrollments.id,
+      { onDelete: "set null" },
+    ),
+    contactEventId: text("contact_event_id").references(() => contactEvents.id, {
+      onDelete: "cascade",
+    }),
+    scoringRuleId: text("scoring_rule_id").references(() => scoringRules.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("score_events_workspace_contact_idx").on(
+      table.workspaceId,
+      table.contactId,
+      table.createdAt,
+    ),
+    uniqueIndex("score_events_contact_event_rule_unique").on(
+      table.workspaceId,
+      table.contactEventId,
+      table.scoringRuleId,
+    ),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "score_events_workspace_contact_fk",
+    }).onDelete("cascade"),
   ],
 );

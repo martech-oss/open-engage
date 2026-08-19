@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 
-import { EmailTrackingEventRepository, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { EmailTrackingEventRepository } from "@openengage/database/messaging";
 
 import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";

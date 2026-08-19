@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { DatabaseHealthRepository } from "@openengage/database";
+import { DatabaseHealthRepository } from "@openengage/database/platform";
 
 import { registerAgentGatewayRoutes } from "./agents/gateway";
+import { registerAssetRoutes } from "./assets/routes";
 import { apiError, requestContext } from "./auth/access";
 import { createAuth } from "./auth/service";
 import { type AppEnvironment } from "./env";
@@ -13,7 +14,6 @@ import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
 import { registerPublicRoutes } from "./public/routes";
-import { registerAssetRoutes } from "./web/asset-routes";
 
 const app = new Hono<AppEnvironment>();
 app.use("*", requestContext);

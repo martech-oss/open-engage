@@ -2,7 +2,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SegmentRepository, uuidv7 } from "@openengage/database";
+import { SegmentRepository, uuidv7 } from "@openengage/database/testing";
 import { contract } from "@openengage/orpc";
 
 import { createFixtureClient, seedWorkspaceClient } from "./factory";

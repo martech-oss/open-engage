@@ -10,12 +10,17 @@ import type {
 } from "@openengage/core/scoring";
 
 import { contactTags, contacts, tags } from "../contacts/schema";
-import { scoreEvents } from "../contacts/score-schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { contactCategoryScores, gradingCriteria, scoringCategories, scoringRules } from "./schema";
+import {
+  contactCategoryScores,
+  gradingCriteria,
+  scoreEvents,
+  scoringCategories,
+  scoringRules,
+} from "./schema";
 
 /** Authenticated CRUD for categories, rules and grading criteria. */
 export class ScoringRepository extends WorkspaceRepository {

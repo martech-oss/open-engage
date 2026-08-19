@@ -1,8 +1,5 @@
-import {
-  CampaignTouchRepository,
-  type OpenEngageDatabase,
-  type TouchCandidate,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { CampaignTouchRepository, type TouchCandidate } from "@openengage/database/projects";
 
 /**
  * Maps a contact event onto the project resource it belongs to. Only events

@@ -1,12 +1,9 @@
-import {
-  createDatabase,
-  AutomationJobRecoveryRepository,
-  ContactImportRecoveryRepository,
-  DeadLetterRepository,
-  GeneratedEmailImageRepository,
-  MaintenanceRepository,
-  uuidv7,
-} from "@openengage/database";
+import { AutomationJobRecoveryRepository } from "@openengage/database/automations";
+import { createDatabase } from "@openengage/database/client";
+import { ContactImportRecoveryRepository } from "@openengage/database/contacts";
+import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
+import { DeadLetterRepository, MaintenanceRepository } from "@openengage/database/platform";
+import { uuidv7 } from "@openengage/database/shared";
 
 import { type RuntimeEnv } from "../env";
 import { primitiveString } from "./values";

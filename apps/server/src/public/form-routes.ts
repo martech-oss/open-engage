@@ -1,16 +1,18 @@
 import type { Hono } from "hono";
 
-import { PublicFormRepository, uuidv7 } from "@openengage/database";
+import { uuidv7 } from "@openengage/database/shared";
+import { PublicFormRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
 import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
 import { logError } from "../observability";
 import { isRecord, primitiveString, stringOrNull } from "../platform/values";
-import { originAllowed, redactFormPayload } from "./domain";
+import { hasTurnstileConfiguration } from "../web/config";
+import { originAllowed, redactFormPayload } from "../web/domain";
 import { validatePublicFormBody } from "./form-validation";
 import { safeJson } from "./http";
-import { hashIp, hasTurnstileConfiguration, verifyTurnstile } from "./shared";
+import { hashIp, verifyTurnstile } from "./shared";
 import { formEmbedScript, renderPublicForm } from "./templates";
 
 /**

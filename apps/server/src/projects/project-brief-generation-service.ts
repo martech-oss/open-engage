@@ -5,7 +5,7 @@ import {
   type MarketingBriefGenerationResult,
 } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import type { OpenEngageDatabase } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database/client";
 
 import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
 import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";

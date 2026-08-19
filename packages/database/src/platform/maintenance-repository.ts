@@ -1,9 +1,9 @@
 import { and, asc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 
 import { contactEventOutbox, contactEvents, contacts } from "../contacts/schema";
-import { scoreEvents } from "../contacts/score-schema";
 import { deliveryEvents } from "../messaging/schema";
 import { dailyMetrics } from "../reports/schema";
+import { scoreEvents } from "../scoring/schema";
 import { DatabaseRepository } from "../shared/repository-base";
 import { idempotencyKeys } from "./schema";
 

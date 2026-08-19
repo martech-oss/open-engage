@@ -85,9 +85,9 @@ Channel adapter、安全なHTML/Text renderer、認証メール用React Email te
 Server Workerに限られるため、それぞれ`apps/server/src/channels`、`rendering`、
 `auth/email-templates`で管理します。
 
-`apps/server/src`と`packages/database/src`は同じ12ドメインで一致します:
-auth / automations / consent / contacts / deals / messaging /
-platform / reports / segments / web / workspaces
+`apps/server/src`と`packages/database/src`は同じ15ドメインで一致します:
+agents / assets / auth / automations / consent / contacts / deals / messaging /
+platform / projects / reports / scoring / segments / web / workspaces
 (+ `apps/server/src`だけが持つserver専用の`runtime`, `public`, `orpc`)。
 
 `packages/orpc/src`はほぼ同じですが、`auth`(Better Authが直接APIを提供するためcontract化していない)、
@@ -99,7 +99,8 @@ platform / reports / segments / web / workspaces
 
 `apps/server/src/<domain>/router.ts`は原則`packages/database`の`*Repository`を直接呼びます。
 `service.ts`は本物のオーケストレーション(複数ステップ、監査ログ、外部I/O、DTOに収まらない計算)が
-あるドメインだけに存在します: `web/asset-service.ts`(R2・checksum・content-typeポリシー)、
+あるドメインだけに存在します: `assets/service.ts`(R2・checksum・content-typeポリシー)、
+`projects/project-brief-service.ts`(施策ブリーフの状態遷移)、
 `deals/service.ts`(参照検証・get-after-write)、`auth/service.ts`(Better Auth設定)、
 `mcp/`(ツール実行の集約)。単なる1行委譲(`return new XRepository(...).method(...)`)や
 レコード→DTOのフィールドコピーは、前者はrouterへインライン化し、後者はrepository側で

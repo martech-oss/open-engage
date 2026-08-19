@@ -13,14 +13,14 @@ import { forbiddenError, workspaceErrors } from "@openengage/orpc";
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";
 import type { AppEnvironment } from "../env";
-import { serveAssetObject } from "../public/asset-response";
+import { serveAssetObject } from "./response";
 import {
   createStreamedAsset,
   findAssetForDelivery,
   loadAssetOrigin,
   replaceAssetContent,
   type StreamedUploadInput,
-} from "./asset-service";
+} from "./service";
 
 type RouteContext = Context<AppEnvironment>;
 

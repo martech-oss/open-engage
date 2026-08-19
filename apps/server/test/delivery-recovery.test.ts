@@ -9,7 +9,7 @@ import {
   deliveryEvents,
   uuidv7,
   webhookEndpoints,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import type { RuntimeEnv } from "../src/env";
 import { processDelivery } from "../src/messaging/delivery-worker";

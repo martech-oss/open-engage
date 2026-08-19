@@ -9,7 +9,8 @@ import {
   type SegmentValidationResult,
 } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { SegmentRepository } from "@openengage/database/segments";
 
 const SYSTEM_EVENTS = [
   "contact_created",

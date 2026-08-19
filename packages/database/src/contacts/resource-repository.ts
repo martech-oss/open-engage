@@ -5,13 +5,13 @@ import { segmentFilterSchema, type SegmentFilter } from "@openengage/core/segmen
 import { jsonRecordSchema } from "@openengage/core/shared";
 
 import { deliveries } from "../messaging/schema";
+import { scoreEvents } from "../scoring/schema";
 import { segmentMemberships, segments } from "../segments/schema";
 import { didChange, nowIso } from "../shared/database-utils";
 import { decodeJson, decodeNullableJson } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { companies, companyContacts, contactEvents, contacts, contactTags, tags } from "./schema";
-import { scoreEvents } from "./score-schema";
 
 /** Cap on the score-event and timeline previews shown in the contact detail drawer. */
 const CONTACT_DETAIL_FEED_LIMIT = 100;

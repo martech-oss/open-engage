@@ -1,5 +1,6 @@
 import type { WebhookEndpointRow } from "@openengage/core/workspaces";
-import { type OpenEngageDatabase, WorkspaceSettingsRepository } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
 import { assertSafeWebhookUrl } from "../channels";
 import { encryptCredentials } from "../platform/crypto";

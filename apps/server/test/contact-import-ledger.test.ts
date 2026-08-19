@@ -11,7 +11,7 @@ import {
   DataJobRepository,
   type ContactImportRow,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { processContactImport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";

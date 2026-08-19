@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 
-import { PublicWebRepository } from "@openengage/database";
+import { PublicWebRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";

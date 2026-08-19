@@ -5,7 +5,7 @@ import type {
   DealStageRow,
   DealTaskListItemRow,
   DealTaskRow,
-} from "@openengage/database";
+} from "@openengage/database/deals";
 
 export function serializeStage(
   stage: Pick<DealStageRow, "id" | "name" | "color" | "position" | "probability">,

@@ -9,11 +9,10 @@ import {
   AutomationEngineRepository,
   AutomationJobRecoveryRepository,
   AUTOMATION_MAX_STARTS,
-  createDatabase,
   type AutomationContactColumn,
   type AutomationJobRow,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+} from "@openengage/database/automations";
+import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
 
 import { PermanentChannelError } from "../channels";
 import { recordContactEvent } from "../contacts/event-service";

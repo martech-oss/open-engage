@@ -13,7 +13,7 @@ import {
   restoreAsset,
   updateAsset,
   uploadAsset,
-} from "./asset-service";
+} from "./service";
 
 function resolveAssetOrigin(context: OrpcContext) {
   return loadAssetOrigin(context.database, context.workspace.workspaceId, context.env.APP_URL);

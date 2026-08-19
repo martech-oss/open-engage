@@ -8,7 +8,7 @@ import {
   ProjectBriefLinkConflictError,
   projectItems,
   SegmentRepository,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import {
   approvedProjectBriefContext,
@@ -22,7 +22,7 @@ import {
   submitProjectBrief,
   updateProjectBrief,
   withdrawProjectBrief,
-} from "../src/web/project-brief-service";
+} from "../src/projects/project-brief-service";
 import { seedWorkspaceContext } from "./factory";
 import { addProjectBriefMember, projectBriefInput } from "./project-brief-test-support";
 

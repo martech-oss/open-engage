@@ -1,5 +1,5 @@
 import { isRecord } from "../platform/values";
-import { escapeHtml } from "./html";
+import { escapeHtml } from "../rendering/html";
 
 export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: string): string {
   return `(() => {

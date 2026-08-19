@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { assets, createDatabase, uuidv7 } from "@openengage/database";
+import { assets, createDatabase, uuidv7 } from "@openengage/database/testing";
 import type { Asset } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";

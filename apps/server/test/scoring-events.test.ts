@@ -9,7 +9,7 @@ import {
   ScoringEngineRepository,
   ScoringRepository,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { recordContactEvent } from "../src/contacts/event-service";
 import { recomputeContactGrade } from "../src/scoring/engine";

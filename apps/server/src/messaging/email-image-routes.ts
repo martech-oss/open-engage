@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 
-import { GeneratedEmailImageRepository } from "@openengage/database";
+import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
 
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import type { AppEnvironment } from "../env";

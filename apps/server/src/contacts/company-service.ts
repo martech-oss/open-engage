@@ -6,13 +6,13 @@ import type {
   CompanyUpdate,
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   CompanyRepository,
-  isConstraintError,
-  writeAuditLog,
-  type OpenEngageDatabase,
   type CompanySummary as RepositoryAccountSummary,
-} from "@openengage/database";
+} from "@openengage/database/contacts";
+import { writeAuditLog } from "@openengage/database/platform";
+import { isConstraintError } from "@openengage/database/shared";
 
 /** Raised when a write conflicts with the unique domain constraint. */
 export class CompanyConflictError extends Error {

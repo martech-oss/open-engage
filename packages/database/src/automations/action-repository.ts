@@ -1,7 +1,7 @@
 import { and, eq, ne, notExists, sql } from "drizzle-orm";
 
 import { contacts } from "../contacts/schema";
-import { scoreEvents } from "../contacts/score-schema";
+import { scoreEvents } from "../scoring/schema";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import type { AutomationJobRow } from "./engine-support";

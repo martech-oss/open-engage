@@ -1,5 +1,5 @@
 import type { WorkspaceContext } from "@openengage/core/shared";
-import type { OpenEngageDatabase } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database/client";
 
 export interface RuntimeSecrets {
   BETTER_AUTH_SECRET: string;

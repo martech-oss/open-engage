@@ -3,7 +3,8 @@ import { betterAuth } from "better-auth/minimal";
 import { organization, twoFactor } from "better-auth/plugins";
 import { adminAc, memberAc, ownerAc } from "better-auth/plugins/organization/access";
 
-import { authSchema, createDatabase } from "@openengage/database";
+import { createDatabase } from "@openengage/database/client";
+import { authSchema } from "@openengage/database/schema";
 
 import type { RuntimeEnv } from "../env";
 import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";

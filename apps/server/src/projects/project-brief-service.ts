@@ -7,13 +7,13 @@ import type {
   ProjectResourceType,
 } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   ProjectBriefCommandRepository,
   ProjectBriefQueryRepository,
   ProjectResourceLinkRepository,
-  type OpenEngageDatabase,
   type ProjectBriefCommandOutcome,
-} from "@openengage/database";
+} from "@openengage/database/projects";
 
 import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
 

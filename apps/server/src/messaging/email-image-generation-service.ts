@@ -1,13 +1,11 @@
 import type { GenerateEmailImageInput, GeneratedEmailImage } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  AssetRepository,
-  GeneratedEmailImageRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { AssetRepository } from "@openengage/database/assets";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
 
+import { loadAssetOrigin, uploadAsset } from "../assets/service";
 import type { RuntimeEnv } from "../env";
-import { loadAssetOrigin, uploadAsset } from "../web/asset-service";
 
 const IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b" as const;
 const IMAGE_TIMEOUT_MS = 55_000;

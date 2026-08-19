@@ -7,7 +7,7 @@ import {
   createDatabase,
   ScoringRepository,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { recordContactEvent } from "../src/contacts/event-service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";

@@ -1,13 +1,11 @@
-import {
-  ProjectBriefLinkConflictError,
-  SegmentRepository,
-  isUniqueConstraintError,
-  writeAuditLog,
-} from "@openengage/database";
+import { writeAuditLog } from "@openengage/database/platform";
+import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
+import { SegmentRepository } from "@openengage/database/segments";
+import { isUniqueConstraintError } from "@openengage/database/shared";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { resolveApprovedProjectBriefContext } from "../web/project-brief-context";
+import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
 import { SegmentGenerationError, generateSegment } from "./generation-service";
 import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";

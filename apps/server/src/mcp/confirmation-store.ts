@@ -1,6 +1,7 @@
 import * as z from "zod";
 
-import { IdempotencyRepository, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { IdempotencyRepository } from "@openengage/database/platform";
 
 const confirmationLifetimeMs = 5 * 60_000;
 const confirmationPayloadSchema = z.object({

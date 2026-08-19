@@ -1,4 +1,5 @@
-import type { OpenEngageDatabase, ReportDateRange } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database/client";
+import type { ReportDateRange } from "@openengage/database/reports";
 
 export type ReportDatabase = OpenEngageDatabase;
 

@@ -2,7 +2,7 @@ import { createExecutionContext, createScheduledController } from "cloudflare:te
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MaintenanceRepository } from "@openengage/database";
+import { MaintenanceRepository } from "@openengage/database/testing";
 
 import { runDailyMaintenance } from "../src/platform/maintenance-worker";
 import { scheduled } from "../src/runtime/dispatch";

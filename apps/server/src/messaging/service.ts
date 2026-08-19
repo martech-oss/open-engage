@@ -5,13 +5,11 @@ import type {
   SubscriptionTopicOption,
 } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  ConsentRepository,
-  isConstraintError,
-  MessagingRepository,
-  SegmentRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ConsentRepository } from "@openengage/database/consent";
+import { MessagingRepository } from "@openengage/database/messaging";
+import { SegmentRepository } from "@openengage/database/segments";
+import { isConstraintError } from "@openengage/database/shared";
 
 export function listMessageVariables(
   database: OpenEngageDatabase,

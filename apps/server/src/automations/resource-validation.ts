@@ -5,15 +5,13 @@ import type {
   AutomationResourceOption,
 } from "@openengage/core/automations";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  ConsentRepository,
-  ContactResourceRepository,
-  MessagingRepository,
-  type OpenEngageDatabase,
-  SegmentRepository,
-  WebRepository,
-  WorkspaceSettingsRepository,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ConsentRepository } from "@openengage/database/consent";
+import { ContactResourceRepository } from "@openengage/database/contacts";
+import { MessagingRepository } from "@openengage/database/messaging";
+import { SegmentRepository } from "@openengage/database/segments";
+import { WebRepository } from "@openengage/database/web";
+import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
 interface ResourceReferences {
   emailTemplates: Set<string>;

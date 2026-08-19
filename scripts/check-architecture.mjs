@@ -42,7 +42,11 @@ const sharedErrorMessages = [
 // never grow it for a new raw-drizzle call site.
 const drizzleImportAllowlist = [];
 
-const root = resolve(import.meta.dirname, "..");
+const rootFlag = process.argv.indexOf("--root");
+const root =
+  rootFlag >= 0 && process.argv[rootFlag + 1]
+    ? resolve(process.argv[rootFlag + 1])
+    : resolve(import.meta.dirname, "..");
 const sourceRoots = [resolve(root, "apps"), resolve(root, "packages")];
 const files = [];
 for (const sourceRoot of sourceRoots) await collectSourceFiles(sourceRoot, files);
@@ -76,6 +80,78 @@ for (const file of files) {
     ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
   ].map((match) => match[1]);
   const workspacePath = relative(root, file);
+  const isTest = isTestFile(workspacePath);
+  const isBetterAuthAdapter = workspacePath === "apps/server/src/auth/service.ts";
+
+  if (imports.includes("@openengage/database")) {
+    violations.push(
+      `${workspacePath}: import an owned @openengage/database subpath, not the database package root`,
+    );
+  }
+  if (!isTest && imports.includes("@openengage/database/testing")) {
+    violations.push(
+      `${workspacePath}: production code must not use the database testing entrypoint`,
+    );
+  }
+  if (imports.includes("@openengage/database/schema") && !isBetterAuthAdapter) {
+    violations.push(
+      `${workspacePath}: only the exact Better Auth adapter may import the database schema entrypoint`,
+    );
+  }
+  if (
+    workspacePath.startsWith("apps/server/src/") &&
+    !isTest &&
+    !isBetterAuthAdapter &&
+    /\.\s*orm\b/.test(source)
+  ) {
+    violations.push(`${workspacePath}: only the exact Better Auth adapter may access database.orm`);
+  }
+  if (
+    isBetterAuthAdapter &&
+    imports.includes("@openengage/database/schema") &&
+    !imports.includes("@openengage/database/client")
+  ) {
+    violations.push(
+      `${workspacePath}: the Better Auth adapter must import createDatabase from @openengage/database/client`,
+    );
+  }
+
+  if (
+    /^(?:packages\/database\/src\/web\/(?:asset-|project-|campaign-repository)|apps\/server\/src\/web\/(?:asset-|project-))/.test(
+      workspacePath,
+    )
+  ) {
+    violations.push(
+      `${workspacePath}: asset/project implementation must live in its owning domain`,
+    );
+  }
+  if (
+    workspacePath === "packages/database/src/web/public-repository.ts" &&
+    /\bPublicAsset(?:Repository|Record)\b/.test(source)
+  ) {
+    violations.push(
+      `${workspacePath}: public asset persistence must live in the database assets domain`,
+    );
+  }
+  if (
+    workspacePath === "packages/database/src/contacts/score-schema.ts" ||
+    imports.some((specifier) => /(?:^|\/)contacts\/score-schema$/.test(specifier))
+  ) {
+    violations.push(`${workspacePath}: score events belong to scoring/schema.ts`);
+  }
+  const databaseDomainBarrel = /^packages\/database\/src\/([^/]+)\/index\.ts$/.exec(workspacePath);
+  if (databaseDomainBarrel) {
+    const ownerRoot = `packages/database/src/${databaseDomainBarrel[1]}/`;
+    for (const specifier of imports.filter((value) => value.startsWith("."))) {
+      const target = resolveImport(file, specifier);
+      const targetPath = target ? relative(root, target) : "";
+      if (!targetPath.startsWith(ownerRoot) || /(?:^|\/)schema\.tsx?$/.test(targetPath)) {
+        violations.push(
+          `${workspacePath}: database domain barrel must export owned repositories/types only`,
+        );
+      }
+    }
+  }
 
   if (
     (workspacePath.startsWith("packages/core/src/") ||
@@ -167,7 +243,20 @@ for (const file of files) {
 
   for (const specifier of imports.filter((value) => value.startsWith("."))) {
     const target = resolveImport(file, specifier);
-    if (target) graph.get(file).push(target);
+    if (target) {
+      graph.get(file).push(target);
+      enforceServerFolderDirection(workspacePath, relative(root, target), violations);
+    }
+  }
+  if (workspacePath.startsWith("apps/client/src/")) {
+    for (const specifier of imports.filter((value) => value.startsWith("@/"))) {
+      const target = resolveImport(
+        resolve(root, "apps/client/src/__alias_importer__.ts"),
+        `./${specifier.slice(2)}`,
+      );
+      if (target) graph.get(file).push(target);
+      else violations.push(`${workspacePath}: unresolved client alias ${specifier}`);
+    }
   }
   for (const specifier of imports) {
     const target = packageSpecifiers.get(specifier);
@@ -240,6 +329,25 @@ function resolveImport(importer, specifier) {
     if (sourceSet.has(candidate)) return candidate;
   }
   return undefined;
+}
+
+function isTestFile(workspacePath) {
+  return /(?:^|\/)test(?:\/|$)|\.(?:test|spec)\.tsx?$/.test(workspacePath);
+}
+
+function enforceServerFolderDirection(importer, target, output) {
+  const match = /^apps\/server\/src\/(platform|rendering|assets|web)\//.exec(importer);
+  if (!match) return;
+  const owner = match[1];
+  if (owner === "platform" && target.startsWith("apps/server/src/channels/")) {
+    output.push(`${importer}: platform must not import channels`);
+  }
+  if (
+    (owner === "rendering" || owner === "assets" || owner === "web") &&
+    target.startsWith("apps/server/src/public/")
+  ) {
+    output.push(`${importer}: ${owner} must not import public`);
+  }
 }
 
 function visit(file) {

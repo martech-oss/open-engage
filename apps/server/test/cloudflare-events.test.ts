@@ -6,7 +6,7 @@ import {
   DeliveryRecoveryRepository,
   MessagingWorkerRepository,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import type { RuntimeEnv } from "../src/env";
 import { processCloudflareEmailEvent } from "../src/messaging/cloudflare-events";

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, notExists, sql } from "drizzle-orm";
 
 import { stringArraySchema } from "@openengage/core/shared";
 import {
@@ -25,7 +25,6 @@ import {
   type PersistPublicFormSubmissionInput,
 } from "./public-form-submission-writer";
 import {
-  assets,
   forms,
   formSubmissions,
   landingPages,
@@ -398,17 +397,6 @@ export class PublicFormRepository extends DatabaseRepository {
   }
 }
 
-export interface PublicAssetRecord {
-  id: string;
-  workspaceId: string;
-  name: string;
-  originalFilename: string;
-  kind: string;
-  r2Key: string;
-  contentType: string;
-  checksum: string;
-}
-
 /** Validated public reads shared by landing-page and tracking routes. */
 export class PublicWebRepository extends DatabaseRepository {
   public async findPublishedLandingPage(
@@ -457,43 +445,5 @@ export class PublicWebRepository extends DatabaseRepository {
     return row
       ? { id: row.id, allowedDomains: trackingAllowedDomainsCodec.decode(row.allowedDomains) }
       : null;
-  }
-}
-
-/**
- * The single gate in front of publicly readable assets. It lives here rather
- * than in `apps/server` because the `openengage-assets` bucket also holds contact
- * CSV exports, inbound email attachments and event archives - every one of the
- * three predicates below (workspace slug, public visibility, not archived) is
- * load-bearing, so the query is kept where it can be unit-tested directly.
- */
-export class PublicAssetRepository extends DatabaseRepository {
-  public async findPublicAsset(
-    workspaceSlug: string,
-    assetId: string,
-  ): Promise<PublicAssetRecord | null> {
-    const row = await this.database.orm
-      .select({
-        id: assets.id,
-        workspaceId: assets.workspaceId,
-        name: assets.name,
-        originalFilename: assets.originalFilename,
-        kind: assets.kind,
-        r2Key: assets.r2Key,
-        contentType: assets.contentType,
-        checksum: assets.checksum,
-      })
-      .from(assets)
-      .innerJoin(organization, eq(organization.id, assets.workspaceId))
-      .where(
-        and(
-          eq(organization.slug, workspaceSlug),
-          eq(assets.id, assetId),
-          eq(assets.visibility, "public"),
-          isNull(assets.archivedAt),
-        ),
-      )
-      .get();
-    return row ?? null;
   }
 }

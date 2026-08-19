@@ -6,7 +6,7 @@ import {
   contacts as contactsTable,
   createDatabase,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { seedMember, seedWorkspaceClient } from "./factory";
 

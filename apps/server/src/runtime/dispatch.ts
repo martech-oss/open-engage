@@ -2,12 +2,14 @@ import { retryDelaySeconds } from "@openengage/core/platform";
 import {
   AutomationEngineRepository,
   AutomationJobRecoveryRepository,
+  claimDueJobs,
+} from "@openengage/database/automations";
+import { createDatabase } from "@openengage/database/client";
+import {
   ContactImportRecoveryRepository,
   ContactImportReconciliationRepository,
-  claimDueJobs,
-  createDatabase,
-  DeliveryRecoveryRepository,
-} from "@openengage/database";
+} from "@openengage/database/contacts";
+import { DeliveryRecoveryRepository } from "@openengage/database/messaging";
 
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";

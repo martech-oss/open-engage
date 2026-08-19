@@ -1,4 +1,4 @@
-import { ReportsRepository } from "@openengage/database";
+import { ReportsRepository } from "@openengage/database/reports";
 
 import { primitiveString, toFiniteNumber } from "../platform/values";
 import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";

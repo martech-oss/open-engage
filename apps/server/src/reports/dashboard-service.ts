@@ -1,5 +1,6 @@
 import type { Dashboard } from "@openengage/core/reports";
-import { ReportsRepository, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ReportsRepository } from "@openengage/database/reports";
 
 import { toFiniteNumber, parseJsonRecord, primitiveString } from "../platform/values";
 

@@ -1,6 +1,6 @@
 import type { ContentDocument, EmailBlock } from "@openengage/core/web";
 
-import { escapeHtml } from "../public/html";
+import { escapeHtml } from "./html";
 
 export interface RenderContext {
   contact: Record<string, unknown>;

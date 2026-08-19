@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 
-import { PublicCustomRedirectRepository } from "@openengage/database";
+import { PublicCustomRedirectRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
 import { recordContactEvent } from "../contacts/event-service";

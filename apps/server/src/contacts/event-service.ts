@@ -1,11 +1,11 @@
+import { AutomationEngineRepository } from "@openengage/database/automations";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
-  AutomationEngineRepository,
   ContactEventRepository,
   type ContactEventProjection,
   type ContactEventRecord,
-  type OpenEngageDatabase,
-  uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/contacts";
+import { uuidv7 } from "@openengage/database/shared";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 import { applyScoringForEvent, recomputeContactGrade } from "../scoring/engine";

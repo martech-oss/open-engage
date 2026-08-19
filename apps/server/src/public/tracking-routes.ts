@@ -1,11 +1,11 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { WebRepository } from "@openengage/database";
+import { WebRepository } from "@openengage/database/web";
 
 import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
-import { originAllowed } from "./domain";
+import { originAllowed } from "../web/domain";
 import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";
 import { siteTrackingScript } from "./templates";

@@ -17,14 +17,10 @@ import type {
   AssetVisibility,
   WorkspaceContext,
 } from "@openengage/core/shared";
-import {
-  AssetRepository,
-  nowIso,
-  uuidv7,
-  writeAuditLog,
-  type AssetRow,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { AssetRepository, type AssetRow } from "@openengage/database/assets";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { writeAuditLog } from "@openengage/database/platform";
+import { nowIso, uuidv7 } from "@openengage/database/shared";
 
 import { bytesToHex, sha256HexFromBytes } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";

@@ -14,7 +14,7 @@ import {
   segments,
   tags,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";

@@ -1,12 +1,12 @@
+import { createDatabase } from "@openengage/database/client";
 import {
   ContactImportPartExecutionRepository,
   ContactImportRecoveryRepository,
   ContactImportReconciliationRepository,
-  createDatabase,
   DataJobWorkerRepository,
   type ContactImportReconciliation,
   type ContactImportRow,
-} from "@openengage/database";
+} from "@openengage/database/contacts";
 
 import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";

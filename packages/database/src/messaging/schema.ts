@@ -8,12 +8,12 @@ import {
   PROVIDERS,
 } from "@openengage/core/shared";
 
+import { assets } from "../assets/schema";
 import { organization } from "../auth/schema";
 import { automationEnrollments } from "../automations/schema";
 import { subscriptionTopics } from "../consent/schema";
 import { contacts } from "../contacts/schema";
 import { checkEnum } from "../shared/enum-check";
-import { assets } from "../web/schema";
 
 export const emailBrandProfiles = sqliteTable("email_brand_profiles", {
   workspaceId: text("workspace_id")

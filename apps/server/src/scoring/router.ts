@@ -1,4 +1,5 @@
-import { isConstraintError, ScoringRepository } from "@openengage/database";
+import { ScoringRepository } from "@openengage/database/scoring";
+import { isConstraintError } from "@openengage/database/shared";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";

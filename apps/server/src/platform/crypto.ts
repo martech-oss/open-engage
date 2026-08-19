@@ -1,4 +1,4 @@
-import { hmacHex, timingSafeEqual } from "../channels";
+import { hmacHex, timingSafeEqual } from "./signatures";
 
 interface SignedTokenPayload {
   workspaceId: string;

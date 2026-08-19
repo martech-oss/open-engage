@@ -13,7 +13,7 @@ import {
   contacts,
   createDatabase,
   uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import { processAutomationJob } from "../src/automations/worker";
 import { recordContactEvent } from "../src/contacts/event-service";

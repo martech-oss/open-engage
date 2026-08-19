@@ -1,6 +1,8 @@
 import PostalMime from "postal-mime";
 
-import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
+import { createDatabase } from "@openengage/database/client";
+import { MessagingWorkerRepository } from "@openengage/database/messaging";
+import { uuidv7 } from "@openengage/database/shared";
 
 import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { RuntimeEnv } from "../env";

@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 
 import type { AgentKey } from "@openengage/core/agents";
-import { AgentConversationRepository } from "@openengage/database";
+import { AgentConversationRepository } from "@openengage/database/agents";
 
 import { apiError, resolveSessionWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import type { AppEnvironment } from "../env";
