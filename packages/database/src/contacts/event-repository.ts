@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, isNull, lte, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, isNull, lte, ne, notExists, or, sql } from "drizzle-orm";
 
 import { jsonRecordSchema } from "@openengage/core/shared";
 
@@ -130,7 +130,7 @@ export class ContactEventRepository extends DatabaseRepository {
       : null;
   }
 
-  public async isContactActive(workspaceId: string, contactId: string): Promise<boolean> {
+  public async isContactProcessable(workspaceId: string, contactId: string): Promise<boolean> {
     const row = await this.database.orm
       .select({ id: contacts.id })
       .from(contacts)
@@ -138,7 +138,7 @@ export class ContactEventRepository extends DatabaseRepository {
         and(
           eq(contacts.workspaceId, workspaceId),
           eq(contacts.id, contactId),
-          eq(contacts.status, "active"),
+          ne(contacts.status, "archived"),
         ),
       )
       .get();

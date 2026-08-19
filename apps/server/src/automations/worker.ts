@@ -57,6 +57,7 @@ export async function processAutomationJob(
         now: new Date().toISOString(),
         waitEventType: result.waitEventType ?? null,
         waitResourceId: result.waitResourceId ?? null,
+        waitStartedAt: result.waitStartedAt ?? null,
       });
       return;
     }
@@ -85,6 +86,7 @@ export async function executeNode(
   waitUntil?: string;
   waitEventType?: string;
   waitResourceId?: string | null;
+  waitStartedAt?: string;
 }> {
   if (node.type === "source") return { branch: "next" };
   if (node.type === "delay") {
@@ -123,6 +125,7 @@ export async function executeNode(
       waitUntil: deadline.toISOString(),
       waitEventType: eventType,
       waitResourceId: node.config.resourceId ?? null,
+      waitStartedAt: job.createdAt,
     };
   }
 

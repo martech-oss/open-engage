@@ -91,7 +91,7 @@ async function processContactEvent(
   try {
     if (
       !event.contactId ||
-      !(await repository.isContactActive(event.workspaceId, event.contactId))
+      !(await repository.isContactProcessable(event.workspaceId, event.contactId))
     ) {
       await repository.skipPending(event.id, leaseId, new Date().toISOString());
       await repository.markProcessed(event.id, leaseId, new Date().toISOString());

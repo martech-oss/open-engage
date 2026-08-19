@@ -1,4 +1,17 @@
-import { and, asc, eq, gte, inArray, isNull, lt, lte, notExists, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { automationDefinitionSchema } from "@openengage/core/automations";
 import { jsonRecordSchema } from "@openengage/core/shared";
@@ -10,6 +23,7 @@ import { changedExactlyOne, didChange } from "../shared/database-utils";
 import { decodeJson, defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { AutomationCompletionRepository } from "./completion-repository";
 import {
   assertAutomationJobTransition,
   AUTOMATION_MAX_STARTS,
@@ -211,14 +225,37 @@ export class AutomationEngineRepository extends DatabaseRepository {
       now: string;
       waitEventType?: string | null;
       waitResourceId?: string | null;
+      waitStartedAt?: string | null;
     },
   ): Promise<void> {
     assertAutomationJobTransition("running", "pending");
-    await this.database.orm
+    const orm = this.database.orm;
+    const matchingEvent =
+      input.waitEventType && input.waitStartedAt
+        ? exists(
+            orm
+              .select({ id: contactEvents.id })
+              .from(contactEvents)
+              .where(
+                and(
+                  eq(contactEvents.workspaceId, automationJobs.workspaceId),
+                  eq(contactEvents.contactId, automationJobs.contactId),
+                  eq(contactEvents.type, input.waitEventType),
+                  gte(contactEvents.occurredAt, input.waitStartedAt),
+                  ...(input.waitResourceId === null || input.waitResourceId === undefined
+                    ? []
+                    : [eq(contactEvents.resourceId, input.waitResourceId)]),
+                ),
+              ),
+          )
+        : null;
+    await orm
       .update(automationJobs)
       .set({
         status: "pending",
-        dueAt: input.dueAt,
+        dueAt: matchingEvent
+          ? sql`CASE WHEN ${matchingEvent} THEN ${input.now} ELSE ${input.dueAt} END`
+          : input.dueAt,
         payload: input.payload,
         waitEventType: input.waitEventType ?? null,
         waitResourceId: input.waitResourceId ?? null,
@@ -237,28 +274,15 @@ export class AutomationEngineRepository extends DatabaseRepository {
 
   /**
    * Terminal node: succeeds the job and completes the enrollment in one
-   * atomic batch (running -> succeeded). The job UPDATE matches on the lease
-   * alone — the holder finishes its row regardless of status races.
+   * atomic batch (running -> succeeded). Every dependent write and the job
+   * transition require the same current running lease.
    */
   public async completeJobClosingEnrollment(
     job: Pick<AutomationJobRow, "id" | "workspaceId" | "enrollmentId">,
     leaseId: string,
     now: string,
   ): Promise<void> {
-    assertAutomationJobTransition("running", "succeeded");
-    const orm = this.database.orm;
-    await orm.batch([
-      this.jobSucceededUpdate(job.id, leaseId, now),
-      orm
-        .update(automationEnrollments)
-        .set({ status: "completed", currentNodeId: null, completedAt: now, updatedAt: now })
-        .where(
-          and(
-            eq(automationEnrollments.workspaceId, job.workspaceId),
-            eq(automationEnrollments.id, job.enrollmentId),
-          ),
-        ),
-    ]);
+    await new AutomationCompletionRepository(this.database).closeEnrollment(job, leaseId, now);
   }
 
   /**
@@ -276,40 +300,15 @@ export class AutomationEngineRepository extends DatabaseRepository {
     nextNodeId: string,
     now: string,
   ): Promise<void> {
-    assertAutomationJobTransition("running", "succeeded");
-    const orm = this.database.orm;
-    await orm.batch([
-      this.jobSucceededUpdate(job.id, leaseId, now),
-      orm
-        .insert(automationJobs)
-        .values({
-          id: uuidv7(),
-          workspaceId: job.workspaceId,
-          enrollmentId: job.enrollmentId,
-          automationVersionId: job.automationVersionId,
-          nodeId: nextNodeId,
-          contactId: job.contactId,
-          idempotencyKey: `${job.enrollmentId}:${nextNodeId}:${job.contactId}`,
-          status: "pending",
-          dueAt: now,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing(),
-      orm
-        .update(automationEnrollments)
-        .set({ currentNodeId: nextNodeId, updatedAt: now })
-        .where(
-          and(
-            eq(automationEnrollments.workspaceId, job.workspaceId),
-            eq(automationEnrollments.id, job.enrollmentId),
-            eq(automationEnrollments.status, "active"),
-          ),
-        ),
-    ]);
+    await new AutomationCompletionRepository(this.database).advanceEnrollment(
+      job,
+      leaseId,
+      nextNodeId,
+      now,
+    );
   }
 
-  /** Decision nodes: has the contact produced this event since enrollment? */
+  /** Decision nodes: has the contact produced this event since this job began? */
   public async hasContactEventSince(
     workspaceId: string,
     contactId: string,
@@ -556,21 +555,6 @@ export class AutomationEngineRepository extends DatabaseRepository {
       )
       .orderBy(asc(contacts.updatedAt))
       .limit(limit);
-  }
-
-  /** Succeeds a finished job; matches on the lease only, like the worker always has. */
-  private jobSucceededUpdate(jobId: string, leaseId: string, now: string) {
-    return this.database.orm
-      .update(automationJobs)
-      .set({
-        status: "succeeded",
-        leaseId: null,
-        leaseUntil: null,
-        waitEventType: null,
-        waitResourceId: null,
-        updatedAt: now,
-      })
-      .where(and(eq(automationJobs.id, jobId), eq(automationJobs.leaseId, leaseId)));
   }
 }
 

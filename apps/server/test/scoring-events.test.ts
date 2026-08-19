@@ -1,11 +1,12 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { gradeLetter } from "@openengage/core/scoring";
 import {
   ContactRepository,
   ContactResourceRepository,
   createDatabase,
+  ScoringEngineRepository,
   ScoringRepository,
   uuidv7,
 } from "@openengage/database";
@@ -13,6 +14,10 @@ import {
 import { recordContactEvent } from "../src/contacts/event-service";
 import { recomputeContactGrade } from "../src/scoring/engine";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 interface Fixture {
   workspaceId: string;
@@ -163,6 +168,46 @@ describe("scoring event processing", () => {
   });
 });
 
+describe("anonymous contact events", () => {
+  it("processes business projections for an anonymous contact", async () => {
+    const fixture = await seed("anonymous-tracking@example.com");
+    await fixture.scoring.createRule({
+      name: "Anonymous event",
+      eventType: "custom_event",
+      matchType: "any",
+      matchValue: null,
+      points: 25,
+      categoryId: null,
+      tagId: null,
+      enabled: true,
+    });
+    await env.DB.prepare("UPDATE contacts SET status = 'anonymous' WHERE id = ?")
+      .bind(fixture.contactId)
+      .run();
+    const queue = {
+      send: async () => undefined,
+      sendBatch: async () => undefined,
+    } as unknown as Queue;
+
+    const recorded = await recordContactEvent(createDatabase(env.DB), {
+      workspaceId: fixture.workspaceId,
+      contactId: fixture.contactId,
+      type: "custom_event",
+      resourceId: "anonymous-event",
+      queue,
+    });
+
+    await expect(readContact(fixture.contactId)).resolves.toMatchObject({ score: 25 });
+    await expect(
+      countRows(
+        `SELECT COUNT(*) AS count FROM contact_event_projections
+         WHERE event_id = ? AND status = 'completed'`,
+        recorded.eventId,
+      ),
+    ).resolves.toBe(6);
+  });
+});
+
 describe("archived contact events", () => {
   it("keeps the audit event without scoring, grading, tagging, enrollment, or reconciliation", async () => {
     const { client, workspaceId } = await seedWorkspaceClient(env.DB);
@@ -285,6 +330,66 @@ describe("archived contact events", () => {
 });
 
 describe("grading", () => {
+  it("retries a stale grade write after a newer contact snapshot wins", async () => {
+    const fixture = await seed("grade-race@example.com");
+    await fixture.scoring.createCriterion({
+      name: "Old first name",
+      field: "first_name",
+      fieldKey: null,
+      operator: "eq",
+      value: "Old",
+      steps: 1,
+      enabled: true,
+    });
+    await env.DB.prepare(
+      "UPDATE contacts SET first_name = 'Old', updated_at = '2026-08-20T03:00:00.000Z' WHERE id = ?",
+    )
+      .bind(fixture.contactId)
+      .run();
+
+    const originalRepository = new ScoringEngineRepository(createDatabase(env.DB));
+    const originalRead = originalRepository.readGradingContact.bind(originalRepository);
+    let releaseStaleRead!: () => void;
+    let announceStaleRead!: () => void;
+    const staleReadReleased = new Promise<void>((resolve) => {
+      releaseStaleRead = resolve;
+    });
+    const staleReadObserved = new Promise<void>((resolve) => {
+      announceStaleRead = resolve;
+    });
+    let firstRead = true;
+    vi.spyOn(ScoringEngineRepository.prototype, "readGradingContact").mockImplementation(
+      async (workspaceId, contactId) => {
+        const contact = await originalRead(workspaceId, contactId);
+        if (firstRead) {
+          firstRead = false;
+          announceStaleRead();
+          await staleReadReleased;
+        }
+        return contact;
+      },
+    );
+
+    const staleComputation = recomputeContactGrade(
+      createDatabase(env.DB),
+      fixture.workspaceId,
+      fixture.contactId,
+    );
+    await staleReadObserved;
+    await env.DB.prepare(
+      "UPDATE contacts SET first_name = 'Latest', updated_at = '2026-08-20T03:01:00.000Z' WHERE id = ?",
+    )
+      .bind(fixture.contactId)
+      .run();
+    await expect(
+      recomputeContactGrade(createDatabase(env.DB), fixture.workspaceId, fixture.contactId),
+    ).resolves.toBe(0);
+    releaseStaleRead();
+    await staleComputation;
+
+    await expect(readContact(fixture.contactId)).resolves.toMatchObject({ grade_points: 0 });
+  });
+
   it("moves the grade in thirds of a letter from the D baseline", async () => {
     const fixture = await seed("grade@example.com", { job_title: "営業部長" });
     await fixture.scoring.createCriterion({

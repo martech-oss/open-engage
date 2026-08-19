@@ -144,24 +144,7 @@ export class AutomationJobRecoveryRepository extends DatabaseRepository {
     if (!row || (row.status !== "leased" && row.status !== "running")) return false;
     assertAutomationJobTransition(row.status, "failed");
     const orm = this.database.orm;
-    const [jobResult] = await orm.batch([
-      orm
-        .update(automationJobs)
-        .set({
-          status: "failed",
-          leaseUntil: null,
-          waitEventType: null,
-          waitResourceId: null,
-          lastError: lastError.slice(0, 2_000),
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(automationJobs.id, jobId),
-            eq(automationJobs.leaseId, leaseId),
-            eq(automationJobs.status, row.status),
-          ),
-        ),
+    const [, jobResult] = await orm.batch([
       orm
         .update(automationEnrollments)
         .set({ status: "failed", currentNodeId: null, completedAt: now, updatedAt: now })
@@ -178,10 +161,28 @@ export class AutomationJobRecoveryRepository extends DatabaseRepository {
                   and(
                     eq(automationJobs.id, jobId),
                     eq(automationJobs.leaseId, leaseId),
-                    eq(automationJobs.status, "failed"),
+                    eq(automationJobs.status, row.status),
                   ),
                 ),
             ),
+          ),
+        ),
+      orm
+        .update(automationJobs)
+        .set({
+          status: "failed",
+          leaseId: null,
+          leaseUntil: null,
+          waitEventType: null,
+          waitResourceId: null,
+          lastError: lastError.slice(0, 2_000),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(automationJobs.id, jobId),
+            eq(automationJobs.leaseId, leaseId),
+            eq(automationJobs.status, row.status),
           ),
         ),
     ]);

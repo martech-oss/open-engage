@@ -109,21 +109,26 @@ export async function recomputeContactGrade(
   contactId: string,
 ): Promise<number | null> {
   const repository = new ScoringEngineRepository(database);
-  const [criteria, contact] = await Promise.all([
+  const [criteria, initialContact] = await Promise.all([
     repository.listEnabledCriteria(workspaceId),
     repository.readGradingContact(workspaceId, contactId),
   ]);
-  if (!contact) return null;
-  const points = clampGradePoints(
-    criteria.reduce(
-      (total, criterion) =>
-        matchesCriterion(criterion, contact) ? total + criterion.steps : total,
-      0,
-    ),
-  );
-  if (points === contact.gradePoints) return points;
-  await repository.setGradePoints(workspaceId, contactId, points);
-  return points;
+  let contact = initialContact;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (!contact) return null;
+    const snapshot = contact;
+    const points = clampGradePoints(
+      criteria.reduce(
+        (total, criterion) =>
+          matchesCriterion(criterion, snapshot) ? total + criterion.steps : total,
+        0,
+      ),
+    );
+    if (points === snapshot.gradePoints) return points;
+    if (await repository.setGradePoints(workspaceId, contactId, snapshot, points)) return points;
+    contact = await repository.readGradingContact(workspaceId, contactId);
+  }
+  throw new Error("Contact changed repeatedly while recomputing its grade");
 }
 
 function matchesCriterion(criterion: GradingCriterion, contact: GradingContactRow): boolean {

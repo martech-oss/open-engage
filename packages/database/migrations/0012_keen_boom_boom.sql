@@ -36,7 +36,13 @@ CREATE UNIQUE INDEX `campaign_touches_source_event_project_unique` ON `campaign_
 --> statement-breakpoint
 INSERT INTO `contact_event_projections`
   (`event_id`, `workspace_id`, `projection`, `status`, `created_at`, `completed_at`)
-SELECT outbox.`event_id`, outbox.`workspace_id`, projections.value, 'pending', outbox.`created_at`, NULL
+-- Pre-0012 outboxes have no per-effect evidence: some producers applied scoring or
+-- attribution before crashing while others did not. Replaying them would duplicate
+-- those effects, so quarantine every legacy projection as terminal. The still-pending
+-- outbox is claimed once after deployment and advances to processed without effects;
+-- operators can explicitly repair any known incomplete legacy event.
+SELECT outbox.`event_id`, outbox.`workspace_id`, projections.value, 'skipped',
+       outbox.`created_at`, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 FROM `contact_event_outbox` AS outbox
 CROSS JOIN json_each(
   '["scoring","grade","campaign","decision_wake","automation_enrollment","segment_reconcile"]'

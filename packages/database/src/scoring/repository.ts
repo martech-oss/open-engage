@@ -480,9 +480,10 @@ export class ScoringEngineRepository extends DatabaseRepository {
   public async setGradePoints(
     workspaceId: string,
     contactId: string,
+    expected: GradingContactRow,
     gradePoints: number,
-  ): Promise<void> {
-    await this.database.orm
+  ): Promise<boolean> {
+    const result = await this.database.orm
       .update(contacts)
       .set({ gradePoints })
       .where(
@@ -490,8 +491,21 @@ export class ScoringEngineRepository extends DatabaseRepository {
           eq(contacts.workspaceId, workspaceId),
           eq(contacts.id, contactId),
           ne(contacts.status, "archived"),
+          expected.email === null ? isNull(contacts.email) : eq(contacts.email, expected.email),
+          expected.firstName === null
+            ? isNull(contacts.firstName)
+            : eq(contacts.firstName, expected.firstName),
+          expected.lastName === null
+            ? isNull(contacts.lastName)
+            : eq(contacts.lastName, expected.lastName),
+          expected.phone === null ? isNull(contacts.phone) : eq(contacts.phone, expected.phone),
+          eq(contacts.stage, expected.stage),
+          eq(contacts.score, expected.score),
+          eq(contacts.gradePoints, expected.gradePoints),
+          eq(contacts.customFields, expected.customFields),
         ),
       )
       .run();
+    return changedExactlyOne(result);
   }
 }
