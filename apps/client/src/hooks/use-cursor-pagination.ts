@@ -1,33 +1,52 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+
+type CursorPaginationState = {
+  key: string;
+  cursor: string | undefined;
+  history: Array<string | undefined>;
+};
+
+function firstPage(key: string): CursorPaginationState {
+  return { key, cursor: undefined, history: [] };
+}
 
 /**
- * Local, not URL-synced: the cursor resets whenever `resetKey` changes, which
- * should be the same filters object a paginated list query already refetches
- * on. `hasNextPage`/`onNext` still need the query's own `nextCursor`, since
- * that comes from the server response, not from this hook.
+ * Local cursor navigation keyed to the query that owns the result set. A key
+ * change exposes the first page during that render, before effects can run.
  */
-export function useCursorPagination(resetKey: unknown) {
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-
-  useEffect(() => {
-    setCursor(undefined);
-    setCursorHistory([]);
-  }, [resetKey]);
+export function useCursorPagination(resetKey: string) {
+  const [stored, setStored] = useState<CursorPaginationState>(() => firstPage(resetKey));
+  const current = stored.key === resetKey ? stored : firstPage(resetKey);
 
   function goToNextPage(nextCursor: string | undefined): void {
-    if (!nextCursor) return;
-    setCursorHistory((history) => [...history, cursor ?? ""]);
-    setCursor(nextCursor);
-  }
-
-  function goToPreviousPage(): void {
-    setCursorHistory((history) => {
-      if (history.length === 0) return history;
-      setCursor(history[history.length - 1] || undefined);
-      return history.slice(0, -1);
+    setStored((previous) => {
+      const normalized = previous.key === resetKey ? previous : firstPage(resetKey);
+      if (!nextCursor || nextCursor === normalized.cursor) return normalized;
+      return {
+        key: resetKey,
+        cursor: nextCursor,
+        history: [...normalized.history, normalized.cursor],
+      };
     });
   }
 
-  return { cursor, hasPreviousPage: cursorHistory.length > 0, goToNextPage, goToPreviousPage };
+  function goToPreviousPage(): void {
+    setStored((previous) => {
+      const normalized = previous.key === resetKey ? previous : firstPage(resetKey);
+      if (normalized.history.length === 0) return normalized;
+      return {
+        key: resetKey,
+        cursor: normalized.history.at(-1),
+        history: normalized.history.slice(0, -1),
+      };
+    });
+  }
+
+  return {
+    cursor: current.cursor,
+    pageIndex: current.history.length,
+    hasPreviousPage: current.history.length > 0,
+    goToNextPage,
+    goToPreviousPage,
+  };
 }

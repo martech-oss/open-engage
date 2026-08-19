@@ -45,12 +45,25 @@ const BULK_ACTIONS: Array<{ action: BulkAction; label: string; resource?: "tag" 
 
 export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
   const queryClient = useQueryClient();
+  const paginationKey = JSON.stringify([
+    initialSearch.q,
+    initialSearch.status,
+    initialSearch.stage,
+    initialSearch.tagId,
+    initialSearch.companyId,
+    initialSearch.segmentId,
+    initialSearch.scoreMin,
+    initialSearch.scoreMax,
+    initialSearch.sort,
+    initialSearch.direction,
+  ]);
   const {
     cursor,
+    pageIndex,
     hasPreviousPage,
     goToNextPage: goToNextCursor,
     goToPreviousPage: goToPreviousCursor,
-  } = useCursorPagination(initialSearch);
+  } = useCursorPagination(paginationKey);
 
   const contactsQuery = useQuery(contactsQueryOptions(initialSearch, cursor));
   const optionsQuery = useSuspenseQuery(contactOptionsQueryOptions());
@@ -60,9 +73,16 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const nextCursor = contactsQuery.data?.nextCursor;
   const loading = contactsQuery.isFetching;
   const filters = useContactFilters(initialSearch);
-  const [pageIndex, setPageIndex] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>(() => ({
+    key: paginationKey,
+    ids: new Set(),
+  }));
+  const selected = selection.key === paginationKey ? selection.ids : new Set<string>();
+  const setSelected = useCallback(
+    (ids: Set<string>) => setSelection({ key: paginationKey, ids }),
+    [paginationKey],
+  );
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showSegmentSave, setShowSegmentSave] = useState(false);
@@ -76,7 +96,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const refreshContacts = useCallback(async () => {
     await invalidateContactsList(queryClient);
     setSelected(new Set());
-  }, [queryClient]);
+  }, [queryClient, setSelected]);
 
   const refreshOptions = useCallback(() => invalidateContactOptions(queryClient), [queryClient]);
 
@@ -86,13 +106,11 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
 
   function goToNextPage() {
     goToNextCursor(nextCursor);
-    setPageIndex((index) => index + 1);
     setSelected(new Set());
   }
 
   function goToPreviousPage() {
     goToPreviousCursor();
-    setPageIndex((index) => Math.max(0, index - 1));
     setSelected(new Set());
   }
 

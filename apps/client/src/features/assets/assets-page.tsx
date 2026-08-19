@@ -62,9 +62,15 @@ export function AssetsPage({
   const queryClient = useQueryClient();
   const canWrite = WRITE_ROLES.has(role);
   const canDelete = DELETE_ROLES.has(role);
+  const paginationKey = JSON.stringify([
+    initialSearch.q,
+    initialSearch.kind,
+    initialSearch.status,
+    initialSearch.view,
+  ]);
 
   const { cursor, hasPreviousPage, goToNextPage, goToPreviousPage } =
-    useCursorPagination(initialSearch);
+    useCursorPagination(paginationKey);
 
   const [queryText, setQueryText] = useState(initialSearch.q);
   const [uploadOpen, setUploadOpen] = useState(false);

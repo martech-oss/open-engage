@@ -18,6 +18,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  createAiProposalWorkflowKey,
+  useAiProposalWorkflow,
+} from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import type {
   EmailDocumentV2,
@@ -37,6 +41,7 @@ import {
 export function EmailAiSheet({
   open,
   onOpenChange,
+  entityId,
   mode,
   purpose,
   current,
@@ -44,6 +49,7 @@ export function EmailAiSheet({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  entityId?: string | undefined;
   mode: "create" | "refine";
   purpose: EmailPurpose;
   current: EmailGenerationProposal;
@@ -60,46 +66,70 @@ export function EmailAiSheet({
   const [imageRequest, setImageRequest] = useState<EmailImageRequest | null>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedEmailImage | null>(null);
   const [error, setError] = useState("");
+  const requestKey = createAiProposalWorkflowKey([
+    "email-template",
+    entityId ?? "new",
+    mode,
+    purpose,
+  ]);
+  const workflow = useAiProposalWorkflow({ open, requestKey, onReset: clearState });
+  const imageWorkflow = useAiProposalWorkflow({
+    open,
+    requestKey: createAiProposalWorkflowKey([requestKey, "image"]),
+    onReset: clearImageState,
+  });
 
   async function submitGeneration(): Promise<void> {
     if (!prompt.trim()) return;
+    const token = workflow.beginRequest();
     setError("");
-    setGeneratedImage(null);
+    imageWorkflow.reset();
     try {
       const next = await generate.mutateAsync(
         mode === "create" ? { mode, purpose, prompt } : { mode, purpose, prompt, current },
       );
-      setResult(next);
-      setImageRequest(next.imageRequests[0] ?? null);
+      if (
+        !workflow.acceptProposal(token, () => {
+          setResult(next);
+          setPreview(null);
+          setImageRequest(next.imageRequests[0] ?? null);
+        })
+      ) {
+        return;
+      }
       const rendered = await previewMutation.mutateAsync({
         purpose,
         subject: next.proposal.subject,
         content: next.proposal.content,
       });
-      setPreview(rendered);
+      workflow.acceptCurrent(token, () => setPreview(rendered));
     } catch (cause) {
-      setError(getErrorMessage(cause, "AIによるメール提案を生成できませんでした"));
+      workflow.acceptCurrent(token, () => {
+        setError(getErrorMessage(cause, "AIによるメール提案を生成できませんでした"));
+      });
     }
   }
 
   async function createImage(): Promise<void> {
     if (!imageRequest) return;
+    const token = imageWorkflow.beginRequest();
     setError("");
     try {
-      setGeneratedImage(
-        await generateImage.mutateAsync({
-          requestId: imageRequest.requestId,
-          prompt: imageRequest.prompt,
-          alt: imageRequest.alt,
-        }),
-      );
+      const image = await generateImage.mutateAsync({
+        requestId: imageRequest.requestId,
+        prompt: imageRequest.prompt,
+        alt: imageRequest.alt,
+      });
+      imageWorkflow.acceptCurrent(token, () => setGeneratedImage(image));
     } catch (cause) {
-      setError(getErrorMessage(cause, "画像を生成できませんでした"));
+      imageWorkflow.acceptCurrent(token, () => {
+        setError(getErrorMessage(cause, "画像を生成できませんでした"));
+      });
     }
   }
 
   function applyProposal(): void {
-    if (!result) return;
+    if (!result || !workflow.canApply) return;
     onApply({
       ...result.proposal,
       content:
@@ -111,15 +141,37 @@ export function EmailAiSheet({
   }
 
   function restart(): void {
+    workflow.reset();
+    imageWorkflow.reset();
+  }
+
+  function clearState(): void {
+    setPrompt("");
     setResult(null);
     setPreview(null);
     setImageRequest(null);
     setGeneratedImage(null);
     setError("");
+    generate.reset();
+    previewMutation.reset();
+    generateImage.reset();
+  }
+
+  function clearImageState(): void {
+    setGeneratedImage(null);
+    generateImage.reset();
+  }
+
+  function handleOpenChange(nextOpen: boolean): void {
+    if (!nextOpen) {
+      workflow.reset();
+      imageWorkflow.reset();
+    }
+    onOpenChange(nextOpen);
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent className="w-full sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle>{mode === "create" ? "AIでメールを作成" : "AIでメールを改善"}</SheetTitle>
@@ -251,7 +303,7 @@ export function EmailAiSheet({
             </Button>
           ) : null}
           {result ? (
-            <Button onClick={applyProposal}>
+            <Button disabled={!workflow.canApply} onClick={applyProposal}>
               <Sparkles data-icon="inline-start" />
               この提案を下書きに適用
             </Button>

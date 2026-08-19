@@ -64,13 +64,13 @@ export function EmailSequenceAiSheet({
   const [error, setError] = useState("");
   const workflow = useAiProposalWorkflow({
     open,
-    workflowKey: createAiProposalWorkflowKey({
-      resource: "email-sequence",
-      mode: "create",
-      entityId,
-      projectId: briefReference.projectId,
-      briefRevision: briefReference.briefRevision,
-    }),
+    requestKey: createAiProposalWorkflowKey([
+      "email-sequence",
+      "create",
+      entityId ?? null,
+      briefReference.projectId ?? null,
+      briefReference.briefRevision ?? null,
+    ]),
     onReset: clearState,
   });
 
@@ -106,7 +106,7 @@ export function EmailSequenceAiSheet({
             },
       );
       if (next.status !== "ready") {
-        workflow.acceptResponse(token, () => {
+        workflow.acceptProposal(token, () => {
           setResult(next);
           setValues({});
         });
@@ -122,7 +122,7 @@ export function EmailSequenceAiSheet({
           return [email.emailRef, output.html] as const;
         }),
       );
-      workflow.acceptResponse(token, () => {
+      workflow.acceptProposal(token, () => {
         setResult(next);
         setValues({});
         setProposal(next.proposal);
@@ -130,9 +130,9 @@ export function EmailSequenceAiSheet({
         setPreviews(Object.fromEntries(rendered));
       });
     } catch (cause) {
-      if (workflow.isCurrentResponse(token)) {
+      workflow.acceptCurrent(token, () => {
         setError(getErrorMessage(cause, "AIによるメールシーケンスを生成できませんでした"));
-      }
+      });
     }
   }
 

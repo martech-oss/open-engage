@@ -18,6 +18,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  createAiProposalWorkflowKey,
+  useAiProposalWorkflow,
+} from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import type {
   CompanyEnrichmentFieldName,
@@ -66,48 +70,61 @@ export function CompanyEnrichmentSheet({
   const [applyDomain, setApplyDomain] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
+  const workflow = useAiProposalWorkflow({
+    open,
+    requestKey: companyEnrichmentRequestKey(source),
+    onReset: clearState,
+  });
 
   async function research(input: CompanyEnrichmentInput): Promise<void> {
+    const token = workflow.beginRequest();
     setError("");
     try {
       const next = await enrich.mutateAsync(input);
-      setResult(next);
-      if (next.status === "needs_domain") {
-        setSelectedDomain(next.candidates[0]?.domain ?? "");
-        return;
-      }
-      const selection = defaultCompanyEnrichmentApplySelection(
-        currentName,
-        currentDomain,
-        next.proposal,
-      );
-      setApplyName(selection.name);
-      setApplyDomain(selection.domain);
+      workflow.acceptProposal(token, () => {
+        setResult(next);
+        if (next.status === "needs_domain") {
+          setSelectedDomain(next.candidates[0]?.domain ?? "");
+          return;
+        }
+        const selection = defaultCompanyEnrichmentApplySelection(
+          currentName,
+          currentDomain,
+          next.proposal,
+        );
+        setApplyName(selection.name);
+        setApplyDomain(selection.domain);
+      });
     } catch (cause) {
-      setError(getErrorMessage(cause, "会社情報を取得できませんでした"));
+      workflow.acceptCurrent(token, () => {
+        setError(getErrorMessage(cause, "会社情報を取得できませんでした"));
+      });
     }
   }
 
   async function apply(): Promise<void> {
-    if (result?.status !== "ready") return;
+    if (result?.status !== "ready" || !workflow.canApply) return;
     const values = selectedCompanyEnrichmentValues(result.proposal, {
       name: applyName,
       domain: applyDomain,
     });
     if (!values.name && !values.domain) return;
+    const token = workflow.beginRequest();
     setApplying(true);
     setError("");
     try {
       await onApply(values);
-      onOpenChange(false);
+      workflow.acceptCurrent(token, () => onOpenChange(false));
     } catch (cause) {
-      setError(getErrorMessage(cause, "提案を反映できませんでした"));
+      workflow.acceptCurrent(token, () => {
+        setError(getErrorMessage(cause, "提案を反映できませんでした"));
+      });
     } finally {
-      setApplying(false);
+      workflow.acceptCurrent(token, () => setApplying(false));
     }
   }
 
-  function reset(): void {
+  function clearState(): void {
     setResult(null);
     setSelectedDomain("");
     setApplyName(false);
@@ -118,11 +135,16 @@ export function CompanyEnrichmentSheet({
   }
 
   function handleOpenChange(nextOpen: boolean): void {
-    if (!nextOpen) reset();
+    if (!nextOpen) workflow.reset();
     onOpenChange(nextOpen);
   }
 
+  function restart(): void {
+    workflow.reset();
+  }
+
   const canApply =
+    workflow.canApply &&
     result?.status === "ready" &&
     ((applyName && Boolean(result.proposal.fields.officialName)) ||
       (applyDomain && Boolean(result.proposal.fields.domain)));
@@ -188,7 +210,7 @@ export function CompanyEnrichmentSheet({
         <Separator />
         <SheetFooter>
           {result ? (
-            <Button variant="ghost" disabled={enrich.isPending || applying} onClick={reset}>
+            <Button variant="ghost" disabled={enrich.isPending || applying} onClick={restart}>
               <RotateCcw data-icon="inline-start" />
               最初から
             </Button>
@@ -227,6 +249,20 @@ export function CompanyEnrichmentSheet({
       </SheetContent>
     </Sheet>
   );
+}
+
+function companyEnrichmentRequestKey(source: CompanyEnrichmentInput): string {
+  if (source.source === "company") {
+    return createAiProposalWorkflowKey(["company-enrichment", "company", source.companyId]);
+  }
+  if (source.source === "domain") {
+    return createAiProposalWorkflowKey([
+      "company-enrichment",
+      "domain",
+      source.domain.trim().toLowerCase(),
+    ]);
+  }
+  return createAiProposalWorkflowKey(["company-enrichment", "name", source.name.trim()]);
 }
 
 function DomainCandidates({

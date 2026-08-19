@@ -166,6 +166,7 @@ export function TemplateForm({
       <EmailAiSheet
         open={aiOpen}
         onOpenChange={setAiOpen}
+        entityId={template?.id}
         mode={template ? "refine" : "create"}
         purpose={purpose}
         current={currentProposal}
