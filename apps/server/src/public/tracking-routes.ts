@@ -69,7 +69,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
       contactId,
       visitorId,
       type: parsed.data.type,
-      resourceType: "page",
+      resourceType: "landing_page",
       ...(parsed.data.resourceId ? { resourceId: parsed.data.resourceId } : {}),
       properties: parsed.data.properties,
       occurredAt: now,

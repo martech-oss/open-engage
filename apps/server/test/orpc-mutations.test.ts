@@ -8,28 +8,62 @@ import { contract } from "@openengage/orpc";
 import { createFixtureClient, seedWorkspaceClient } from "./factory";
 
 type Client = ContractRouterClient<typeof contract>;
+type SegmentWrite = "create" | "update";
+
+const segmentWrites = ["create", "update"] as const satisfies readonly SegmentWrite[];
+const nonSlugConstraints = [
+  ["foreign key", "SQLITE_CONSTRAINT: FOREIGN KEY constraint failed"],
+  ["check", "SQLITE_CONSTRAINT: CHECK constraint failed: segments_kind_check"],
+  ["not null", "SQLITE_CONSTRAINT: NOT NULL constraint failed: segments.name"],
+] as const;
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("oRPC mutations", () => {
-  it("maps a wrapped segment constraint to the slug conflict contract", async () => {
+  it.each(segmentWrites)(
+    "maps a wrapped segment slug unique constraint to the conflict contract on %s",
+    async (operation) => {
+      const { client } = await seedWorkspaceClient(env.DB);
+      rejectNextSegmentWrite(
+        operation,
+        new Error("wrapped database write", {
+          cause: new Error(
+            "SQLITE_CONSTRAINT: UNIQUE constraint failed: segments.workspace_id, segments.slug",
+          ),
+        }),
+      );
+
+      await expect(callSegmentWrite(client, operation)).rejects.toMatchObject({
+        code: "SEGMENT_CONFLICT",
+        status: 409,
+      });
+    },
+  );
+
+  it.each(
+    segmentWrites.flatMap((operation) =>
+      nonSlugConstraints.map(([kind, message]) => [kind, operation, message] as const),
+    ),
+  )("propagates a wrapped segment %s constraint on %s", async (_kind, operation, message) => {
     const { client } = await seedWorkspaceClient(env.DB);
-    vi.spyOn(SegmentRepository.prototype, "createSegment").mockRejectedValueOnce(
-      new Error("wrapped database write", {
-        cause: new Error(
-          "SQLITE_CONSTRAINT: UNIQUE constraint failed: segments.workspace_id, segments.slug",
-        ),
-      }),
+    rejectNextSegmentWrite(
+      operation,
+      new Error("wrapped database write", { cause: new Error(message) }),
     );
 
-    await expect(
-      client.segments.create({
-        name: "Duplicate segment",
-        slug: "duplicate-segment",
-        kind: "static",
-        membershipSource: "Manual",
-      }),
-    ).rejects.toMatchObject({ code: "SEGMENT_CONFLICT", status: 409 });
+    await expect(callSegmentWrite(client, operation)).rejects.toMatchObject({
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+    });
+  });
+
+  it("keeps a real duplicate segment slug on the typed conflict path", async () => {
+    const { client } = await seedWorkspaceClient(env.DB);
+    await callSegmentWrite(client, "create");
+    await expect(callSegmentWrite(client, "create")).rejects.toMatchObject({
+      code: "SEGMENT_CONFLICT",
+      status: 409,
+    });
   });
 
   it("manages subscription topics", async () => {
@@ -233,3 +267,31 @@ describe("oRPC mutations", () => {
     });
   });
 });
+
+function rejectNextSegmentWrite(operation: SegmentWrite, error: Error): void {
+  if (operation === "create") {
+    vi.spyOn(SegmentRepository.prototype, "createSegment").mockRejectedValueOnce(error);
+    return;
+  }
+  vi.spyOn(SegmentRepository.prototype, "updateSegment").mockRejectedValueOnce(error);
+}
+
+function callSegmentWrite(client: Client, operation: SegmentWrite): Promise<unknown> {
+  if (operation === "create") {
+    return client.segments.create({
+      name: "Duplicate segment",
+      slug: "duplicate-segment",
+      kind: "static",
+      membershipSource: "Manual",
+    });
+  }
+  return client.segments.update({
+    id: uuidv7(),
+    name: "Duplicate segment",
+    slug: "duplicate-segment",
+    description: "",
+    kind: "static",
+    filter: null,
+    membershipSource: "Manual",
+  });
+}

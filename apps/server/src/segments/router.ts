@@ -1,7 +1,7 @@
 import {
   ProjectBriefLinkConflictError,
   SegmentRepository,
-  isConstraintError,
+  isUniqueConstraintError,
   writeAuditLog,
 } from "@openengage/database";
 import { ack } from "@openengage/orpc";
@@ -12,6 +12,8 @@ import { SegmentGenerationError, generateSegment } from "./generation-service";
 import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
 import { loadSegmentCatalog, validateSegmentFilter } from "./validation-service";
+
+const SEGMENT_SLUG_UNIQUE_COLUMNS = ["segments.workspace_id", "segments.slug"] as const;
 
 export const listSegmentsProcedure = authed.segments.list.handler(async ({ context, input }) => {
   return listSegments(context.database, context.workspace, input.kind);
@@ -71,7 +73,9 @@ export const createSegmentProcedure = authed.segments.create.handler(
       if (error instanceof ProjectBriefLinkConflictError) {
         throw errors.BRIEF_REVISION_CONFLICT();
       }
-      if (isConstraintError(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isUniqueConstraintError(error, SEGMENT_SLUG_UNIQUE_COLUMNS)) {
+        throw errors.SEGMENT_CONFLICT({ cause: error });
+      }
       throw error;
     }
     if (input.kind === "dynamic") {
@@ -122,7 +126,9 @@ export const updateSegmentProcedure = authed.segments.update.handler(
         ...(filter ? { filter } : {}),
       });
     } catch (error) {
-      if (isConstraintError(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isUniqueConstraintError(error, SEGMENT_SLUG_UNIQUE_COLUMNS)) {
+        throw errors.SEGMENT_CONFLICT({ cause: error });
+      }
       throw error;
     }
     if (!updated) throw errors.SEGMENT_NOT_FOUND();

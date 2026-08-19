@@ -5,6 +5,10 @@ import {
   ContactRepository,
   EmailTrackingSettingsRepository,
   MessagingWorkerRepository,
+  createDatabase,
+  emailTemplates,
+  projectItems,
+  projects,
   uuidv7,
 } from "@openengage/database";
 
@@ -17,6 +21,11 @@ interface Seeded {
   workspaceId: string;
   contactId: string;
   deliveryId: string;
+}
+
+interface AttributedSeeded extends Seeded {
+  projectId: string;
+  templateId: string;
 }
 
 async function seedDelivery(label: string): Promise<Seeded> {
@@ -40,6 +49,60 @@ async function seedDelivery(label: string): Promise<Seeded> {
     payload: "{}",
   });
   return { workspaceId, contactId: contact.id, deliveryId };
+}
+
+async function seedAttributedDelivery(label: string): Promise<AttributedSeeded> {
+  const { workspaceId } = await seedWorkspace(env.DB);
+  const contact = await new ContactRepository(env.DB, {
+    workspaceId,
+    userId: "tracking-owner",
+    role: "owner",
+  }).createContact({ email: `${label}@example.com`, customFields: {} });
+  const deliveryId = uuidv7();
+  const projectId = uuidv7();
+  const templateId = uuidv7();
+  const now = "2026-08-20T12:00:00.000Z";
+  const orm = createDatabase(env.DB).orm;
+  await orm.batch([
+    orm.insert(emailTemplates).values({
+      id: templateId,
+      workspaceId,
+      name: "Attributed sequence",
+      purpose: "marketing",
+      draftSubject: "Hello",
+      draftContent: "<p>Hello</p>",
+      createdAt: now,
+      updatedAt: now,
+    }),
+    orm.insert(projects).values({
+      id: projectId,
+      workspaceId,
+      name: "Attributed campaign",
+      createdAt: now,
+      updatedAt: now,
+    }),
+    orm.insert(projectItems).values({
+      workspaceId,
+      projectId,
+      resourceType: "email_sequence",
+      resourceId: templateId,
+      createdAt: now,
+    }),
+  ]);
+  await new MessagingWorkerRepository(env.DB).insertQueuedDelivery({
+    id: deliveryId,
+    workspaceId,
+    contactId: contact.id,
+    enrollmentId: null,
+    channel: "email",
+    purpose: "marketing",
+    provider: "cloudflare",
+    recipient: contact.email,
+    templateId,
+    idempotencyKey: `tracking-${label}`,
+    payload: "{}",
+  });
+  return { workspaceId, contactId: contact.id, deliveryId, projectId, templateId };
 }
 
 /** Renders one tracked link + pixel the same way the delivery worker does. */
@@ -109,6 +172,39 @@ const contactEventCount = (contactId: string, type: string) =>
   );
 
 describe("email open and click endpoints", () => {
+  it("attributes an opened delivery to its canonical email sequence project", async () => {
+    const seeded = await seedAttributedDelivery("attributed-open");
+    const path = pathOf(await trackedHtml(seeded, "https://example.com/campaign"), "t");
+
+    expect((await call(path)).status).toBe(200);
+    await expect(
+      eventually(
+        () =>
+          countRows(
+            "SELECT COUNT(*) AS count FROM campaign_touches WHERE workspace_id = ? AND project_id = ? AND contact_id = ?",
+            seeded.workspaceId,
+            seeded.projectId,
+            seeded.contactId,
+          ),
+        1,
+      ),
+    ).resolves.toBe(1);
+    await expect(
+      env.DB.prepare(
+        `SELECT project_id AS projectId, resource_type AS resourceType,
+                resource_id AS resourceId, event_type AS eventType
+         FROM campaign_touches WHERE workspace_id = ? AND project_id = ?`,
+      )
+        .bind(seeded.workspaceId, seeded.projectId)
+        .first(),
+    ).resolves.toEqual({
+      projectId: seeded.projectId,
+      resourceType: "email_sequence",
+      resourceId: seeded.templateId,
+      eventType: "email_opened",
+    });
+  });
+
   it("records an open once, in both the delivery and contact timelines", async () => {
     const seeded = await seedDelivery("open");
     const path = pathOf(await trackedHtml(seeded, "https://example.com/a"), "t");

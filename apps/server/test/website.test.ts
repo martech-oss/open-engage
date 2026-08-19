@@ -5,7 +5,7 @@ import { seedWorkspaceClient } from "./factory";
 
 describe("Website center", () => {
   it("manages and publishes forms, pages, site messages, and site tracking", async () => {
-    const { client, slug: workspaceSlug } = await seedWorkspaceClient(env.DB);
+    const { client, slug: workspaceSlug, workspaceId } = await seedWorkspaceClient(env.DB);
     // The hosted-form, embed, track and script endpoints are public and are not
     // part of the oRPC contract; they stay plain fetches against the worker.
     const publicCall = (path: string, init?: RequestInit) => {
@@ -140,6 +140,13 @@ describe("Website center", () => {
     expect(await trackResponse.json()).toMatchObject({
       data: { accepted: true, identified: true, visitorId },
     });
+    await expect(
+      env.DB.prepare(
+        "SELECT resource_type AS resourceType FROM contact_events WHERE workspace_id = ? AND contact_id = ? AND type = 'page_viewed'",
+      )
+        .bind(workspaceId, contact.id)
+        .first(),
+    ).resolves.toEqual({ resourceType: "landing_page" });
     const messages = (await (
       await publicCall(
         `/api/public/site-messages/${workspaceSlug}?visitorId=${visitorId}` +

@@ -52,7 +52,7 @@ async function toCandidate(
     case "email_replied": {
       // These name a delivery; projects list the template behind it.
       const templateId = await repository.resolveTemplateId(input.workspaceId, resourceId);
-      return templateId ? { resourceType: "email", resourceId: templateId } : null;
+      return templateId ? { resourceType: "email_sequence", resourceId: templateId } : null;
     }
     default:
       return null;

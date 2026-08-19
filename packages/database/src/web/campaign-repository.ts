@@ -1,5 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
+import type { ProjectResourceType } from "@openengage/core/projects";
+
 import { deals } from "../deals/schema";
 import { deliveries } from "../messaging/schema";
 import type { ReportDateRange } from "../reports/repository";
@@ -9,7 +11,7 @@ import { uuidv7 } from "../shared/uuid";
 import { campaignTouches, projectItems, projects } from "./schema";
 
 export interface TouchCandidate {
-  resourceType: "automation" | "email" | "form" | "page" | "redirect" | "segment";
+  resourceType: ProjectResourceType;
   resourceId: string;
 }
 

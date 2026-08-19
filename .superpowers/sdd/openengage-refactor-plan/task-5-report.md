@@ -36,8 +36,8 @@ Complete. Report inputs now retain the shared range refinements, every workspace
 
 ## Constraint classification
 
-- Segment create/update now use the shared `isConstraintError`, including its wrapped-cause traversal, instead of a local message regex.
-- A real oRPC mutation test injects a wrapped SQLite constraint and verifies the typed `SEGMENT_CONFLICT` 409 response.
+- Segment create/update use the shared cause-chain-aware `isUniqueConstraintError` with the exact `segments.workspace_id, segments.slug` signature instead of a local message regex or a broad constraint classifier.
+- Real and wrapped slug-unique failures map to the typed `SEGMENT_CONFLICT` 409 response; wrapped foreign-key, check, and not-null failures propagate as 500 on both create and update.
 - The public-form contact-email classifier remains intentionally narrow and unchanged.
 
 ## Strict TDD evidence
@@ -91,3 +91,57 @@ Complete. Report inputs now retain the shared range refinements, every workspace
 - `packages/database/src/deals/repository.ts` remains an existing large-file-ratchet exception. Task 5 added only the focused invariant behavior; the broad Task 8 split was intentionally not entered.
 - Database uniqueness and transactional batches are the final authority for promotion/archive races; tests use real D1/SQLite behavior rather than helper mocks.
 - No known Task 5 behavioral residual remains. No Task 6+ or unrelated Task 8 work was performed.
+
+## Independent review fix round 1/5
+
+### Canonical campaign attribution
+
+- `TouchCandidate.resourceType` now uses core `ProjectResourceType`, so campaign attribution cannot reintroduce the removed `email`/`page` aliases.
+- Email open, click, and reply events resolve their delivery template and emit the canonical `email_sequence` key. A real tracked-open route test creates a template, canonical project link, delivery, and contact event through D1, then verifies exactly one owning-project touch with `resource_type = email_sequence`.
+- Public site tracking now records canonical `landing_page` resource metadata. Its current resource ID is the tracked URL, so it is not a campaign-link candidate; there is no production landing-page-ID attribution producer to test. The website route test verifies the canonical event metadata.
+- A targeted production scan finds no remaining `resourceType: "email"` or `resourceType: "page"` values. Migration 0014 intentionally retains those two strings only as legacy aliases to convert.
+
+### Exact segment conflict classification
+
+- The shared database utility collects messages through the existing five-level `cause` chain and compares the complete ordered SQLite UNIQUE column signature.
+- Segment create/update pass the exact `segments.workspace_id, segments.slug` signature. Other unique keys and every foreign-key, check, or not-null constraint bypass the 409 mapping and remain operational 500 errors.
+- Route tests cover exact wrapped uniqueness and each non-slug constraint on both create and update. A real duplicate-slug integration test confirms the actual SQLite/D1 signature still maps to 409.
+
+### Strict TDD RED
+
+Command:
+
+`pnpm exec vitest run test/email-tracking.test.ts test/orpc-mutations.test.ts` in `apps/server`
+
+- RED: 2 files collected; 7 failed and 21 passed.
+- The real tracked-open path persisted zero owning-project touches instead of one because the producer emitted `email` against a canonical `email_sequence` link.
+- Wrapped foreign-key, check, and not-null failures on both segment create and update all returned `SEGMENT_CONFLICT` 409 instead of propagating as 500.
+- Wrapped exact slug uniqueness and the real duplicate-slug integration remained green, isolating the classifier overreach.
+
+Additional metadata command:
+
+`pnpm exec vitest run test/website.test.ts` in `apps/server`
+
+- RED: 1/1 failed; the persisted page-view event contained `resourceType: "page"` instead of `landing_page`.
+
+### GREEN and final verification
+
+- Review-focused server suites (`email-tracking`, `orpc-mutations`, `website`): 3 files; 29/29 tests passed.
+- `pnpm exec vitest run --reporter=dot` in `apps/server`: 53 files; 300/300 tests passed.
+- `pnpm --filter @openengage/core test`: 13 files; 98/98 tests passed.
+- `pnpm --filter @openengage/orpc test`: 1 file; 7/7 tests passed.
+- `pnpm --filter @openengage/database test`: 6 files; 12/12 tests passed.
+- `pnpm --filter @openengage/client test`: 25 files; 92/92 tests passed.
+- `pnpm typecheck`: generated Cloudflare bindings and all eight workspace typechecks passed.
+- `pnpm lint`: passed.
+- `pnpm format:check`: 707 matched files passed.
+- `pnpm architecture:check`: 653 source files; no forbidden dependencies or cycles.
+- Server raw-SQL gate: clean.
+- `pnpm db:generate`: 71 tables; `No schema changes, nothing to migrate`.
+- Client production/TypeScript build and server Wrangler dry-run build: passed.
+- `git diff --check`: passed.
+
+### Deferred reviewer minors
+
+- The independent concurrent-archive coverage request remains deferred to the review ledger; this round did not broaden the already-correct archive implementation.
+- Cleanup of the tracked Task 5 report remains deferred to the final ledger-directed cleanup. This round updates the existing tracked evidence rather than changing its repository status.
