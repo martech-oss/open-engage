@@ -342,6 +342,9 @@ export const contactImportParts = sqliteTable(
     leaseExpiresAt: text("lease_expires_at"),
     /** Stable candidate ids and normalized rows reserved before any insert. */
     candidates: text(),
+    /** Completed-part outbox payload; only exact-live completion may populate it. */
+    reconciliationContactIds: text("reconciliation_contact_ids"),
+    reconciliationPublishedAt: text("reconciliation_published_at"),
     processed: integer().default(0).notNull(),
     succeeded: integer().default(0).notNull(),
     failed: integer().default(0).notNull(),
@@ -358,6 +361,11 @@ export const contactImportParts = sqliteTable(
     index("contact_import_parts_processing_lease_idx")
       .on(table.leaseExpiresAt, table.jobId, table.part)
       .where(sql`${table.status} = 'processing'`),
+    index("contact_import_parts_reconciliation_pending_idx")
+      .on(table.updatedAt, table.jobId, table.part)
+      .where(
+        sql`${table.status} = 'completed' AND ${table.reconciliationContactIds} IS NOT NULL AND ${table.reconciliationPublishedAt} IS NULL`,
+      ),
     check(
       "contact_import_parts_status_check",
       sql`${table.status} IN ('pending', 'processing', 'completed', 'failed')`,

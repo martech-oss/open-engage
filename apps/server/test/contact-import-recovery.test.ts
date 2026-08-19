@@ -2,7 +2,13 @@ import { createExecutionContext, createScheduledController } from "cloudflare:te
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { contacts, createDatabase, DataJobRepository, uuidv7 } from "@openengage/database";
+import {
+  contacts,
+  ContactImportRecoveryRepository,
+  createDatabase,
+  DataJobRepository,
+  uuidv7,
+} from "@openengage/database";
 
 import { processContactImport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";
@@ -51,7 +57,7 @@ describe("contact import recovery", () => {
     });
   });
 
-  it("retries an insert-to-reconciliation failure without publishing phantom candidate IDs", async () => {
+  it("recovers a post-insert reconciliation outage from durable completed-part evidence", async () => {
     const fixture = await seedImport([{ email: "recover@example.com" }]);
     const published: unknown[] = [];
     let fail = true;
@@ -68,12 +74,16 @@ describe("contact import recovery", () => {
       "injected reconciliation outage",
     );
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({
-      status: "processing",
-      processed: 0,
-      succeeded: 0,
+      status: "completed",
+      processed: 1,
+      succeeded: 1,
       failed: 0,
     });
-    await processContactImport(fixture.jobId, 0, 1, runtime);
+    await scheduled(
+      createScheduledController({ cron: "* * * * *" }),
+      runtime,
+      createExecutionContext(),
+    );
 
     const actual = await env.DB.prepare(
       "SELECT id FROM contacts WHERE workspace_id = ? AND email = 'recover@example.com'",
@@ -142,30 +152,132 @@ describe("contact import recovery", () => {
     });
   });
 
-  it("replays the same owned id after enqueue succeeds but completion rolls back", async () => {
-    const fixture = await seedImport([{ email: "completion-gap@example.com" }]);
+  it("does not insert or reconcile after its expired lease is replaced and terminated", async () => {
+    const fixture = await seedImport([{ email: "terminal-race@example.com" }]);
     const published: unknown[] = [];
-    await env.DB.prepare(
-      `CREATE TRIGGER inject_import_completion_failure
-       BEFORE UPDATE OF status ON contact_import_parts
-       WHEN OLD.job_id = '${fixture.jobId}' AND NEW.status = 'completed'
-       BEGIN SELECT RAISE(FAIL, 'injected import completion failure'); END`,
-    ).run();
+    const paused = pauseNextDatabaseBatch(env.DB);
+    const staleRun = processContactImport(
+      fixture.jobId,
+      0,
+      1,
+      runtimeWithJobsQueue(queueStub(published), paused.database),
+    );
+    await paused.reached;
+    await expirePartLease(fixture.jobId);
+    const replacement = await new ContactImportRecoveryRepository(createDatabase(env.DB)).claimPart(
+      {
+        jobId: fixture.jobId,
+        part: 0,
+        totalParts: 1,
+        now: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    );
+    expect(replacement.kind).toBe("claimed");
+    await persistDeadLetter(
+      "openengage-dead-letter",
+      { kind: "contact_import", importJobId: fixture.jobId, part: 0, totalParts: 1 },
+      5,
+      runtimeWithJobsQueue(queueStub([])),
+    );
 
-    await expect(
-      processContactImport(fixture.jobId, 0, 1, runtimeWithJobsQueue(queueStub(published))),
-    ).rejects.toThrow("injected import completion failure");
-    await env.DB.prepare("DROP TRIGGER inject_import_completion_failure").run();
-    await processContactImport(fixture.jobId, 0, 1, runtimeWithJobsQueue(queueStub(published)));
+    paused.resume();
+    await staleRun;
 
-    expect(published).toHaveLength(2);
-    expect(published[0]).toEqual(published[1]);
+    await expect(countContacts(fixture.workspaceId, "terminal-race@example.com")).resolves.toBe(0);
+    expect(published).toEqual([]);
+    await expect(readPart(fixture.jobId, 0)).resolves.toMatchObject({ status: "failed" });
+  });
+
+  it("lets the current owner insert and count a candidate when a stale owner resumes first", async () => {
+    const fixture = await seedImport([{ email: "owner-race@example.com" }]);
+    const stalePublished: unknown[] = [];
+    const currentPublished: unknown[] = [];
+    const stale = pauseNextDatabaseBatch(env.DB);
+    const staleRun = processContactImport(
+      fixture.jobId,
+      0,
+      1,
+      runtimeWithJobsQueue(queueStub(stalePublished), stale.database),
+    );
+    await stale.reached;
+    await expirePartLease(fixture.jobId);
+    const current = pauseNextDatabaseBatch(env.DB);
+    const currentRun = processContactImport(
+      fixture.jobId,
+      0,
+      1,
+      runtimeWithJobsQueue(queueStub(currentPublished), current.database),
+    );
+    await current.reached;
+
+    stale.resume();
+    await staleRun;
+    current.resume();
+    await currentRun;
+
+    const contact = await env.DB.prepare(
+      "SELECT id FROM contacts WHERE workspace_id = ? AND email = 'owner-race@example.com'",
+    )
+      .bind(fixture.workspaceId)
+      .first<{ id: string }>();
+    expect(stalePublished).toEqual([]);
+    expect(currentPublished).toEqual([
+      {
+        kind: "segment_contact_reconcile",
+        workspaceId: fixture.workspaceId,
+        contactId: contact?.id,
+      },
+    ]);
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({
       status: "completed",
       processed: 1,
       succeeded: 1,
       failed: 0,
     });
+  });
+
+  it("replays durable reconciliation when queue acceptance is ambiguous", async () => {
+    const fixture = await seedImport([{ email: "completion-gap@example.com" }]);
+    const published: unknown[] = [];
+    let failAfterPublish = true;
+    const runtime = runtimeWithJobsQueue({
+      send: async (body: unknown) => {
+        published.push(body);
+      },
+      sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
+        published.push(...[...messages].map((message) => message.body));
+        if (failAfterPublish) {
+          failAfterPublish = false;
+          throw new Error("injected ambiguous queue acceptance");
+        }
+      },
+    } as unknown as Queue);
+
+    await expect(processContactImport(fixture.jobId, 0, 1, runtime)).rejects.toThrow(
+      "injected ambiguous queue acceptance",
+    );
+    await expect(readJob(fixture.jobId)).resolves.toMatchObject({
+      status: "completed",
+      processed: 1,
+      succeeded: 1,
+      failed: 0,
+    });
+    await scheduled(
+      createScheduledController({ cron: "* * * * *" }),
+      runtime,
+      createExecutionContext(),
+    );
+
+    const reconciliations = published.filter(
+      (message): message is Record<string, unknown> =>
+        typeof message === "object" &&
+        message !== null &&
+        "kind" in message &&
+        message.kind === "segment_contact_reconcile",
+    );
+    expect(reconciliations).toHaveLength(2);
+    expect(reconciliations[0]).toEqual(reconciliations[1]);
   });
 
   it("leaves the next part durable when completion commits but direct publication fails", async () => {
@@ -205,9 +317,8 @@ describe("contact import recovery", () => {
       .bind(fixture.jobId)
       .run();
     const runtime = runtimeWithJobsQueue(
-      queueStub([], async () => {
-        throw new Error("fifth attempt outage");
-      }),
+      queueStub([]),
+      failNextDatabaseBatch(env.DB, new Error("fifth attempt outage")),
     );
 
     await expect(processContactImport(fixture.jobId, 0, 1, runtime)).rejects.toThrow(
@@ -309,13 +420,83 @@ function queueStub(
   } as unknown as Queue;
 }
 
-function runtimeWithJobsQueue(queue: Queue): RuntimeEnv {
+function runtimeWithJobsQueue(queue: Queue, database: D1Database = env.DB): RuntimeEnv {
   return new Proxy(env, {
     get(target, property, receiver) {
       if (property === "JOBS_QUEUE") return queue;
+      if (property === "DB") return database;
       return Reflect.get(target, property, receiver);
     },
   }) as RuntimeEnv;
+}
+
+function pauseNextDatabaseBatch(source: D1Database): {
+  database: D1Database;
+  reached: Promise<void>;
+  resume: () => void;
+} {
+  let markReached!: () => void;
+  let resume!: () => void;
+  let paused = false;
+  const reached = new Promise<void>((resolve) => {
+    markReached = resolve;
+  });
+  const resumed = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const database = new Proxy(source, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          if (!paused) {
+            paused = true;
+            markReached();
+            await resumed;
+          }
+          return target.batch(statements);
+        };
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { database, reached, resume };
+}
+
+function failNextDatabaseBatch(source: D1Database, error: Error): D1Database {
+  let failed = false;
+  return new Proxy(source, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          if (!failed) {
+            failed = true;
+            throw error;
+          }
+          return target.batch(statements);
+        };
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+async function expirePartLease(jobId: string): Promise<void> {
+  await env.DB.prepare(
+    "UPDATE contact_import_parts SET lease_expires_at = '2000-01-01T00:00:00.000Z' WHERE job_id = ? AND part = 0",
+  )
+    .bind(jobId)
+    .run();
+}
+
+async function countContacts(workspaceId: string, email: string): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM contacts WHERE workspace_id = ? AND email = ?",
+  )
+    .bind(workspaceId, email)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
 }
 
 async function readJob(jobId: string) {

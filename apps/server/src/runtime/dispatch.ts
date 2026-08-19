@@ -3,6 +3,7 @@ import {
   AutomationEngineRepository,
   AutomationJobRecoveryRepository,
   ContactImportRecoveryRepository,
+  ContactImportReconciliationRepository,
   claimDueJobs,
   createDatabase,
   DeliveryRecoveryRepository,
@@ -12,7 +13,11 @@ import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";
 import { PermanentChannelError } from "../channels";
 import { retryPendingPublicFormEvents } from "../contacts/event-service";
-import { processContactExport, processContactImport } from "../contacts/worker";
+import {
+  processContactExport,
+  processContactImport,
+  publishContactImportReconciliation,
+} from "../contacts/worker";
 import { type RuntimeEnv } from "../env";
 import { processCloudflareEmailEvent } from "../messaging/cloudflare-events";
 import { processDelivery } from "../messaging/delivery-worker";
@@ -71,7 +76,12 @@ export async function scheduled(
   }
 
   const importRecovery = new ContactImportRecoveryRepository(database);
+  const importReconciliation = new ContactImportReconciliationRepository(database);
   await importRecovery.recoverExpiredParts(now);
+  const importReconciliations = await importReconciliation.scanPending();
+  for (const reconciliation of importReconciliations) {
+    await publishContactImportReconciliation(importReconciliation, reconciliation, env.JOBS_QUEUE);
+  }
   const importParts = await importRecovery.scanPendingParts();
   if (importParts.length > 0) {
     await env.JOBS_QUEUE.sendBatch(

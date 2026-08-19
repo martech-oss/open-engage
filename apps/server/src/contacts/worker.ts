@@ -1,7 +1,9 @@
 import {
   ContactImportRecoveryRepository,
+  ContactImportReconciliationRepository,
   createDatabase,
   DataJobWorkerRepository,
+  type ContactImportReconciliation,
   type ContactImportRow,
 } from "@openengage/database";
 
@@ -17,6 +19,9 @@ export async function processContactImport(
   env: RuntimeEnv,
 ): Promise<void> {
   const repository = new ContactImportRecoveryRepository(createDatabase(env.DB));
+  const reconciliationRepository = new ContactImportReconciliationRepository(
+    createDatabase(env.DB),
+  );
   const now = new Date().toISOString();
   const claim = await repository.claimPart({
     jobId,
@@ -42,16 +47,20 @@ export async function processContactImport(
         jobId,
         part,
         leaseId: claim.leaseId,
+        now: new Date().toISOString(),
         processed: lines.length,
         rows: normalizeImportRows(lines),
       });
       if (!manifest) return;
     }
-    const contactIds = await repository.insertReservedCandidates(
-      claim.workspaceId,
-      manifest.candidates,
-    );
-    await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, claim.workspaceId, contactIds);
+    const contactIds = await repository.insertReservedCandidates({
+      jobId,
+      part,
+      leaseId: claim.leaseId,
+      workspaceId: claim.workspaceId,
+      now: new Date().toISOString(),
+      candidates: manifest.candidates,
+    });
     const completed = await repository.completePart({
       jobId,
       part,
@@ -62,8 +71,19 @@ export async function processContactImport(
       // Identifier conflicts and malformed rows are both explicit failures;
       // therefore processed always equals succeeded + failed.
       failed: manifest.processed - contactIds.length,
+      contactIds,
       now: new Date().toISOString(),
     });
+    if (completed) {
+      const reconciliation = await reconciliationRepository.readPending(jobId, part);
+      if (reconciliation) {
+        await publishContactImportReconciliation(
+          reconciliationRepository,
+          reconciliation,
+          env.JOBS_QUEUE,
+        );
+      }
+    }
     if (completed && part + 1 < totalParts) {
       await env.JOBS_QUEUE.send({
         kind: "contact_import",
@@ -96,6 +116,23 @@ export async function processContactImport(
     }
     throw error;
   }
+}
+
+export async function publishContactImportReconciliation(
+  repository: ContactImportReconciliationRepository,
+  reconciliation: ContactImportReconciliation,
+  queue: Queue,
+): Promise<void> {
+  await enqueueSegmentContactReconciliation(
+    queue,
+    reconciliation.workspaceId,
+    reconciliation.contactIds,
+  );
+  await repository.markPublished(
+    reconciliation.jobId,
+    reconciliation.part,
+    new Date().toISOString(),
+  );
 }
 
 function normalizeImportRows(lines: readonly string[]): ContactImportRow[] {

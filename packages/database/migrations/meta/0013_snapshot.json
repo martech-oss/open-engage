@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2c550576-1b22-4763-8f8e-0b9d80524387",
+  "id": "2a84a187-a9ff-47aa-97b3-5cdd7e4bfad7",
   "prevId": "510ef75b-5b25-4c2e-93ea-0cea9f7683d2",
   "tables": {
     "agent_conversations": {
@@ -1487,6 +1487,20 @@
           "notNull": false,
           "autoincrement": false
         },
+        "reconciliation_contact_ids": {
+          "name": "reconciliation_contact_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reconciliation_published_at": {
+          "name": "reconciliation_published_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "processed": {
           "name": "processed",
           "type": "integer",
@@ -1560,6 +1574,16 @@
           ],
           "isUnique": false,
           "where": "\"contact_import_parts\".\"status\" = 'processing'"
+        },
+        "contact_import_parts_reconciliation_pending_idx": {
+          "name": "contact_import_parts_reconciliation_pending_idx",
+          "columns": [
+            "updated_at",
+            "job_id",
+            "part"
+          ],
+          "isUnique": false,
+          "where": "\"contact_import_parts\".\"status\" = 'completed' AND \"contact_import_parts\".\"reconciliation_contact_ids\" IS NOT NULL AND \"contact_import_parts\".\"reconciliation_published_at\" IS NULL"
         }
       },
       "foreignKeys": {
