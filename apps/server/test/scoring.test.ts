@@ -123,6 +123,22 @@ function emit(
   });
 }
 
+async function expectNoScoringSideEffects(fixture: Fixture): Promise<void> {
+  await expect(readContact(fixture.contactId)).resolves.toMatchObject({ score: 0 });
+  await expect(
+    countRows("SELECT COUNT(*) AS count FROM score_events WHERE contact_id = ?", fixture.contactId),
+  ).resolves.toBe(0);
+  await expect(
+    countRows(
+      "SELECT COUNT(*) AS count FROM contact_category_scores WHERE contact_id = ?",
+      fixture.contactId,
+    ),
+  ).resolves.toBe(0);
+  await expect(
+    countRows("SELECT COUNT(*) AS count FROM contact_tags WHERE contact_id = ?", fixture.contactId),
+  ).resolves.toBe(0);
+}
+
 describe("scoring rules", () => {
   it("returns the same not-found error for foreign references on create and update", async () => {
     const local = await seedWorkspaceClient(env.DB);
@@ -313,13 +329,30 @@ describe("scoring rules", () => {
     ]);
   });
 
-  it("does not score or attach foreign category and tag resources from a legacy rule", async () => {
-    const local = await seed("foreign-execution-local@example.com");
-    const foreign = await seed("foreign-execution-owner@example.com");
+  it("does not score or attach a foreign category from a legacy rule", async () => {
+    const local = await seed("foreign-category-execution-local@example.com");
+    const foreign = await seed("foreign-category-execution-owner@example.com");
     const foreignCategory = await foreign.scoring.createCategory({
       name: "Foreign execution category",
       slug: "foreign-execution-category",
     });
+    await restoreLegacyScoringRulesTable();
+    await insertLegacyRule({
+      workspaceId: local.workspaceId,
+      categoryId: foreignCategory.id,
+      tagId: null,
+      points: 10,
+    });
+
+    await expect(emit(local, "page_viewed", "https://example.com/")).resolves.toMatchObject({
+      enrollmentCount: 0,
+    });
+    await expectNoScoringSideEffects(local);
+  });
+
+  it("does not score or attach a foreign tag from a legacy rule", async () => {
+    const local = await seed("foreign-tag-execution-local@example.com");
+    const foreign = await seed("foreign-tag-execution-owner@example.com");
     const foreignTagId = uuidv7();
     await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
       id: foreignTagId,
@@ -330,7 +363,7 @@ describe("scoring rules", () => {
     await restoreLegacyScoringRulesTable();
     await insertLegacyRule({
       workspaceId: local.workspaceId,
-      categoryId: foreignCategory.id,
+      categoryId: null,
       tagId: foreignTagId,
       points: 10,
     });
@@ -338,19 +371,7 @@ describe("scoring rules", () => {
     await expect(emit(local, "page_viewed", "https://example.com/")).resolves.toMatchObject({
       enrollmentCount: 0,
     });
-    await expect(readContact(local.contactId)).resolves.toMatchObject({ score: 0 });
-    await expect(
-      countRows("SELECT COUNT(*) AS count FROM score_events WHERE contact_id = ?", local.contactId),
-    ).resolves.toBe(0);
-    await expect(
-      countRows(
-        "SELECT COUNT(*) AS count FROM contact_category_scores WHERE contact_id = ?",
-        local.contactId,
-      ),
-    ).resolves.toBe(0);
-    await expect(
-      countRows("SELECT COUNT(*) AS count FROM contact_tags WHERE contact_id = ?", local.contactId),
-    ).resolves.toBe(0);
+    await expectNoScoringSideEffects(local);
   });
 
   it("does not expose an archived category from a legacy malformed rule", async () => {
