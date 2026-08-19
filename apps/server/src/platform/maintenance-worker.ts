@@ -1,6 +1,7 @@
 import {
   createDatabase,
   AutomationJobRecoveryRepository,
+  ContactImportRecoveryRepository,
   DeadLetterRepository,
   GeneratedEmailImageRepository,
   MaintenanceRepository,
@@ -17,11 +18,33 @@ export async function persistDeadLetter(
   env: RuntimeEnv,
   error = "Queue retries exhausted",
 ): Promise<void> {
-  const parsed = body as { jobId?: string; deliveryId?: string };
+  const parsed = body as {
+    kind?: string;
+    jobId?: string;
+    importJobId?: string;
+    part?: number;
+    totalParts?: number;
+    deliveryId?: string;
+  };
   const database = createDatabase(env.DB);
   const repository = new DeadLetterRepository(database);
   let workspaceId: string | null = null;
-  if (parsed.jobId) {
+  if (
+    parsed.kind === "contact_import" &&
+    parsed.importJobId &&
+    typeof parsed.part === "number" &&
+    typeof parsed.totalParts === "number"
+  ) {
+    const imports = new ContactImportRecoveryRepository(database);
+    workspaceId = await imports.findJobWorkspace(parsed.importJobId);
+    await imports.failPartFromDeadLetter({
+      jobId: parsed.importJobId,
+      part: parsed.part,
+      totalParts: parsed.totalParts,
+      error,
+      now: new Date().toISOString(),
+    });
+  } else if (parsed.jobId) {
     workspaceId = await repository.findJobWorkspace(parsed.jobId);
     const leaseId = (body as { leaseId?: unknown }).leaseId;
     if (typeof leaseId === "string") {

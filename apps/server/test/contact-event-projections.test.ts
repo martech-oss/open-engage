@@ -56,7 +56,7 @@ describe("contact event projection durability schema", () => {
 
   it("backfills all six projections for pre-migration pending event work", async () => {
     const migrations = await env.DB.prepare(
-      "SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1",
+      "SELECT name FROM d1_migrations WHERE name LIKE '0012_%' LIMIT 1",
     ).first<{ name: string }>();
     expect(migrations?.name).toMatch(/^0012_/);
 

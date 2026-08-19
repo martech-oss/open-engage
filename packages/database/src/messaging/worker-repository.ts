@@ -1,19 +1,14 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import {
-  channelMessageSchema,
-  emailDocumentV2Schema,
-  type ChannelMessage,
-  type EmailDocumentV2,
-} from "@openengage/core/messaging";
+import { emailDocumentV2Schema, type EmailDocumentV2 } from "@openengage/core/messaging";
 
 import { organization } from "../auth/schema";
 import { suppressions } from "../consent/schema";
 import { contactEventProjectionRows } from "../contacts/event-repository";
 import { contactEventOutbox, contactEventProjections, contactEvents } from "../contacts/schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
-import { decodeJson, defineJsonCodec } from "../shared/json-codec";
+import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { webhookEndpoints } from "../workspaces/schema";
@@ -25,29 +20,10 @@ import {
   messageVariables,
 } from "./schema";
 
-/** The delivery columns the queue worker needs to claim and send one delivery. */
-export interface DeliveryClaimRecord {
-  id: string;
-  workspaceId: string;
-  contactId: string | null;
-  channel: "email" | "webhook";
-  purpose: "transactional" | "marketing";
-  provider: "cloudflare" | "webhook";
-  recipient: string | null;
-  topicId: string | null;
-  idempotencyKey: string;
-  payload: ChannelMessage;
-  status: string;
-  attempts: number;
-}
-
 const publishedContentCodec = defineJsonCodec(
   emailDocumentV2Schema,
   "email_templates.published_content",
 );
-
-/** Batch size for one worker sweep of the delivery queue. */
-const DUE_DELIVERY_SCAN_LIMIT = 100;
 
 /**
  * Queue-worker and webhook-handler queries for the delivery pipeline.
@@ -191,156 +167,6 @@ export class MessagingWorkerRepository extends DatabaseRepository {
       })
       .onConflictDoNothing();
     return changedExactlyOne(result);
-  }
-
-  public async findDeliveryForProcessing(deliveryId: string): Promise<DeliveryClaimRecord | null> {
-    const row = await this.database.orm
-      .select({
-        id: deliveries.id,
-        workspaceId: deliveries.workspaceId,
-        contactId: deliveries.contactId,
-        channel: deliveries.channel,
-        purpose: deliveries.purpose,
-        provider: deliveries.provider,
-        recipient: deliveries.recipient,
-        topicId: deliveries.topicId,
-        idempotencyKey: deliveries.idempotencyKey,
-        payload: deliveries.payload,
-        status: deliveries.status,
-        attempts: deliveries.attempts,
-      })
-      .from(deliveries)
-      .where(eq(deliveries.id, deliveryId))
-      .get();
-    if (!row) return null;
-    // Check constraints restrict channel, purpose and provider to these unions.
-    return {
-      ...row,
-      channel: row.channel as "email" | "webhook",
-      purpose: row.purpose as "transactional" | "marketing",
-      provider: row.provider as "cloudflare" | "webhook",
-      payload: decodeJson(row.payload, channelMessageSchema, "deliveries.payload"),
-    };
-  }
-
-  /** Claims a queued or previously failed delivery, counting the attempt. */
-  public async claimDelivery(deliveryId: string): Promise<boolean> {
-    const result = await this.database.orm
-      .update(deliveries)
-      .set({
-        status: "sending",
-        attempts: sql`${deliveries.attempts} + 1`,
-        updatedAt: nowIso(),
-      })
-      .where(and(eq(deliveries.id, deliveryId), inArray(deliveries.status, ["queued", "failed"])));
-    return changedExactlyOne(result);
-  }
-
-  public async markDeliverySuppressed(deliveryId: string, reason: string): Promise<void> {
-    await this.database.orm
-      .update(deliveries)
-      .set({ status: "suppressed", lastError: reason, updatedAt: nowIso() })
-      .where(eq(deliveries.id, deliveryId));
-  }
-
-  public async markDeliveryProviderSuppressed(deliveryId: string): Promise<void> {
-    const now = nowIso();
-    const orm = this.database.orm;
-    await orm.batch([
-      orm
-        .update(deliveries)
-        .set({ status: "suppressed", lastError: "provider_suppressed", updatedAt: now })
-        .where(eq(deliveries.id, deliveryId)),
-      orm
-        .insert(suppressions)
-        .select(
-          orm
-            .select({
-              id: sql<string>`${uuidv7()}`.as("id"),
-              workspaceId: deliveries.workspaceId,
-              contactId: deliveries.contactId,
-              email: deliveries.recipient,
-              reason: sql<string>`'provider'`.as("reason"),
-              provider: sql<string>`'cloudflare'`.as("provider"),
-              createdAt: sql<string>`${now}`.as("created_at"),
-            })
-            .from(deliveries)
-            .where(eq(deliveries.id, deliveryId)),
-        )
-        .onConflictDoNothing(),
-    ]);
-  }
-
-  /**
-   * Atomically (one D1 batch) marks a sending delivery accepted and records
-   * the synthetic `accepted` event, deduplicated per provider event id.
-   */
-  public async markDeliveryAccepted(input: {
-    deliveryId: string;
-    workspaceId: string;
-    provider: string;
-    providerMessageId: string;
-    acceptedAt: string;
-  }): Promise<void> {
-    const now = nowIso();
-    const orm = this.database.orm;
-    await orm.batch([
-      orm
-        .update(deliveries)
-        .set({
-          status: "accepted",
-          providerMessageId: input.providerMessageId,
-          lastError: null,
-          updatedAt: now,
-        })
-        .where(and(eq(deliveries.id, input.deliveryId), eq(deliveries.status, "sending"))),
-      orm
-        .insert(deliveryEvents)
-        .values({
-          id: uuidv7(),
-          workspaceId: input.workspaceId,
-          deliveryId: input.deliveryId,
-          provider: input.provider,
-          providerEventId: `accepted:${input.deliveryId}`,
-          providerMessageId: input.providerMessageId,
-          type: "accepted",
-          occurredAt: input.acceptedAt,
-          metadata: "{}",
-          createdAt: now,
-        })
-        .onConflictDoNothing(),
-    ]);
-  }
-
-  /** Records a send failure while the delivery is still claimed as sending. */
-  public async recordDeliveryAttemptFailure(
-    deliveryId: string,
-    input: { status: "queued" | "failed"; nextAttemptAt: string | null; lastError: string },
-  ): Promise<void> {
-    await this.database.orm
-      .update(deliveries)
-      .set({
-        status: input.status,
-        nextAttemptAt: input.nextAttemptAt,
-        lastError: input.lastError,
-        updatedAt: nowIso(),
-      })
-      .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, "sending")));
-  }
-
-  /** Queued deliveries whose retry timer (if any) has elapsed, oldest first. */
-  public async scanDueDeliveries(now: string): Promise<Array<{ id: string }>> {
-    return await this.database.orm
-      .select({ id: deliveries.id })
-      .from(deliveries)
-      .where(
-        and(
-          eq(deliveries.status, "queued"),
-          or(isNull(deliveries.nextAttemptAt), lte(deliveries.nextAttemptAt, now)),
-        ),
-      )
-      .orderBy(asc(deliveries.createdAt))
-      .limit(DUE_DELIVERY_SCAN_LIMIT);
   }
 
   /** Resolves the delivery a signed reply address points at, if it still exists. */

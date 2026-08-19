@@ -141,6 +141,8 @@ export const deliveries = sqliteTable(
     providerMessageId: text("provider_message_id"),
     attempts: integer().default(0).notNull(),
     nextAttemptAt: text("next_attempt_at"),
+    leaseId: text("lease_id"),
+    leaseExpiresAt: text("lease_expires_at"),
     lastError: text("last_error"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -156,6 +158,12 @@ export const deliveries = sqliteTable(
       table.status,
       table.nextAttemptAt,
     ),
+    index("deliveries_queued_due_idx")
+      .on(table.nextAttemptAt, table.createdAt)
+      .where(sql`${table.status} = 'queued' AND ${table.attempts} < 5`),
+    index("deliveries_sending_lease_idx")
+      .on(table.leaseExpiresAt, table.createdAt)
+      .where(sql`${table.status} = 'sending'`),
     index("deliveries_workspace_channel_created_idx").on(
       table.workspaceId,
       table.channel,

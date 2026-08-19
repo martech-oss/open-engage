@@ -6,8 +6,7 @@ import type { OpenEngageDatabase } from "../client";
 import { nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
-import { uuidv7 } from "../shared/uuid";
-import { contacts, importJobs } from "./schema";
+import { contactImportParts, contacts, importJobs } from "./schema";
 
 export type DataJobKind = "contact_import" | "contact_export";
 
@@ -31,16 +30,35 @@ export class DataJobRepository extends WorkspaceRepository {
     cursor: Record<string, unknown>;
   }): Promise<void> {
     const now = nowIso();
-    await this.database.orm.insert(importJobs).values({
+    const totalParts =
+      input.kind === "contact_import" && typeof input.cursor["totalParts"] === "number"
+        ? input.cursor["totalParts"]
+        : null;
+    const jobInsert = this.database.orm.insert(importJobs).values({
       id: input.id,
       workspaceId: this.context.workspaceId,
       kind: input.kind,
       r2Key: input.r2Key,
-      status: "pending",
-      cursor: JSON.stringify(input.cursor),
+      status: totalParts === 0 ? "completed" : "pending",
+      cursor: JSON.stringify(totalParts === null ? input.cursor : { part: 0, totalParts }),
       createdAt: now,
       updatedAt: now,
     });
+    if (totalParts !== null && totalParts > 0) {
+      await this.database.orm.batch([
+        jobInsert,
+        this.database.orm.insert(contactImportParts).values({
+          jobId: input.id,
+          part: 0,
+          totalParts,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ]);
+      return;
+    }
+    await jobInsert;
   }
 
   public markCompleted(jobId: string): Promise<void> {
@@ -88,27 +106,6 @@ export class DataJobRepository extends WorkspaceRepository {
  * intentionally not workspace-scoped.
  */
 export class DataJobWorkerRepository extends DatabaseRepository {
-  public async claimImportJob(
-    jobId: string,
-  ): Promise<{ workspaceId: string; r2Key: string; status: string } | null> {
-    const row = await this.database.orm
-      .select({
-        workspaceId: importJobs.workspaceId,
-        r2Key: importJobs.r2Key,
-        status: importJobs.status,
-      })
-      .from(importJobs)
-      .where(
-        and(
-          eq(importJobs.id, jobId),
-          eq(importJobs.kind, "contact_import"),
-          inArray(importJobs.status, ["pending", "processing"]),
-        ),
-      )
-      .get();
-    return row ?? null;
-  }
-
   public async claimExportJob(jobId: string): Promise<{
     workspaceId: string;
     r2Key: string;
@@ -133,65 +130,6 @@ export class DataJobWorkerRepository extends DatabaseRepository {
       .get();
     if (!row) return null;
     return { ...row, cursor: safeJsonRecord(row.cursor) };
-  }
-
-  public async markProcessing(jobId: string): Promise<void> {
-    await this.database.orm
-      .update(importJobs)
-      .set({ status: "processing", updatedAt: nowIso() })
-      .where(eq(importJobs.id, jobId));
-  }
-
-  /** Inserts one import part atomically, skipping duplicate identifiers. */
-  public async insertContacts(workspaceId: string, rows: ContactImportRow[]): Promise<string[]> {
-    if (rows.length === 0) return [];
-    const now = nowIso();
-    const prepared = rows.map((row) => ({ id: uuidv7(), row }));
-    const [first, ...rest] = prepared.map(({ id, row }) =>
-      this.database.orm
-        .insert(contacts)
-        .values({
-          id,
-          workspaceId,
-          email: row.email,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          phone: row.phone,
-          externalId: row.externalId,
-          stage: row.stage,
-          score: 0,
-          status: "active",
-          customFields: JSON.stringify(row.customFields),
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing(),
-    );
-    if (first) await this.database.orm.batch([first, ...rest]);
-    return prepared.map((item) => item.id);
-  }
-
-  public async recordImportProgress(
-    jobId: string,
-    input: {
-      finished: boolean;
-      cursor: Record<string, unknown>;
-      processed: number;
-      succeeded: number;
-      failed: number;
-    },
-  ): Promise<void> {
-    await this.database.orm
-      .update(importJobs)
-      .set({
-        status: input.finished ? "completed" : "processing",
-        cursor: JSON.stringify(input.cursor),
-        processed: sql`${importJobs.processed} + ${input.processed}`,
-        succeeded: sql`${importJobs.succeeded} + ${input.succeeded}`,
-        failed: sql`${importJobs.failed} + ${input.failed}`,
-        updatedAt: nowIso(),
-      })
-      .where(eq(importJobs.id, jobId));
   }
 
   /**

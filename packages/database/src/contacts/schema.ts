@@ -326,3 +326,44 @@ export const importJobs = sqliteTable(
     ),
   ],
 );
+
+/** Durable ownership and lease state for one contact-import part. */
+export const contactImportParts = sqliteTable(
+  "contact_import_parts",
+  {
+    jobId: text("job_id")
+      .notNull()
+      .references(() => importJobs.id, { onDelete: "cascade" }),
+    part: integer().notNull(),
+    totalParts: integer("total_parts").notNull(),
+    status: text().default("pending").notNull(),
+    attempts: integer().default(0).notNull(),
+    leaseId: text("lease_id"),
+    leaseExpiresAt: text("lease_expires_at"),
+    /** Stable candidate ids and normalized rows reserved before any insert. */
+    candidates: text(),
+    processed: integer().default(0).notNull(),
+    succeeded: integer().default(0).notNull(),
+    failed: integer().default(0).notNull(),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    completedAt: text("completed_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.part] }),
+    index("contact_import_parts_pending_idx")
+      .on(table.updatedAt, table.jobId, table.part)
+      .where(sql`${table.status} = 'pending'`),
+    index("contact_import_parts_processing_lease_idx")
+      .on(table.leaseExpiresAt, table.jobId, table.part)
+      .where(sql`${table.status} = 'processing'`),
+    check(
+      "contact_import_parts_status_check",
+      sql`${table.status} IN ('pending', 'processing', 'completed', 'failed')`,
+    ),
+    check("contact_import_parts_part_check", sql`${table.part} >= 0`),
+    check("contact_import_parts_total_check", sql`${table.totalParts} > ${table.part}`),
+    check("contact_import_parts_attempts_check", sql`${table.attempts} BETWEEN 0 AND 5`),
+  ],
+);

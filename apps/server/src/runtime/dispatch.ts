@@ -2,9 +2,10 @@ import { retryDelaySeconds } from "@openengage/core/platform";
 import {
   AutomationEngineRepository,
   AutomationJobRecoveryRepository,
+  ContactImportRecoveryRepository,
   claimDueJobs,
   createDatabase,
-  MessagingWorkerRepository,
+  DeliveryRecoveryRepository,
 } from "@openengage/database";
 
 import { enrollInactiveContacts } from "../automations/enrollment";
@@ -69,7 +70,18 @@ export async function scheduled(
     }
   }
 
-  const dueDeliveries = await new MessagingWorkerRepository(database).scanDueDeliveries(now);
+  const importRecovery = new ContactImportRecoveryRepository(database);
+  await importRecovery.recoverExpiredParts(now);
+  const importParts = await importRecovery.scanPendingParts();
+  if (importParts.length > 0) {
+    await env.JOBS_QUEUE.sendBatch(
+      importParts.map((part) => ({ body: { kind: "contact_import" as const, ...part } })),
+    );
+  }
+
+  const deliveryRecovery = new DeliveryRecoveryRepository(database);
+  await deliveryRecovery.recoverExpiredDeliveries(now);
+  const dueDeliveries = await deliveryRecovery.scanDueDeliveries(now);
   if (dueDeliveries.length > 0) {
     await env.DELIVERY_QUEUE.sendBatch(
       dueDeliveries.map((delivery) => ({
