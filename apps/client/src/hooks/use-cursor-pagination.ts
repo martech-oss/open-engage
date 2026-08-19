@@ -16,7 +16,11 @@ function firstPage(key: string): CursorPaginationState {
  */
 export function useCursorPagination(resetKey: string) {
   const [stored, setStored] = useState<CursorPaginationState>(() => firstPage(resetKey));
-  const current = stored.key === resetKey ? stored : firstPage(resetKey);
+  let current = stored;
+  if (stored.key !== resetKey) {
+    current = firstPage(resetKey);
+    setStored(current);
+  }
 
   function goToNextPage(nextCursor: string | undefined): void {
     setStored((previous) => {

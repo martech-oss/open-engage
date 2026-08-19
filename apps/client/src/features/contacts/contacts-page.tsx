@@ -74,11 +74,16 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const loading = contactsQuery.isFetching;
   const filters = useContactFilters(initialSearch);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [selection, setSelection] = useState<{ key: string; ids: Set<string> }>(() => ({
+  const [storedSelection, setSelection] = useState<{ key: string; ids: Set<string> }>(() => ({
     key: paginationKey,
     ids: new Set(),
   }));
-  const selected = selection.key === paginationKey ? selection.ids : new Set<string>();
+  let selection = storedSelection;
+  if (storedSelection.key !== paginationKey) {
+    selection = { key: paginationKey, ids: new Set() };
+    setSelection(selection);
+  }
+  const selected = selection.ids;
   const setSelected = useCallback(
     (ids: Set<string>) => setSelection({ key: paginationKey, ids }),
     [paginationKey],

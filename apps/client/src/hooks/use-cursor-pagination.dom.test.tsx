@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useCursorPagination } from "./use-cursor-pagination";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("useCursorPagination", () => {
   it("restores the exact cursor while navigating 1 → 2 → 3 → 2 → 1", () => {
@@ -68,5 +70,51 @@ describe("useCursorPagination", () => {
       pageIndex: 0,
       hasPreviousPage: false,
     });
+  });
+
+  it("commits a mismatched key so an immediate A → B → A cannot resurrect history", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const renders: Array<{
+      key: string;
+      cursor: string | undefined;
+      pageIndex: number;
+      hasPreviousPage: boolean;
+    }> = [];
+    const { result, rerender } = renderHook(
+      ({ resetKey }) => {
+        const pagination = useCursorPagination(resetKey);
+        renders.push({
+          key: resetKey,
+          cursor: pagination.cursor,
+          pageIndex: pagination.pageIndex,
+          hasPreviousPage: pagination.hasPreviousPage,
+        });
+        return pagination;
+      },
+      { initialProps: { resetKey: "search-a" } },
+    );
+    act(() => result.current.goToNextPage("search-a-page-2"));
+
+    const beforeMismatch = renders.length;
+    rerender({ resetKey: "search-b" });
+    expect(renders.slice(beforeMismatch)).toEqual(
+      expect.arrayContaining([
+        {
+          key: "search-b",
+          cursor: undefined,
+          pageIndex: 0,
+          hasPreviousPage: false,
+        },
+      ]),
+    );
+
+    rerender({ resetKey: "search-a" });
+
+    expect(result.current).toMatchObject({
+      cursor: undefined,
+      pageIndex: 0,
+      hasPreviousPage: false,
+    });
+    expect(errors).not.toHaveBeenCalled();
   });
 });
