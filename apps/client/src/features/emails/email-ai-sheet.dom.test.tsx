@@ -185,6 +185,32 @@ describe("EmailAiSheet request authority", () => {
     expect(screen.queryByText("stale image failure")).toBeNull();
   });
 
+  it("returns a current image failure to optional text-only apply even after editing", async () => {
+    const pendingImage = deferred<GeneratedEmailImage>();
+    const onApply = vi.fn<(proposal: EmailGenerationProposal) => void>();
+    mutations.generate.mutateAsync.mockResolvedValue(emailResult("proposal", "image-a"));
+    mutations.preview.mutateAsync.mockResolvedValue({ subject: "preview", html: "html", text: "" });
+    mutations.image.mutateAsync.mockReturnValue(pendingImage.promise);
+    render(<EmailAiSheet {...emailProps({ onApply })} />);
+    startEmailGeneration("request with optional image");
+    await screen.findByText("proposal");
+    fireEvent.click(screen.getByRole("button", { name: "画像を生成" }));
+
+    await reject(pendingImage, new Error("current image failure"));
+
+    expect(screen.getByText("current image failure")).toBeTruthy();
+    expect(applyButton().disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("画像プロンプト"), {
+      target: { value: "edited after failure" },
+    });
+
+    expect(applyButton().disabled).toBe(false);
+    fireEvent.click(applyButton());
+    expect(onApply).toHaveBeenCalledOnce();
+    expect(onApply.mock.calls[0]?.[0].content.blocks).toEqual(defaultEmailDocumentV2().blocks);
+  });
+
   it("clears an accepted image and disables apply when its request changes", async () => {
     mutations.generate.mutateAsync.mockResolvedValue(emailResult("proposal", "image-a"));
     mutations.preview.mutateAsync.mockResolvedValue({ subject: "preview", html: "html", text: "" });

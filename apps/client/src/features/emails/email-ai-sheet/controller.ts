@@ -106,6 +106,7 @@ export function useEmailAiController({
       imageWorkflow.acceptCurrent(token, () => setGeneratedImage(image));
     } catch (cause) {
       imageWorkflow.acceptCurrent(token, () => {
+        setImageGenerationStarted(false);
         setError(getErrorMessage(cause, "画像を生成できませんでした"));
       });
     }
