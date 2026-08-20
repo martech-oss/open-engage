@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 
 import {
+  NodeFlags,
   SyntaxKind,
   isArrayBindingPattern,
   isArrayLiteralExpression,
@@ -12,6 +13,7 @@ import {
   isBindingElement,
   isBlock,
   isCallExpression,
+  isCatchClause,
   isClassDeclaration,
   isClassExpression,
   isClassStaticBlockDeclaration,
@@ -49,6 +51,7 @@ import {
   isSpreadAssignment,
   isSpreadElement,
   isStringLiteral,
+  isThrowStatement,
   isTypeAssertion,
   isVariableDeclaration,
   isVariableStatement,
@@ -115,7 +118,19 @@ for (const sourceRoot of sourceRoots) await collectSourceFiles(sourceRoot, files
 const sourceSet = new Set(files);
 const graph = new Map(files.map((file) => [file, []]));
 const violations = [];
-const sourceFacts = extractSourceFacts(files);
+let sourceFacts;
+try {
+  sourceFacts = extractSourceFacts(files);
+} catch (error) {
+  const parseDiagnostic =
+    error instanceof Error && error.message.startsWith("TypeScript could not parse")
+      ? error.message
+      : error instanceof Error && error.name !== "RangeError"
+        ? `architecture analysis failed safely: ${error.message}`
+        : "architecture analysis failed safely for deeply nested or invalid TypeScript";
+  process.stderr.write(`Architecture violations:\n- ${parseDiagnostic}\n`);
+  process.exit(1);
+}
 
 // Maps a package's bare specifier (e.g. "@openengage/core/contacts") to the
 // source file it resolves to, read straight from each package.json's
@@ -157,9 +172,12 @@ for (const file of files) {
   const isTest = isTestFile(workspacePath);
   const isBetterAuthAdapter = workspacePath === "apps/server/src/auth/service.ts";
   const importedDatabaseEntrypoints = new Set(
-    edges.flatMap((edge) => [...resolveDatabaseEntrypoints(file, edge)]),
+    edges
+      .filter((edge) => !edge.viaImportedBinding)
+      .flatMap((edge) => [...resolveDatabaseEntrypoints(file, edge)]),
   );
   const importsRawOwnerSchema = edges.some((edge) => {
+    if (edge.viaImportedBinding) return false;
     const target = resolveModuleSpecifier(file, edge.specifier);
     return target && isDatabaseOwnerSchema(target);
   });
@@ -495,33 +513,63 @@ function extractAstFacts(sourceFile) {
 
   sourceFile.forEachChild(visit);
   const provenance = createProvenanceAnalyzer(lexicalModel);
-  const exportedSpecifiers = new Set();
+  const exportedProvenanceEdges = [];
+  function addExportedProvenance(specifiers, viaCallableOutput) {
+    for (const specifier of specifiers) {
+      exportedProvenanceEdges.push({ specifier, viaCallableOutput });
+    }
+  }
   for (const binding of lexicalModel.exportedBindings) {
-    addProvenance(exportedSpecifiers, provenance.forBinding(binding));
+    addExportedProvenance(provenance.forBinding(binding), bindingIsCallableSurface(binding));
   }
   for (const expression of lexicalModel.exportedExpressions) {
-    addProvenance(exportedSpecifiers, provenance.forExpression(expression));
+    addExportedProvenance(
+      provenance.forExpression(expression),
+      expressionIsCallableSurface(expression),
+    );
   }
   for (const definition of lexicalModel.exportedDefinitions) {
-    addProvenance(exportedSpecifiers, provenance.forDefinition(definition));
+    addExportedProvenance(
+      provenance.forDefinition(definition),
+      definitionIsCallableSurface(definition),
+    );
   }
-  for (const specifier of exportedSpecifiers) {
-    edges.push({ exportsAll: false, kind: "export", specifier, viaImportedBinding: true });
+  for (const { specifier, viaCallableOutput } of exportedProvenanceEdges) {
+    edges.push({
+      exportsAll: false,
+      kind: "export",
+      specifier,
+      viaCallableOutput,
+      viaImportedBinding: true,
+    });
   }
   return { edges, functionLikeSpans, hasStaticOrmAccess, source: sourceFile.text };
 }
 
 function createLexicalModel(sourceFile) {
-  const rootScope = { bindings: new Map(), parent: undefined };
+  const rootScope = { bindings: new Map(), kind: "source", parent: undefined };
   const nodeScopes = new WeakMap();
+  const scopesByRange = new Map();
   const declarationBindings = new WeakMap();
+  const declarationBindingsByRange = new Map();
   const exportedBindings = new Set();
   const exportedDefinitions = [];
   const exportedExpressions = [];
   const exportedIdentifierNodes = [];
+  const assignmentNodes = [];
+  const classAssignments = new WeakMap();
 
-  function createScope(parent) {
-    return { bindings: new Map(), parent };
+  function nodeRangeKey(node) {
+    return `${node.kind}:${node.pos}:${node.end}`;
+  }
+
+  function rememberScope(node, scope) {
+    nodeScopes.set(node, scope);
+    scopesByRange.set(nodeRangeKey(node), scope);
+  }
+
+  function createScope(parent, kind) {
+    return { bindings: new Map(), kind, parent };
   }
 
   function bindIdentifier(identifier, scope, definition) {
@@ -532,17 +580,27 @@ function createLexicalModel(sourceFile) {
     }
     if (definition) binding.definitions.push(definition);
     declarationBindings.set(identifier, binding);
-    nodeScopes.set(identifier, scope);
+    declarationBindingsByRange.set(nodeRangeKey(identifier), binding);
+    rememberScope(identifier, scope);
     return binding;
   }
 
+  function projectedDefinition(definition, path) {
+    if (!definition || path.length === 0) return definition;
+    if (definition.kind === "expression") {
+      return { kind: "projection", node: definition.node, path };
+    }
+    if (definition.kind === "expressions") {
+      return { kind: "projection-list", nodes: definition.nodes, path };
+    }
+    return definition;
+  }
+
   function bindName(name, scope, definition) {
-    if (!name) return [];
-    if (isIdentifier(name)) return [bindIdentifier(name, scope, definition)];
-    if (!isObjectBindingPattern(name) && !isArrayBindingPattern(name)) return [];
-    return name.elements.flatMap((element) =>
-      element && isBindingElement(element) ? bindName(element.name, scope, definition) : [],
-    );
+    return bindingPatternLeaves(name).map(({ identifier, path }) => ({
+      binding: bindIdentifier(identifier, scope, projectedDefinition(definition, path)),
+      path,
+    }));
   }
 
   function hasExportModifier(node) {
@@ -552,14 +610,14 @@ function createLexicalModel(sourceFile) {
   function visitFunction(node, outerScope) {
     let declarationBinding;
     if (isFunctionDeclaration(node) && node.name) {
-      [declarationBinding] = bindName(node.name, outerScope, { kind: "function", node });
+      declarationBinding = bindName(node.name, outerScope, { kind: "function", node })[0]?.binding;
     }
     if (isFunctionDeclaration(node) && node.parent === sourceFile && hasExportModifier(node)) {
       if (declarationBinding) exportedBindings.add(declarationBinding);
       else exportedDefinitions.push({ kind: "function", node });
     }
 
-    const functionScope = createScope(outerScope);
+    const functionScope = createScope(outerScope, "function");
     if (isFunctionExpression(node) && node.name) {
       bindName(node.name, functionScope, { kind: "function", node });
     }
@@ -575,14 +633,14 @@ function createLexicalModel(sourceFile) {
   function visitClass(node, outerScope) {
     let declarationBinding;
     if (isClassDeclaration(node) && node.name) {
-      [declarationBinding] = bindName(node.name, outerScope, { kind: "class", node });
+      declarationBinding = bindName(node.name, outerScope, { kind: "class", node })[0]?.binding;
     }
     if (isClassDeclaration(node) && node.parent === sourceFile && hasExportModifier(node)) {
       if (declarationBinding) exportedBindings.add(declarationBinding);
       else exportedDefinitions.push({ kind: "class", node });
     }
 
-    const classScope = createScope(outerScope);
+    const classScope = createScope(outerScope, "class");
     if (isClassExpression(node) && node.name) {
       bindName(node.name, classScope, { kind: "class", node });
     }
@@ -591,7 +649,7 @@ function createLexicalModel(sourceFile) {
   }
 
   function visit(node, scope) {
-    nodeScopes.set(node, scope);
+    rememberScope(node, scope);
 
     if (isImportDeclaration(node)) {
       const specifier = staticString(node.moduleSpecifier);
@@ -633,8 +691,23 @@ function createLexicalModel(sourceFile) {
       visitClass(node, scope);
       return;
     }
+    if (isCatchClause(node)) {
+      const catchScope = createScope(scope, "block");
+      const thrownExpressions = collectThrownExpressions(node.parent?.tryBlock);
+      if (node.variableDeclaration) {
+        bindName(
+          node.variableDeclaration.name,
+          catchScope,
+          thrownExpressions.length > 0
+            ? { kind: "expressions", nodes: thrownExpressions }
+            : undefined,
+        );
+      }
+      visit(node.block, catchScope);
+      return;
+    }
     if (isBlock(node)) {
-      const blockScope = createScope(scope);
+      const blockScope = createScope(scope, "block");
       node.forEachChild((child) => visit(child, blockScope));
       return;
     }
@@ -642,7 +715,10 @@ function createLexicalModel(sourceFile) {
       const definition = node.initializer
         ? { kind: "expression", node: node.initializer }
         : undefined;
-      const bindings = bindName(node.name, scope, definition);
+      const declarationScope = isBlockScopedVariableDeclaration(node)
+        ? scope
+        : nearestVarScope(scope);
+      const bindings = bindName(node.name, declarationScope, definition);
       const statement = node.parent?.parent;
       if (
         statement &&
@@ -650,18 +726,24 @@ function createLexicalModel(sourceFile) {
         statement.parent === sourceFile &&
         hasExportModifier(statement)
       ) {
-        for (const binding of bindings) exportedBindings.add(binding);
+        for (const { binding } of bindings) exportedBindings.add(binding);
       }
       if (node.initializer) visit(node.initializer, scope);
       return;
+    }
+    if (isBinaryExpression(node) && node.operatorToken.kind === SyntaxKind.EqualsToken) {
+      assignmentNodes.push(node);
     }
     node.forEachChild((child) => visit(child, scope));
   }
 
   function resolveIdentifier(identifier) {
-    const declarationBinding = declarationBindings.get(identifier);
+    const declarationBinding =
+      declarationBindings.get(identifier) ??
+      declarationBindingsByRange.get(nodeRangeKey(identifier));
     if (declarationBinding) return declarationBinding;
-    let scope = nodeScopes.get(identifier) ?? rootScope;
+    let scope =
+      nodeScopes.get(identifier) ?? scopesByRange.get(nodeRangeKey(identifier)) ?? rootScope;
     while (scope) {
       const binding = scope.bindings.get(identifier.text);
       if (binding) return binding;
@@ -676,8 +758,49 @@ function createLexicalModel(sourceFile) {
     if (binding) exportedBindings.add(binding);
   }
 
+  for (const assignment of assignmentNodes) {
+    const target = unwrapTransparentExpression(assignment.left);
+    if (!isPropertyAccessExpression(target) && !isElementAccessExpression(target)) continue;
+    const member = isPropertyAccessExpression(target)
+      ? classMemberName(target.name)
+      : staticString(target.argumentExpression);
+    if (member === undefined) continue;
+    const receiver = unwrapTransparentExpression(target.expression);
+    const classes = [];
+    if (receiver.kind === SyntaxKind.ThisKeyword) {
+      const owner = enclosingThisClass(target);
+      if (owner) classes.push(owner);
+    } else if (isIdentifier(receiver)) {
+      const binding = resolveIdentifier(receiver);
+      for (const definition of binding?.definitions ?? []) {
+        if (definition.kind === "class") classes.push(definition.node);
+        if (
+          definition.kind === "expression" &&
+          (isClassDeclaration(definition.node) || isClassExpression(definition.node))
+        ) {
+          classes.push(definition.node);
+        }
+      }
+    }
+    for (const owner of classes) {
+      const records = classAssignments.get(owner) ?? [];
+      records.push({
+        member,
+        node: assignment.right,
+        ownerCallable: enclosingCallable(assignment, owner),
+        private: isPrivateIdentifier(
+          isPropertyAccessExpression(target) ? target.name : target.argumentExpression,
+        ),
+      });
+      classAssignments.set(owner, records);
+    }
+  }
+
   return {
-    bindingsForName: (name) => bindNameBindings(name, declarationBindings),
+    assignmentsForClass: (node) => classAssignments.get(node) ?? [],
+    bindingEntriesForName: (name) =>
+      bindNameEntries(name, declarationBindings, declarationBindingsByRange),
+    classForThis: enclosingThisClass,
     exportedBindings,
     exportedDefinitions,
     exportedExpressions,
@@ -685,16 +808,132 @@ function createLexicalModel(sourceFile) {
   };
 }
 
-function bindNameBindings(name, declarationBindings) {
-  if (!name) return [];
-  if (isIdentifier(name)) {
-    const binding = declarationBindings.get(name);
-    return binding ? [binding] : [];
+function isBlockScopedVariableDeclaration(node) {
+  return Boolean(node.parent?.flags & NodeFlags.BlockScoped);
+}
+
+function nearestVarScope(scope) {
+  while (scope.parent && scope.kind !== "function" && scope.kind !== "source") {
+    scope = scope.parent;
   }
-  if (!isObjectBindingPattern(name) && !isArrayBindingPattern(name)) return [];
-  return name.elements.flatMap((element) =>
-    element && isBindingElement(element) ? bindNameBindings(element.name, declarationBindings) : [],
-  );
+  return scope;
+}
+
+function collectThrownExpressions(node) {
+  if (!node) return [];
+  const expressions = [];
+  const pending = [node];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (isThrowStatement(current)) {
+      if (current.expression) expressions.push(current.expression);
+      continue;
+    }
+    if (
+      current !== node &&
+      (isFunctionNode(current) || isClassDeclaration(current) || isClassExpression(current))
+    ) {
+      continue;
+    }
+    current.forEachChild((child) => {
+      pending.push(child);
+    });
+  }
+  return expressions;
+}
+
+function bindNameEntries(name, declarationBindings, declarationBindingsByRange) {
+  return bindingPatternLeaves(name).flatMap(({ identifier, path }) => {
+    const binding =
+      declarationBindings.get(identifier) ??
+      declarationBindingsByRange.get(`${identifier.kind}:${identifier.pos}:${identifier.end}`);
+    return binding ? [{ binding, path }] : [];
+  });
+}
+
+function bindingPatternLeaves(name) {
+  if (!name) return [];
+  const leaves = [];
+  const pending = [{ name, path: [] }];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current.name) continue;
+    if (isIdentifier(current.name)) {
+      leaves.push({ identifier: current.name, path: current.path });
+      continue;
+    }
+    if (isArrayBindingPattern(current.name)) {
+      for (let index = current.name.elements.length - 1; index >= 0; index -= 1) {
+        const element = current.name.elements[index];
+        if (!element || !isBindingElement(element) || !element.name) continue;
+        pending.push({
+          name: element.name,
+          path: [
+            ...current.path,
+            {
+              defaultNode: element.initializer,
+              index,
+              kind: "array",
+              rest: Boolean(element.dotDotDotToken),
+            },
+          ],
+        });
+      }
+      continue;
+    }
+    if (!isObjectBindingPattern(current.name)) continue;
+    const excludedKeys = current.name.elements
+      .filter((element) => element && isBindingElement(element) && !element.dotDotDotToken)
+      .map((element) => staticPropertyName(element.propertyName ?? element.name))
+      .filter((key) => key !== undefined);
+    for (let index = current.name.elements.length - 1; index >= 0; index -= 1) {
+      const element = current.name.elements[index];
+      if (!element || !isBindingElement(element) || !element.name) continue;
+      pending.push({
+        name: element.name,
+        path: [
+          ...current.path,
+          {
+            defaultNode: element.initializer,
+            excludedKeys,
+            key: element.dotDotDotToken
+              ? undefined
+              : staticPropertyName(element.propertyName ?? element.name),
+            kind: "object",
+            rest: Boolean(element.dotDotDotToken),
+          },
+        ],
+      });
+    }
+  }
+  return leaves;
+}
+
+function classMemberName(name) {
+  if (!name) return undefined;
+  if (isPrivateIdentifier(name)) return name.text;
+  return staticPropertyName(name);
+}
+
+function enclosingThisClass(node) {
+  let current = node.parent;
+  while (current) {
+    if (isClassDeclaration(current) || isClassExpression(current)) return current;
+    if (isFunctionDeclaration(current) || isFunctionExpression(current)) {
+      return undefined;
+    }
+    current = current.parent;
+  }
+  return undefined;
+}
+
+function enclosingCallable(node, boundary) {
+  let current = node.parent;
+  while (current && current !== boundary) {
+    if (isFunctionNode(current)) return current;
+    current = current.parent;
+  }
+  return undefined;
 }
 
 function isFunctionNode(node) {
@@ -709,12 +948,28 @@ function isFunctionNode(node) {
   );
 }
 
+function bindingIsCallableSurface(binding) {
+  return binding.definitions.some(definitionIsCallableSurface);
+}
+
+function definitionIsCallableSurface(definition) {
+  if (definition.kind === "function" || definition.kind === "class") return true;
+  return definition.kind === "expression" && expressionIsCallableSurface(definition.node);
+}
+
+function expressionIsCallableSurface(expression) {
+  const node = unwrapTransparentExpression(expression);
+  return isFunctionNode(node) || isClassDeclaration(node) || isClassExpression(node);
+}
+
 function createProvenanceAnalyzer(model) {
   function createContext(parent) {
     return {
       activeCallables: parent?.activeCallables ?? new Set(),
       activeClasses: parent?.activeClasses ?? new Set(),
+      activeMemberClasses: parent?.activeMemberClasses ?? new Map(),
       cache: new Map(),
+      classInstanceContexts: parent?.classInstanceContexts ?? new Map(),
       overrides: new Map(parent?.overrides ?? []),
       resolving: new Set(),
     };
@@ -737,9 +992,143 @@ function createProvenanceAnalyzer(model) {
 
   function definitionProvenance(definition, context) {
     if (definition.kind === "expression") return expressionProvenance(definition.node, context);
+    if (definition.kind === "expressions") {
+      const provenance = new Set();
+      for (const node of definition.nodes) {
+        addProvenance(provenance, expressionProvenance(node, context));
+      }
+      return provenance;
+    }
+    if (definition.kind === "projection") {
+      return projectedExpressionProvenance(definition.node, definition.path, context);
+    }
+    if (definition.kind === "projection-list") {
+      const provenance = new Set();
+      for (const node of definition.nodes) {
+        addProvenance(provenance, projectedExpressionProvenance(node, definition.path, context));
+      }
+      return provenance;
+    }
     if (definition.kind === "function") return callableOutputProvenance(definition.node, context);
     if (definition.kind === "class") return classOutputProvenance(definition.node, context);
     return new Set();
+  }
+
+  function projectedExpressionProvenance(expression, path, context, pathIndex = 0) {
+    if (pathIndex >= path.length) {
+      return expression ? expressionProvenance(expression, context) : new Set();
+    }
+    const step = path[pathIndex];
+    if (!expression) {
+      return step.defaultNode
+        ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
+        : new Set();
+    }
+
+    const node = unwrapTransparentExpression(expression);
+    if (step.kind === "array" && isArrayLiteralExpression(node)) {
+      if (step.rest) {
+        const provenance = new Set();
+        for (const element of node.elements.slice(step.index)) {
+          if (!element || element.kind === SyntaxKind.OmittedExpression) continue;
+          addProvenance(
+            provenance,
+            projectedExpressionProvenance(
+              isSpreadElement(element) ? element.expression : element,
+              path,
+              context,
+              pathIndex + 1,
+            ),
+          );
+        }
+        return provenance;
+      }
+      const element = node.elements[step.index];
+      if (!element || element.kind === SyntaxKind.OmittedExpression) {
+        return step.defaultNode
+          ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
+          : new Set();
+      }
+      if (isSpreadElement(element)) {
+        const provenance = expressionProvenance(element.expression, context);
+        if (step.defaultNode)
+          addProvenance(provenance, expressionProvenance(step.defaultNode, context));
+        return provenance;
+      }
+      if (isDefinitelyUndefined(element)) {
+        return step.defaultNode
+          ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
+          : new Set();
+      }
+      return projectedExpressionProvenance(element, path, context, pathIndex + 1);
+    }
+
+    if (step.kind === "object" && isObjectLiteralExpression(node)) {
+      if (step.rest) {
+        const provenance = new Set();
+        for (const property of node.properties) {
+          const key = classMemberName(property.name);
+          if (key !== undefined && step.excludedKeys.includes(key)) continue;
+          addProvenance(
+            provenance,
+            objectPropertyProvenance(property, path, context, pathIndex + 1),
+          );
+        }
+        return provenance;
+      }
+      if (step.key !== undefined) {
+        const properties = node.properties.filter(
+          (property) => classMemberName(property.name) === step.key,
+        );
+        if (properties.length > 0) {
+          const provenance = new Set();
+          for (const property of properties) {
+            addProvenance(
+              provenance,
+              objectPropertyProvenance(property, path, context, pathIndex + 1, step.defaultNode),
+            );
+          }
+          return provenance;
+        }
+      }
+      return step.defaultNode
+        ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
+        : new Set();
+    }
+
+    const provenance = expressionProvenance(node, context);
+    if (step.defaultNode) {
+      addProvenance(
+        provenance,
+        projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1),
+      );
+    }
+    return provenance;
+  }
+
+  function objectPropertyProvenance(property, path, context, pathIndex, defaultNode) {
+    if (isPropertyAssignment(property)) {
+      if (isDefinitelyUndefined(property.initializer) && defaultNode) {
+        return projectedExpressionProvenance(defaultNode, path, context, pathIndex);
+      }
+      return projectedExpressionProvenance(property.initializer, path, context, pathIndex);
+    }
+    if (isShorthandPropertyAssignment(property)) {
+      if (isDefinitelyUndefined(property.name) && defaultNode) {
+        return projectedExpressionProvenance(defaultNode, path, context, pathIndex);
+      }
+      return projectedExpressionProvenance(property.name, path, context, pathIndex);
+    }
+    if (isSpreadAssignment(property)) return expressionProvenance(property.expression, context);
+    if (isMethodDeclaration(property) || isGetAccessorDeclaration(property)) {
+      return callableOutputProvenance(property, context);
+    }
+    return new Set();
+  }
+
+  function isDefinitelyUndefined(node) {
+    node = unwrapTransparentExpression(node);
+    return isIdentifier(node) && node.text === "undefined" && !model.resolveIdentifier(node);
   }
 
   function expressionProvenance(expression, context) {
@@ -755,9 +1144,27 @@ function createProvenanceAnalyzer(model) {
       } else if (isClassDeclaration(node) || isClassExpression(node)) {
         addProvenance(provenance, classOutputProvenance(node, context));
       } else if (isPropertyAccessExpression(node)) {
-        pending.push(node.expression);
+        const owner =
+          unwrapTransparentExpression(node.expression).kind === SyntaxKind.ThisKeyword
+            ? model.classForThis(node)
+            : undefined;
+        const member = classMemberName(node.name);
+        if (owner && member !== undefined) {
+          addProvenance(provenance, classMemberValueProvenance(owner, member, context));
+        } else {
+          pending.push(node.expression);
+        }
       } else if (isElementAccessExpression(node)) {
-        enqueueExpressions(pending, [node.expression, node.argumentExpression]);
+        const owner =
+          unwrapTransparentExpression(node.expression).kind === SyntaxKind.ThisKeyword
+            ? model.classForThis(node)
+            : undefined;
+        const member = staticString(node.argumentExpression);
+        if (owner && member !== undefined) {
+          addProvenance(provenance, classMemberValueProvenance(owner, member, context));
+        } else {
+          enqueueExpressions(pending, [node.expression, node.argumentExpression]);
+        }
       } else if (isObjectLiteralExpression(node)) {
         for (const property of node.properties) {
           if (isPropertyAssignment(property)) {
@@ -783,15 +1190,23 @@ function createProvenanceAnalyzer(model) {
           for (const callable of callables) {
             addProvenance(provenance, callableOutputProvenance(callable, context, node.arguments));
           }
-        } else if (isTransparentValueCall(node.expression)) {
+        } else if (
+          !knownCallResultCannotContainArgument(node.expression) &&
+          (isTransparentValueCall(node.expression) || unknownCallCanReturnArgument(node.expression))
+        ) {
           enqueueExpressions(pending, node.arguments ?? []);
         }
       } else if (isNewExpression(node)) {
         const classes = classDefinitions(node.expression, new Set());
         if (classes.length > 0) {
           for (const classNode of classes) {
-            addProvenance(provenance, classOutputProvenance(classNode, context));
+            addProvenance(
+              provenance,
+              classOutputProvenance(classNode, context, node.arguments ?? []),
+            );
           }
+        } else if (unknownCallCanReturnArgument(node.expression)) {
+          enqueueExpressions(pending, node.arguments ?? []);
         }
       } else if (
         isBinaryExpression(node) &&
@@ -807,7 +1222,7 @@ function createProvenanceAnalyzer(model) {
 
   function callableDefinitions(node, seenBindings) {
     node = unwrapTransparentExpression(node);
-    if (isFunctionNode(node)) return [node];
+    if (isFunctionNode(node)) return node.body ? [node] : [];
     if (isConditionalExpression(node)) {
       return [
         ...callableDefinitions(node.whenTrue, seenBindings),
@@ -819,7 +1234,7 @@ function createProvenanceAnalyzer(model) {
     if (!binding || seenBindings.has(binding)) return [];
     seenBindings.add(binding);
     return binding.definitions.flatMap((definition) => {
-      if (definition.kind === "function") return [definition.node];
+      if (definition.kind === "function") return definition.node.body ? [definition.node] : [];
       if (definition.kind === "expression") {
         return callableDefinitions(definition.node, seenBindings);
       }
@@ -850,23 +1265,8 @@ function createProvenanceAnalyzer(model) {
   function callableOutputProvenance(node, parentContext, argumentsList = []) {
     if (parentContext.activeCallables.has(node)) return new Set();
     parentContext.activeCallables.add(node);
-    const context = createContext(parentContext);
+    const context = createCallableContext(node, parentContext, argumentsList);
     try {
-      for (const [index, parameter] of (node.parameters ?? []).entries()) {
-        const argument = argumentsList[index];
-        const argumentProvenance = argument
-          ? expressionProvenance(
-              isSpreadElement(argument) ? argument.expression : argument,
-              parentContext,
-            )
-          : parameter.initializer
-            ? expressionProvenance(parameter.initializer, context)
-            : new Set();
-        for (const binding of model.bindingsForName(parameter.name)) {
-          context.overrides.set(binding, argumentProvenance);
-        }
-      }
-
       if (isArrowFunction(node) && node.body && !isBlock(node.body)) {
         return expressionProvenance(node.body, context);
       }
@@ -876,6 +1276,40 @@ function createProvenanceAnalyzer(model) {
     } finally {
       parentContext.activeCallables.delete(node);
     }
+  }
+
+  function createCallableContext(node, parentContext, argumentsList = []) {
+    const context = createContext(parentContext);
+    for (const [index, parameter] of (node.parameters ?? []).entries()) {
+      const argument = parameter.dotDotDotToken
+        ? undefined
+        : argumentsList[index]
+          ? isSpreadElement(argumentsList[index])
+            ? argumentsList[index].expression
+            : argumentsList[index]
+          : parameter.initializer;
+      for (const { binding, path } of model.bindingEntriesForName(parameter.name)) {
+        const parameterProvenance = parameter.dotDotDotToken
+          ? provenanceForExpressions(argumentsList.slice(index), parentContext)
+          : projectedExpressionProvenance(argument, path, context);
+        context.overrides.set(binding, parameterProvenance);
+      }
+    }
+    return context;
+  }
+
+  function provenanceForExpressions(expressions, context) {
+    const provenance = new Set();
+    for (const expression of expressions) {
+      addProvenance(
+        provenance,
+        expressionProvenance(
+          isSpreadElement(expression) ? expression.expression : expression,
+          context,
+        ),
+      );
+    }
+    return provenance;
   }
 
   function collectCallableOutputs(node, context, provenance) {
@@ -894,15 +1328,32 @@ function createProvenanceAnalyzer(model) {
       ) {
         continue;
       }
-      current.forEachChild((child) => pending.push(child));
+      current.forEachChild((child) => {
+        pending.push(child);
+      });
     }
   }
 
-  function classOutputProvenance(node, context) {
+  function classOutputProvenance(node, context, argumentsList = []) {
     if (context.activeClasses.has(node)) return new Set();
     context.activeClasses.add(node);
     const provenance = new Set();
+    const hadInstanceContext = context.classInstanceContexts.has(node);
+    const previousInstanceContext = context.classInstanceContexts.get(node);
     try {
+      const constructor = node.members.find((member) => isConstructorDeclaration(member));
+      const constructorContext = constructor
+        ? createCallableContext(constructor, context, argumentsList)
+        : context;
+      context.classInstanceContexts.set(node, constructorContext);
+      if (constructor) {
+        for (const parameter of constructor.parameters ?? []) {
+          if (!isPublicParameterProperty(parameter)) continue;
+          for (const { binding } of model.bindingEntriesForName(parameter.name)) {
+            addProvenance(provenance, bindingProvenance(binding, constructorContext));
+          }
+        }
+      }
       for (const member of node.members) {
         if (isPrivateClassMember(member)) continue;
         if (isPropertyDeclaration(member) && member.initializer) {
@@ -911,10 +1362,81 @@ function createProvenanceAnalyzer(model) {
           addProvenance(provenance, callableOutputProvenance(member, context));
         }
       }
+      for (const assignment of model.assignmentsForClass(node)) {
+        if (assignment.private || classMemberIsPrivate(node, assignment.member)) continue;
+        const assignmentContext = assignment.ownerCallable
+          ? assignment.ownerCallable === constructor
+            ? constructorContext
+            : createCallableContext(assignment.ownerCallable, context)
+          : context;
+        addProvenance(provenance, expressionProvenance(assignment.node, assignmentContext));
+      }
       return provenance;
     } finally {
+      if (hadInstanceContext) context.classInstanceContexts.set(node, previousInstanceContext);
+      else context.classInstanceContexts.delete(node);
       context.activeClasses.delete(node);
     }
+  }
+
+  function classMemberValueProvenance(node, memberName, context) {
+    let activeMembers = context.activeMemberClasses.get(node);
+    if (!activeMembers) {
+      activeMembers = new Set();
+      context.activeMemberClasses.set(node, activeMembers);
+    }
+    if (activeMembers.has(memberName)) return new Set();
+    activeMembers.add(memberName);
+    const provenance = new Set();
+    try {
+      for (const member of node.members) {
+        if (isConstructorDeclaration(member)) {
+          const instanceContext = context.classInstanceContexts.get(node) ?? context;
+          for (const parameter of member.parameters ?? []) {
+            if (classMemberName(parameter.name) !== memberName) continue;
+            for (const { binding } of model.bindingEntriesForName(parameter.name)) {
+              addProvenance(provenance, bindingProvenance(binding, instanceContext));
+            }
+          }
+          continue;
+        }
+        if (classMemberName(member.name) !== memberName) continue;
+        if (isPropertyDeclaration(member) && member.initializer) {
+          addProvenance(provenance, expressionProvenance(member.initializer, context));
+        }
+      }
+      for (const assignment of model.assignmentsForClass(node)) {
+        if (assignment.member === memberName) {
+          addProvenance(provenance, expressionProvenance(assignment.node, context));
+        }
+      }
+      return provenance;
+    } finally {
+      activeMembers.delete(memberName);
+    }
+  }
+
+  function unknownCallCanReturnArgument(node) {
+    node = unwrapTransparentExpression(node);
+    if (isIdentifier(node)) return true;
+    if (!isPropertyAccessExpression(node) && !isElementAccessExpression(node)) return false;
+    const receiver = unwrapTransparentExpression(node.expression);
+    if (!isIdentifier(receiver)) return false;
+    const binding = model.resolveIdentifier(receiver);
+    return Boolean(binding?.importSpecifiers.size);
+  }
+
+  function knownCallResultCannotContainArgument(node) {
+    node = unwrapTransparentExpression(node);
+    if (isKnownPrimitiveSanitizer(node)) return true;
+    if (!isIdentifier(node)) return false;
+    const binding = model.resolveIdentifier(node);
+    return [...(binding?.importSpecifiers ?? [])].some(
+      (specifier) =>
+        specifier === "drizzle-orm" ||
+        specifier.startsWith("drizzle-orm/") ||
+        (node.text === "decodeJson" && /(?:^|\/)shared\/json-codec$/.test(specifier)),
+    );
   }
 
   const rootContext = createContext();
@@ -935,6 +1457,34 @@ function isPrivateClassMember(member) {
   return (
     (member.name && isPrivateIdentifier(member.name)) ||
     (member.modifiers?.some((modifier) => modifier.kind === SyntaxKind.PrivateKeyword) ?? false)
+  );
+}
+
+function classMemberIsPrivate(node, memberName) {
+  return node.members.some(
+    (member) => classMemberName(member.name) === memberName && isPrivateClassMember(member),
+  );
+}
+
+function isPublicParameterProperty(parameter) {
+  const modifiers = new Set(parameter.modifiers?.map((modifier) => modifier.kind) ?? []);
+  const isParameterProperty = [
+    SyntaxKind.PublicKeyword,
+    SyntaxKind.PrivateKeyword,
+    SyntaxKind.ProtectedKeyword,
+    SyntaxKind.ReadonlyKeyword,
+  ].some((kind) => modifiers.has(kind));
+  return (
+    isParameterProperty &&
+    !modifiers.has(SyntaxKind.PrivateKeyword) &&
+    !modifiers.has(SyntaxKind.ProtectedKeyword)
+  );
+}
+
+function isKnownPrimitiveSanitizer(node) {
+  node = unwrapTransparentExpression(node);
+  return (
+    isIdentifier(node) && ["BigInt", "Boolean", "Number", "String", "Symbol"].includes(node.text)
   );
 }
 
@@ -1044,7 +1594,7 @@ function collectDatabaseEntrypoints(file) {
       return;
     }
     for (const edge of sourceFacts.get(current)?.edges ?? []) {
-      if (edge.kind !== "export") continue;
+      if (edge.kind !== "export" || edge.viaCallableOutput) continue;
       const directSpecifier = databaseSpecifiers.get(edge.specifier);
       if (directSpecifier) {
         entrypoints.add(directSpecifier);
