@@ -50,6 +50,16 @@ function componentLines(count) {
   ].join("\n");
 }
 
+function classMemberLines(signature, count) {
+  return [
+    "export class Fixture {",
+    `  ${signature} {`,
+    ...Array.from({ length: count - 2 }, () => "    void 0;"),
+    "  }",
+    "}",
+  ].join("\n");
+}
+
 await test("architecture policy accepts and rejects controlled repositories", async (t) => {
   const scenarios = [
     {
@@ -136,6 +146,51 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "domain barrel",
     },
     {
+      name: "rejects a named export fed by a raw-schema initializer alias chain",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const first = assets;\nconst second = first;\n" +
+          "export const exposed = second;\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a default export fed by a raw-schema initializer alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export { default } from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\nexport default exposed;\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a default object surface containing a raw-schema alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export { default } from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\nexport default { schema: exposed };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects an exported object shorthand containing a raw-schema alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\nexport const surface = { exposed };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
       name: "rejects a relative server import that resolves to the database schema",
       files: {
         "apps/server/src/contacts/service.ts":
@@ -190,6 +245,14 @@ await test("architecture policy accepts and rejects controlled repositories", as
       files: {
         "apps/server/src/contacts/service.ts":
           "declare const database: unknown;\nvoid database[`orm`];\n",
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "rejects a parenthesized database orm element access outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          'declare const database: unknown;\nvoid database[("orm")];\n',
       },
       want: "Better Auth adapter",
     },
@@ -261,6 +324,29 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "dependency cycle",
     },
     {
+      name: "unwraps nested transparent dynamic import expressions when detecting cycles",
+      files: {
+        "apps/client/src/a.ts": 'void import((("@/b" as string) satisfies string)!);\n',
+        "apps/client/src/b.ts": 'import "@/a";\n',
+      },
+      want: "dependency cycle",
+    },
+    {
+      name: "unwraps a type-asserted dynamic import when detecting cycles",
+      files: {
+        "apps/client/src/a.ts": 'void import(<string>"@/b");\n',
+        "apps/client/src/b.ts": 'import "@/a";\n',
+      },
+      want: "dependency cycle",
+    },
+    {
+      name: "does not evaluate dynamic imports hidden behind transparent wrappers",
+      files: {
+        "apps/client/src/a.ts": 'const target = "@/b";\nvoid import((target as string)!);\n',
+        "apps/client/src/b.ts": 'import "@/a";\n',
+      },
+    },
+    {
       name: "resolves type-only declarations and import types when detecting cycles",
       files: {
         "apps/client/src/a.ts": 'import type { B } from "@/b";\nexport type A = B;\n',
@@ -330,12 +416,83 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "over 500 lines",
     },
     {
+      name: "allows a handwritten declaration at exactly 500 actual lines",
+      files: { "apps/server/src/exact-limit.d.ts": sourceLines(500) },
+    },
+    {
+      name: "rejects a handwritten declaration at 501 actual lines",
+      files: { "apps/server/src/over-limit.d.ts": sourceLines(501) },
+      want: "over 500 lines",
+    },
+    {
+      name: "checks dependencies in handwritten declarations",
+      files: {
+        "apps/server/src/leak.d.ts":
+          'import type { contacts } from "../../../packages/database/src/contacts/schema";\n' +
+          "export type Leak = typeof contacts;\n",
+        "packages/database/src/contacts/schema.ts": "export const contacts = {};\n",
+      },
+      want: "raw owner schema",
+    },
+    {
       name: "allows a client TSX function at exactly 250 lines",
       files: { "apps/client/src/exact-function.tsx": componentLines(250) },
     },
     {
       name: "rejects a client TSX function at 251 lines",
       files: { "apps/client/src/over-function.tsx": componentLines(251) },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: "allows a client TSX constructor at exactly 250 lines",
+      files: {
+        "apps/client/src/exact-constructor.tsx": classMemberLines("constructor()", 250),
+      },
+    },
+    {
+      name: "rejects a client TSX constructor at 251 lines",
+      files: {
+        "apps/client/src/over-constructor.tsx": classMemberLines("constructor()", 251),
+      },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: "allows a client TSX getter at exactly 250 lines",
+      files: {
+        "apps/client/src/exact-getter.tsx": classMemberLines("get value()", 250),
+      },
+    },
+    {
+      name: "rejects a client TSX getter at 251 lines",
+      files: {
+        "apps/client/src/over-getter.tsx": classMemberLines("get value()", 251),
+      },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: "allows a client TSX setter at exactly 250 lines",
+      files: {
+        "apps/client/src/exact-setter.tsx": classMemberLines("set value(input: unknown)", 250),
+      },
+    },
+    {
+      name: "rejects a client TSX setter at 251 lines",
+      files: {
+        "apps/client/src/over-setter.tsx": classMemberLines("set value(input: unknown)", 251),
+      },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: "allows a client TSX static block at exactly 250 lines",
+      files: {
+        "apps/client/src/exact-static-block.tsx": classMemberLines("static", 250),
+      },
+    },
+    {
+      name: "rejects a client TSX static block at 251 lines",
+      files: {
+        "apps/client/src/over-static-block.tsx": classMemberLines("static", 251),
+      },
       want: "function-like node.*over 250 lines",
     },
     {
