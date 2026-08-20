@@ -557,6 +557,7 @@ function createLexicalModel(sourceFile) {
   const exportedExpressions = [];
   const exportedIdentifierNodes = [];
   const assignmentNodes = [];
+  const mutationCallNodes = [];
   const classAssignments = new WeakMap();
 
   function nodeRangeKey(node) {
@@ -588,10 +589,10 @@ function createLexicalModel(sourceFile) {
   function projectedDefinition(definition, path) {
     if (!definition || path.length === 0) return definition;
     if (definition.kind === "expression") {
-      return { kind: "projection", node: definition.node, path };
+      return { ...definition, kind: "projection", path };
     }
     if (definition.kind === "expressions") {
-      return { kind: "projection-list", nodes: definition.nodes, path };
+      return { ...definition, kind: "projection-list", path };
     }
     return definition;
   }
@@ -610,7 +611,13 @@ function createLexicalModel(sourceFile) {
   function visitFunction(node, outerScope) {
     let declarationBinding;
     if (isFunctionDeclaration(node) && node.name) {
-      declarationBinding = bindName(node.name, outerScope, { kind: "function", node })[0]?.binding;
+      declarationBinding = bindName(node.name, outerScope, {
+        kind: "function",
+        node,
+        ownerCallable: enclosingCallable(node),
+        position: Number.NEGATIVE_INFINITY,
+        write: "replace",
+      })[0]?.binding;
     }
     if (isFunctionDeclaration(node) && node.parent === sourceFile && hasExportModifier(node)) {
       if (declarationBinding) exportedBindings.add(declarationBinding);
@@ -619,7 +626,13 @@ function createLexicalModel(sourceFile) {
 
     const functionScope = createScope(outerScope, "function");
     if (isFunctionExpression(node) && node.name) {
-      bindName(node.name, functionScope, { kind: "function", node });
+      bindName(node.name, functionScope, {
+        kind: "function",
+        node,
+        ownerCallable: node,
+        position: Number.NEGATIVE_INFINITY,
+        write: "replace",
+      });
     }
     for (const parameter of node.parameters ?? []) {
       bindName(parameter.name, functionScope, { kind: "parameter", node: parameter });
@@ -633,7 +646,13 @@ function createLexicalModel(sourceFile) {
   function visitClass(node, outerScope) {
     let declarationBinding;
     if (isClassDeclaration(node) && node.name) {
-      declarationBinding = bindName(node.name, outerScope, { kind: "class", node })[0]?.binding;
+      declarationBinding = bindName(node.name, outerScope, {
+        kind: "class",
+        node,
+        ownerCallable: enclosingCallable(node),
+        position: node.pos,
+        write: "replace",
+      })[0]?.binding;
     }
     if (isClassDeclaration(node) && node.parent === sourceFile && hasExportModifier(node)) {
       if (declarationBinding) exportedBindings.add(declarationBinding);
@@ -642,7 +661,13 @@ function createLexicalModel(sourceFile) {
 
     const classScope = createScope(outerScope, "class");
     if (isClassExpression(node) && node.name) {
-      bindName(node.name, classScope, { kind: "class", node });
+      bindName(node.name, classScope, {
+        kind: "class",
+        node,
+        ownerCallable: enclosingCallable(node),
+        position: node.pos,
+        write: "replace",
+      });
     }
     for (const clause of node.heritageClauses ?? []) visit(clause, classScope);
     for (const member of node.members) visit(member, classScope);
@@ -699,7 +724,13 @@ function createLexicalModel(sourceFile) {
           node.variableDeclaration.name,
           catchScope,
           thrownExpressions.length > 0
-            ? { kind: "expressions", nodes: thrownExpressions }
+            ? {
+                kind: "expressions",
+                nodes: thrownExpressions,
+                ownerCallable: enclosingCallable(node),
+                position: node.pos,
+                write: "merge",
+              }
             : undefined,
         );
       }
@@ -713,8 +744,20 @@ function createLexicalModel(sourceFile) {
     }
     if (isVariableDeclaration(node)) {
       const definition = node.initializer
-        ? { kind: "expression", node: node.initializer }
-        : undefined;
+        ? {
+            kind: "expression",
+            node: node.initializer,
+            ownerCallable: enclosingCallable(node),
+            position: node.initializer.end,
+            write: "replace",
+          }
+        : {
+            kind: hasDeclareModifier(node) ? "unknown" : "undefined",
+            node,
+            ownerCallable: enclosingCallable(node),
+            position: node.pos,
+            write: "replace",
+          };
       const declarationScope = isBlockScopedVariableDeclaration(node)
         ? scope
         : nearestVarScope(scope);
@@ -731,9 +774,10 @@ function createLexicalModel(sourceFile) {
       if (node.initializer) visit(node.initializer, scope);
       return;
     }
-    if (isBinaryExpression(node) && node.operatorToken.kind === SyntaxKind.EqualsToken) {
+    if (isBinaryExpression(node) && assignmentWriteKind(node.operatorToken.kind)) {
       assignmentNodes.push(node);
     }
+    if (isCallExpression(node)) mutationCallNodes.push(node);
     node.forEachChild((child) => visit(child, scope));
   }
 
@@ -759,6 +803,74 @@ function createLexicalModel(sourceFile) {
   }
 
   for (const assignment of assignmentNodes) {
+    let write = assignmentWriteKind(assignment.operatorToken.kind);
+    if (!write) continue;
+    if (write === "replace" && mutationIsConditional(assignment)) write = "merge";
+    for (const { identifier, path } of assignmentPatternLeaves(assignment.left)) {
+      const binding = resolveIdentifier(identifier);
+      if (!binding) continue;
+      binding.definitions.push(
+        projectedDefinition(
+          {
+            kind: "expression",
+            node: assignment.right,
+            ownerCallable: enclosingCallable(assignment),
+            position: assignment.end,
+            write,
+          },
+          path,
+        ),
+      );
+    }
+  }
+
+  function classesForExpression(expression, seenBindings = new Set()) {
+    const node = unwrapTransparentExpression(expression);
+    if (isClassDeclaration(node) || isClassExpression(node)) return [node];
+    if (isConditionalExpression(node)) {
+      return [
+        ...classesForExpression(node.whenTrue, seenBindings),
+        ...classesForExpression(node.whenFalse, seenBindings),
+      ];
+    }
+    if (!isIdentifier(node)) return [];
+    const binding = resolveIdentifier(node);
+    if (!binding || seenBindings.has(binding)) return [];
+    seenBindings.add(binding);
+    return binding.definitions.flatMap((definition) => {
+      if (definition.kind === "class") return [definition.node];
+      if (definition.kind === "expression") {
+        return classesForExpression(definition.node, seenBindings);
+      }
+      return [];
+    });
+  }
+
+  function classesForReceiver(receiver) {
+    receiver = unwrapTransparentExpression(receiver);
+    if (receiver.kind === SyntaxKind.ThisKeyword) {
+      const owner = enclosingThisClass(receiver);
+      return owner ? [owner] : [];
+    }
+    return classesForExpression(receiver);
+  }
+
+  function recordClassAssignment(owner, member, node, mutation, targetName) {
+    let write = assignmentWriteKind(mutation.operatorToken?.kind) ?? "replace";
+    if (write === "replace" && mutationIsConditional(mutation)) write = "merge";
+    const records = classAssignments.get(owner) ?? [];
+    records.push({
+      member,
+      node,
+      ownerCallable: enclosingCallable(mutation, owner),
+      position: mutation.end,
+      private: targetName ? isPrivateIdentifier(targetName) : false,
+      write,
+    });
+    classAssignments.set(owner, records);
+  }
+
+  for (const assignment of assignmentNodes) {
     const target = unwrapTransparentExpression(assignment.left);
     if (!isPropertyAccessExpression(target) && !isElementAccessExpression(target)) continue;
     const member = isPropertyAccessExpression(target)
@@ -766,33 +878,36 @@ function createLexicalModel(sourceFile) {
       : staticString(target.argumentExpression);
     if (member === undefined) continue;
     const receiver = unwrapTransparentExpression(target.expression);
-    const classes = [];
-    if (receiver.kind === SyntaxKind.ThisKeyword) {
-      const owner = enclosingThisClass(target);
-      if (owner) classes.push(owner);
-    } else if (isIdentifier(receiver)) {
-      const binding = resolveIdentifier(receiver);
-      for (const definition of binding?.definitions ?? []) {
-        if (definition.kind === "class") classes.push(definition.node);
-        if (
-          definition.kind === "expression" &&
-          (isClassDeclaration(definition.node) || isClassExpression(definition.node))
-        ) {
-          classes.push(definition.node);
+    for (const owner of classesForReceiver(receiver)) {
+      recordClassAssignment(
+        owner,
+        member,
+        assignment.right,
+        assignment,
+        isPropertyAccessExpression(target) ? target.name : target.argumentExpression,
+      );
+    }
+  }
+
+  for (const call of mutationCallNodes) {
+    const callee = unwrapTransparentExpression(call.expression);
+    if (
+      !isPropertyAccessExpression(callee) ||
+      !isIdentifier(callee.expression) ||
+      callee.expression.text !== "Object" ||
+      callee.name.text !== "assign" ||
+      resolveIdentifier(callee.expression) ||
+      call.arguments.length < 2
+    ) {
+      continue;
+    }
+    const receiver = call.arguments[0];
+    for (const owner of classesForReceiver(receiver)) {
+      for (const source of call.arguments.slice(1)) {
+        for (const { member, node } of objectMutationEntries(source)) {
+          recordClassAssignment(owner, member, node, call);
         }
       }
-    }
-    for (const owner of classes) {
-      const records = classAssignments.get(owner) ?? [];
-      records.push({
-        member,
-        node: assignment.right,
-        ownerCallable: enclosingCallable(assignment, owner),
-        private: isPrivateIdentifier(
-          isPropertyAccessExpression(target) ? target.name : target.argumentExpression,
-        ),
-      });
-      classAssignments.set(owner, records);
     }
   }
 
@@ -817,6 +932,179 @@ function nearestVarScope(scope) {
     scope = scope.parent;
   }
   return scope;
+}
+
+function hasDeclareModifier(node) {
+  const declarationModifiers = node.modifiers ?? [];
+  const statementModifiers = isVariableStatement(node.parent?.parent)
+    ? (node.parent.parent.modifiers ?? [])
+    : [];
+  return [...declarationModifiers, ...statementModifiers].some(
+    (modifier) => modifier.kind === SyntaxKind.DeclareKeyword,
+  );
+}
+
+function assignmentWriteKind(kind) {
+  if (kind === SyntaxKind.EqualsToken) return "replace";
+  if (
+    kind === SyntaxKind.QuestionQuestionEqualsToken ||
+    kind === SyntaxKind.BarBarEqualsToken ||
+    kind === SyntaxKind.AmpersandAmpersandEqualsToken
+  ) {
+    return "merge";
+  }
+  return undefined;
+}
+
+function mutationIsConditional(node) {
+  let current = node.parent;
+  while (current) {
+    if (isFunctionNode(current)) return false;
+    if (
+      [
+        SyntaxKind.IfStatement,
+        SyntaxKind.ConditionalExpression,
+        SyntaxKind.SwitchStatement,
+        SyntaxKind.CaseBlock,
+        SyntaxKind.ForStatement,
+        SyntaxKind.ForInStatement,
+        SyntaxKind.ForOfStatement,
+        SyntaxKind.WhileStatement,
+        SyntaxKind.DoStatement,
+        SyntaxKind.TryStatement,
+        SyntaxKind.CatchClause,
+      ].includes(current.kind)
+    ) {
+      return true;
+    }
+    if (
+      isBinaryExpression(current) &&
+      [
+        SyntaxKind.AmpersandAmpersandToken,
+        SyntaxKind.BarBarToken,
+        SyntaxKind.QuestionQuestionToken,
+      ].includes(current.operatorToken.kind)
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function assignmentPatternLeaves(name) {
+  const leaves = [];
+  const pending = [{ name: unwrapTransparentExpression(name), path: [] }];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    const target = unwrapTransparentExpression(current.name);
+    if (isIdentifier(target)) {
+      leaves.push({ identifier: target, path: current.path });
+      continue;
+    }
+    if (isArrayLiteralExpression(target)) {
+      for (let index = target.elements.length - 1; index >= 0; index -= 1) {
+        let element = target.elements[index];
+        if (!element || element.kind === SyntaxKind.OmittedExpression) continue;
+        let defaultNode;
+        let rest = false;
+        if (isSpreadElement(element)) {
+          rest = true;
+          element = element.expression;
+        }
+        element = unwrapTransparentExpression(element);
+        if (isBinaryExpression(element) && element.operatorToken.kind === SyntaxKind.EqualsToken) {
+          defaultNode = element.right;
+          element = element.left;
+        }
+        pending.push({
+          name: element,
+          path: [...current.path, { defaultNode, index, kind: "array", rest }],
+        });
+      }
+      continue;
+    }
+    if (!isObjectLiteralExpression(target)) continue;
+    const excludedKeys = target.properties
+      .filter((property) => !isSpreadAssignment(property))
+      .map((property) => classMemberName(property.name))
+      .filter((key) => key !== undefined);
+    for (let index = target.properties.length - 1; index >= 0; index -= 1) {
+      const property = target.properties[index];
+      if (isSpreadAssignment(property)) {
+        pending.push({
+          name: property.expression,
+          path: [
+            ...current.path,
+            {
+              excludedKeys,
+              key: undefined,
+              kind: "object",
+              rest: true,
+            },
+          ],
+        });
+        continue;
+      }
+      if (isShorthandPropertyAssignment(property)) {
+        pending.push({
+          name: property.name,
+          path: [
+            ...current.path,
+            {
+              defaultNode: property.objectAssignmentInitializer,
+              excludedKeys,
+              key: property.name.text,
+              kind: "object",
+              rest: false,
+            },
+          ],
+        });
+        continue;
+      }
+      if (!isPropertyAssignment(property)) continue;
+      let propertyTarget = unwrapTransparentExpression(property.initializer);
+      let defaultNode;
+      if (
+        isBinaryExpression(propertyTarget) &&
+        propertyTarget.operatorToken.kind === SyntaxKind.EqualsToken
+      ) {
+        defaultNode = propertyTarget.right;
+        propertyTarget = propertyTarget.left;
+      }
+      pending.push({
+        name: propertyTarget,
+        path: [
+          ...current.path,
+          {
+            defaultNode,
+            excludedKeys,
+            key: classMemberName(property.name),
+            kind: "object",
+            rest: false,
+          },
+        ],
+      });
+    }
+  }
+  return leaves;
+}
+
+function objectMutationEntries(expression) {
+  const node = unwrapTransparentExpression(expression);
+  if (!isObjectLiteralExpression(node)) return [];
+  const entries = [];
+  for (const property of node.properties) {
+    if (isPropertyAssignment(property)) {
+      const member = classMemberName(property.name);
+      if (member !== undefined) entries.push({ member, node: property.initializer });
+    } else if (isShorthandPropertyAssignment(property)) {
+      entries.push({ member: property.name.text, node: property.name });
+    } else if (isSpreadAssignment(property)) {
+      entries.push(...objectMutationEntries(property.expression));
+    }
+  }
+  return entries;
 }
 
 function collectThrownExpressions(node) {
@@ -971,23 +1259,85 @@ function createProvenanceAnalyzer(model) {
       cache: new Map(),
       classInstanceContexts: parent?.classInstanceContexts ?? new Map(),
       overrides: new Map(parent?.overrides ?? []),
-      resolving: new Set(),
+      sourceOverrides: new Map(parent?.sourceOverrides ?? []),
+      resolving: new Map(),
+      resolvingDefinedness: new Map(),
     };
   }
 
-  function bindingProvenance(binding, context) {
-    if (context.overrides.has(binding)) return context.overrides.get(binding);
-    if (context.cache.has(binding)) return context.cache.get(binding);
-    if (context.resolving.has(binding)) return new Set();
+  function referencePosition(reference) {
+    return reference?.pos ?? Number.POSITIVE_INFINITY;
+  }
 
-    context.resolving.add(binding);
-    const provenance = new Set(binding.importSpecifiers);
+  function effectiveDefinitions(binding, reference) {
+    const position = referencePosition(reference);
+    const referenceCallable = reference ? enclosingCallable(reference) : undefined;
+    const groups = new Map();
     for (const definition of binding.definitions) {
+      const definitionPosition = definition.position ?? Number.NEGATIVE_INFINITY;
+      const sameExecution = definition.ownerCallable === referenceCallable;
+      if (reference && sameExecution && definitionPosition > position) continue;
+      const definitions = groups.get(definition.ownerCallable) ?? [];
+      definitions.push(definition);
+      groups.set(definition.ownerCallable, definitions);
+    }
+    const effective = [];
+    for (const definitions of groups.values()) {
+      let groupValues = [];
+      for (const definition of definitions.sort(
+        (left, right) =>
+          (left.position ?? Number.NEGATIVE_INFINITY) -
+          (right.position ?? Number.NEGATIVE_INFINITY),
+      )) {
+        if (definition.write === "replace") groupValues = [definition];
+        else groupValues.push(definition);
+      }
+      effective.push(...groupValues);
+    }
+    return effective;
+  }
+
+  function bindingProvenance(binding, context, reference) {
+    if (context.overrides.has(binding)) return context.overrides.get(binding).provenance;
+    const position = referencePosition(reference);
+    let bindingCache = context.cache.get(binding);
+    if (!bindingCache) {
+      bindingCache = new Map();
+      context.cache.set(binding, bindingCache);
+    }
+    if (bindingCache.has(position)) return bindingCache.get(position);
+    const resolvingPositions = context.resolving.get(binding) ?? new Set();
+    if (resolvingPositions.has(position)) return new Set();
+
+    resolvingPositions.add(position);
+    context.resolving.set(binding, resolvingPositions);
+    const provenance = new Set(binding.importSpecifiers);
+    for (const definition of effectiveDefinitions(binding, reference)) {
       addProvenance(provenance, definitionProvenance(definition, context));
     }
-    context.resolving.delete(binding);
-    context.cache.set(binding, provenance);
+    resolvingPositions.delete(position);
+    if (resolvingPositions.size === 0) context.resolving.delete(binding);
+    bindingCache.set(position, provenance);
     return provenance;
+  }
+
+  function bindingDefinedness(binding, context, reference) {
+    if (context.overrides.has(binding)) return context.overrides.get(binding).definedness;
+    const position = referencePosition(reference);
+    const resolvingPositions = context.resolvingDefinedness.get(binding) ?? new Set();
+    if (resolvingPositions.has(position)) return "unknown";
+    resolvingPositions.add(position);
+    context.resolvingDefinedness.set(binding, resolvingPositions);
+    try {
+      const definitions = effectiveDefinitions(binding, reference);
+      if (definitions.length === 0) return "unknown";
+      return joinDefinedness(
+        definitions.map((definition) => definitionDefinedness(definition, context)),
+      );
+    } finally {
+      resolvingPositions.delete(position);
+      if (resolvingPositions.size === 0) context.resolvingDefinedness.delete(binding);
+    }
   }
 
   function definitionProvenance(definition, context) {
@@ -1014,121 +1364,490 @@ function createProvenanceAnalyzer(model) {
     return new Set();
   }
 
-  function projectedExpressionProvenance(expression, path, context, pathIndex = 0) {
-    if (pathIndex >= path.length) {
-      return expression ? expressionProvenance(expression, context) : new Set();
+  function definitionDefinedness(definition, context) {
+    if (definition.kind === "undefined") return "undefined";
+    if (definition.kind === "unknown" || definition.kind === "parameter") return "unknown";
+    if (definition.kind === "expression") return expressionDefinedness(definition.node, context);
+    if (definition.kind === "expressions") {
+      return joinDefinedness(definition.nodes.map((node) => expressionDefinedness(node, context)));
     }
+    if (definition.kind === "projection") {
+      return projectedExpressionFact(definition.node, definition.path, context).definedness;
+    }
+    if (definition.kind === "projection-list") {
+      return joinDefinedness(
+        definition.nodes.map(
+          (node) => projectedExpressionFact(node, definition.path, context).definedness,
+        ),
+      );
+    }
+    if (definition.kind === "function" || definition.kind === "class") return "nonundefined";
+    return "unknown";
+  }
+
+  function valueFact(provenance = new Set(), definedness = "unknown") {
+    return { definedness, provenance };
+  }
+
+  function joinDefinedness(values) {
+    const known = new Set(values);
+    if (known.size === 1) return values[0];
+    return "unknown";
+  }
+
+  function mergeFacts(facts, definedness) {
+    const provenance = new Set();
+    for (const fact of facts) addProvenance(provenance, fact.provenance);
+    return valueFact(
+      provenance,
+      definedness ??
+        (facts.length > 0 ? joinDefinedness(facts.map((fact) => fact.definedness)) : "unknown"),
+    );
+  }
+
+  function expressionFact(expression, context) {
+    if (!expression) return valueFact(new Set(), "undefined");
+    return valueFact(
+      expressionProvenance(expression, context),
+      expressionDefinedness(expression, context),
+    );
+  }
+
+  function projectedExpressionProvenance(expression, path, context, pathIndex = 0) {
+    return projectedExpressionFact(expression, path, context, pathIndex).provenance;
+  }
+
+  function projectedExpressionFact(
+    expression,
+    path,
+    context,
+    pathIndex = 0,
+    seenBindings = new Set(),
+  ) {
+    if (pathIndex >= path.length) return expressionFact(expression, context);
     const step = path[pathIndex];
     if (!expression) {
-      return step.defaultNode
-        ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
-        : new Set();
+      return applyProjectionDefault(
+        valueFact(new Set(), "undefined"),
+        step.defaultNode,
+        path,
+        context,
+        pathIndex + 1,
+      );
     }
 
     const node = unwrapTransparentExpression(expression);
+    if (isIdentifier(node)) {
+      const binding = model.resolveIdentifier(node);
+      if (binding && !seenBindings.has(binding)) {
+        const nestedSeen = new Set(seenBindings);
+        nestedSeen.add(binding);
+        const sourceOverride = context.sourceOverrides.get(binding);
+        if (sourceOverride) {
+          return mergeFacts(
+            sourceOverride.expressions.map((source) =>
+              projectedExpressionFact(source, path, sourceOverride.context, pathIndex, nestedSeen),
+            ),
+          );
+        }
+        const facts = effectiveDefinitions(binding, node).map((definition) => {
+          if (definition.kind === "expression") {
+            return projectedExpressionFact(definition.node, path, context, pathIndex, nestedSeen);
+          }
+          if (definition.kind === "expressions") {
+            return mergeFacts(
+              definition.nodes.map((source) =>
+                projectedExpressionFact(source, path, context, pathIndex, nestedSeen),
+              ),
+            );
+          }
+          const fact = valueFact(
+            definitionProvenance(definition, context),
+            definitionDefinedness(definition, context),
+          );
+          return applyProjectionDefault(fact, step.defaultNode, path, context, pathIndex + 1);
+        });
+        if (facts.length > 0) return mergeFacts(facts);
+      }
+    }
+
     if (step.kind === "array" && isArrayLiteralExpression(node)) {
       if (step.rest) {
-        const provenance = new Set();
+        const facts = [];
         for (const element of node.elements.slice(step.index)) {
           if (!element || element.kind === SyntaxKind.OmittedExpression) continue;
-          addProvenance(
-            provenance,
-            projectedExpressionProvenance(
+          facts.push(
+            projectedExpressionFact(
               isSpreadElement(element) ? element.expression : element,
               path,
               context,
               pathIndex + 1,
+              seenBindings,
             ),
           );
         }
-        return provenance;
+        return mergeFacts(facts, "nonundefined");
       }
       const element = node.elements[step.index];
       if (!element || element.kind === SyntaxKind.OmittedExpression) {
-        return step.defaultNode
-          ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
-          : new Set();
+        return applyProjectionDefault(
+          valueFact(new Set(), "undefined"),
+          step.defaultNode,
+          path,
+          context,
+          pathIndex + 1,
+        );
       }
       if (isSpreadElement(element)) {
-        const provenance = expressionProvenance(element.expression, context);
-        if (step.defaultNode)
-          addProvenance(provenance, expressionProvenance(step.defaultNode, context));
-        return provenance;
-      }
-      if (isDefinitelyUndefined(element)) {
-        return step.defaultNode
-          ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
-          : new Set();
-      }
-      return projectedExpressionProvenance(element, path, context, pathIndex + 1);
-    }
-
-    if (step.kind === "object" && isObjectLiteralExpression(node)) {
-      if (step.rest) {
-        const provenance = new Set();
-        for (const property of node.properties) {
-          const key = classMemberName(property.name);
-          if (key !== undefined && step.excludedKeys.includes(key)) continue;
-          addProvenance(
-            provenance,
-            objectPropertyProvenance(property, path, context, pathIndex + 1),
-          );
-        }
-        return provenance;
-      }
-      if (step.key !== undefined) {
-        const properties = node.properties.filter(
-          (property) => classMemberName(property.name) === step.key,
+        return applyProjectionDefault(
+          valueFact(expressionProvenance(element.expression, context), "unknown"),
+          step.defaultNode,
+          path,
+          context,
+          pathIndex + 1,
         );
-        if (properties.length > 0) {
-          const provenance = new Set();
-          for (const property of properties) {
-            addProvenance(
-              provenance,
-              objectPropertyProvenance(property, path, context, pathIndex + 1, step.defaultNode),
-            );
-          }
-          return provenance;
-        }
       }
-      return step.defaultNode
-        ? projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1)
-        : new Set();
-    }
-
-    const provenance = expressionProvenance(node, context);
-    if (step.defaultNode) {
-      addProvenance(
-        provenance,
-        projectedExpressionProvenance(step.defaultNode, path, context, pathIndex + 1),
+      return applyProjectionDefault(
+        projectedExpressionFact(element, path, context, pathIndex + 1, seenBindings),
+        step.defaultNode,
+        path,
+        context,
+        pathIndex + 1,
+        expressionDefinedness(element, context),
       );
     }
-    return provenance;
+
+    if (step.kind === "object") {
+      if (step.rest) {
+        return objectRestFact(node, step.excludedKeys, context, seenBindings);
+      }
+      if (step.key !== undefined) {
+        const selection = objectPropertySelection(
+          node,
+          step.key,
+          path,
+          context,
+          pathIndex + 1,
+          seenBindings,
+        );
+        const selected =
+          selection.presence === "absent"
+            ? valueFact(new Set(), "undefined")
+            : valueFact(selection.provenance, selection.definedness);
+        return applyProjectionDefault(selected, step.defaultNode, path, context, pathIndex + 1);
+      }
+    }
+
+    return applyProjectionDefault(
+      expressionFact(node, context),
+      step.defaultNode,
+      path,
+      context,
+      pathIndex + 1,
+    );
   }
 
-  function objectPropertyProvenance(property, path, context, pathIndex, defaultNode) {
-    if (isPropertyAssignment(property)) {
-      if (isDefinitelyUndefined(property.initializer) && defaultNode) {
-        return projectedExpressionProvenance(defaultNode, path, context, pathIndex);
-      }
-      return projectedExpressionProvenance(property.initializer, path, context, pathIndex);
+  function applyProjectionDefault(
+    selected,
+    defaultNode,
+    path,
+    context,
+    nextPathIndex,
+    selectedDefinedness = selected.definedness,
+  ) {
+    if (!defaultNode || selectedDefinedness === "nonundefined") return selected;
+    const fallback = projectedExpressionFact(defaultNode, path, context, nextPathIndex);
+    if (selectedDefinedness === "undefined") return fallback;
+    const definedness = fallback.definedness === "nonundefined" ? "nonundefined" : "unknown";
+    return mergeFacts([selected, fallback], definedness);
+  }
+
+  function emptyObjectSelection() {
+    return { definedness: "undefined", presence: "absent", provenance: new Set() };
+  }
+
+  function selectionForProperty(property, path, context, nextPathIndex, seenBindings) {
+    let expression;
+    if (isPropertyAssignment(property)) expression = property.initializer;
+    else if (isShorthandPropertyAssignment(property)) expression = property.name;
+    else if (isMethodDeclaration(property) || isGetAccessorDeclaration(property)) {
+      return {
+        definedness: "nonundefined",
+        presence: "present",
+        provenance: callableOutputProvenance(property, context),
+      };
+    } else {
+      return { definedness: "unknown", presence: "unknown", provenance: new Set() };
     }
+    const fact = projectedExpressionFact(expression, path, context, nextPathIndex, seenBindings);
+    return {
+      definedness: expressionDefinedness(expression, context),
+      presence: "present",
+      provenance: fact.provenance,
+    };
+  }
+
+  function mergeAlternativeSelections(selections) {
+    if (selections.length === 0) return emptyObjectSelection();
+    const provenance = new Set();
+    for (const selection of selections) addProvenance(provenance, selection.provenance);
+    const presences = new Set(selections.map((selection) => selection.presence));
+    return {
+      definedness: joinDefinedness(selections.map((selection) => selection.definedness)),
+      presence: presences.size === 1 ? selections[0].presence : "unknown",
+      provenance,
+    };
+  }
+
+  function overlayObjectSelection(previous, incoming) {
+    if (incoming.presence === "absent") return previous;
+    if (incoming.presence === "present") return incoming;
+    const provenance = new Set(previous.provenance);
+    addProvenance(provenance, incoming.provenance);
+    return {
+      definedness: joinDefinedness([previous.definedness, incoming.definedness]),
+      presence: previous.presence === "present" ? "present" : "unknown",
+      provenance,
+    };
+  }
+
+  function objectPropertySelection(expression, key, path, context, nextPathIndex, seenBindings) {
+    const node = unwrapTransparentExpression(expression);
+    if (isObjectLiteralExpression(node)) {
+      let selection = emptyObjectSelection();
+      for (const property of node.properties) {
+        if (isSpreadAssignment(property)) {
+          selection = overlayObjectSelection(
+            selection,
+            objectPropertySelection(
+              property.expression,
+              key,
+              path,
+              context,
+              nextPathIndex,
+              seenBindings,
+            ),
+          );
+          continue;
+        }
+        const propertyKey = classMemberName(property.name);
+        if (propertyKey === key) {
+          selection = selectionForProperty(property, path, context, nextPathIndex, seenBindings);
+        } else if (propertyKey === undefined) {
+          selection = overlayObjectSelection(selection, {
+            definedness: "unknown",
+            presence: "unknown",
+            provenance: objectPropertyValueProvenance(property, context),
+          });
+        }
+      }
+      return selection;
+    }
+    if (isConditionalExpression(node)) {
+      return mergeAlternativeSelections([
+        objectPropertySelection(node.whenTrue, key, path, context, nextPathIndex, seenBindings),
+        objectPropertySelection(node.whenFalse, key, path, context, nextPathIndex, seenBindings),
+      ]);
+    }
+    if (isIdentifier(node)) {
+      const binding = model.resolveIdentifier(node);
+      if (binding && !seenBindings.has(binding)) {
+        const nestedSeen = new Set(seenBindings);
+        nestedSeen.add(binding);
+        const sourceOverride = context.sourceOverrides.get(binding);
+        if (sourceOverride) {
+          return mergeAlternativeSelections(
+            sourceOverride.expressions.map((source) =>
+              objectPropertySelection(
+                source,
+                key,
+                path,
+                sourceOverride.context,
+                nextPathIndex,
+                nestedSeen,
+              ),
+            ),
+          );
+        }
+        const selections = effectiveDefinitions(binding, node).flatMap((definition) => {
+          if (definition.kind === "expression") {
+            return [
+              objectPropertySelection(
+                definition.node,
+                key,
+                path,
+                context,
+                nextPathIndex,
+                nestedSeen,
+              ),
+            ];
+          }
+          if (definition.kind === "expressions") {
+            return definition.nodes.map((source) =>
+              objectPropertySelection(source, key, path, context, nextPathIndex, nestedSeen),
+            );
+          }
+          return [];
+        });
+        if (selections.length > 0) return mergeAlternativeSelections(selections);
+      }
+    }
+    return {
+      definedness: "unknown",
+      presence: "unknown",
+      provenance: expressionProvenance(node, context),
+    };
+  }
+
+  function objectPropertyValueProvenance(property, context) {
+    if (isPropertyAssignment(property)) return expressionProvenance(property.initializer, context);
     if (isShorthandPropertyAssignment(property)) {
-      if (isDefinitelyUndefined(property.name) && defaultNode) {
-        return projectedExpressionProvenance(defaultNode, path, context, pathIndex);
-      }
-      return projectedExpressionProvenance(property.name, path, context, pathIndex);
+      return expressionProvenance(property.name, context);
     }
-    if (isSpreadAssignment(property)) return expressionProvenance(property.expression, context);
     if (isMethodDeclaration(property) || isGetAccessorDeclaration(property)) {
       return callableOutputProvenance(property, context);
     }
     return new Set();
   }
 
-  function isDefinitelyUndefined(node) {
-    node = unwrapTransparentExpression(node);
-    return isIdentifier(node) && node.text === "undefined" && !model.resolveIdentifier(node);
+  function objectRestFact(expression, excludedKeys, context, seenBindings) {
+    const shape = objectShape(expression, context, seenBindings);
+    const provenance = new Set(shape.unknownProvenance);
+    for (const [key, fact] of shape.properties) {
+      if (!excludedKeys.includes(key)) addProvenance(provenance, fact.provenance);
+    }
+    return valueFact(provenance, "nonundefined");
+  }
+
+  function objectShape(expression, context, seenBindings = new Set()) {
+    const node = unwrapTransparentExpression(expression);
+    if (isObjectLiteralExpression(node)) {
+      const shape = { properties: new Map(), unknownProvenance: new Set() };
+      for (const property of node.properties) {
+        if (isSpreadAssignment(property)) {
+          const spreadShape = objectShape(property.expression, context, seenBindings);
+          for (const [key, fact] of spreadShape.properties) shape.properties.set(key, fact);
+          addProvenance(shape.unknownProvenance, spreadShape.unknownProvenance);
+          continue;
+        }
+        const key = classMemberName(property.name);
+        if (key === undefined) {
+          addProvenance(shape.unknownProvenance, objectPropertyValueProvenance(property, context));
+          continue;
+        }
+        shape.properties.set(
+          key,
+          valueFact(objectPropertyValueProvenance(property, context), "unknown"),
+        );
+      }
+      return shape;
+    }
+    if (isIdentifier(node)) {
+      const binding = model.resolveIdentifier(node);
+      if (binding && !seenBindings.has(binding)) {
+        const nestedSeen = new Set(seenBindings);
+        nestedSeen.add(binding);
+        const sourceOverride = context.sourceOverrides.get(binding);
+        if (sourceOverride) {
+          return mergeObjectShapes(
+            sourceOverride.expressions.map((source) =>
+              objectShape(source, sourceOverride.context, nestedSeen),
+            ),
+          );
+        }
+        const shapes = effectiveDefinitions(binding, node).flatMap((definition) => {
+          if (definition.kind === "expression") {
+            return [objectShape(definition.node, context, nestedSeen)];
+          }
+          if (definition.kind === "expressions") {
+            return definition.nodes.map((source) => objectShape(source, context, nestedSeen));
+          }
+          return [];
+        });
+        if (shapes.length > 0) return mergeObjectShapes(shapes);
+      }
+    }
+    return { properties: new Map(), unknownProvenance: expressionProvenance(node, context) };
+  }
+
+  function mergeObjectShapes(shapes) {
+    const merged = { properties: new Map(), unknownProvenance: new Set() };
+    for (const shape of shapes) {
+      addProvenance(merged.unknownProvenance, shape.unknownProvenance);
+      for (const [key, fact] of shape.properties) {
+        const previous = merged.properties.get(key);
+        merged.properties.set(key, previous ? mergeFacts([previous, fact]) : fact);
+      }
+    }
+    return merged;
+  }
+
+  function expressionDefinedness(expression, context) {
+    if (!expression) return "undefined";
+    const node = unwrapTransparentExpression(expression);
+    if (isIdentifier(node)) {
+      if (node.text === "undefined" && !model.resolveIdentifier(node)) return "undefined";
+      const binding = model.resolveIdentifier(node);
+      return binding ? bindingDefinedness(binding, context, node) : "unknown";
+    }
+    if (
+      isObjectLiteralExpression(node) ||
+      isArrayLiteralExpression(node) ||
+      isFunctionNode(node) ||
+      isClassDeclaration(node) ||
+      isClassExpression(node) ||
+      isNewExpression(node)
+    ) {
+      return "nonundefined";
+    }
+    if (
+      [
+        SyntaxKind.StringLiteral,
+        SyntaxKind.NoSubstitutionTemplateLiteral,
+        SyntaxKind.NumericLiteral,
+        SyntaxKind.BigIntLiteral,
+        SyntaxKind.RegularExpressionLiteral,
+        SyntaxKind.TrueKeyword,
+        SyntaxKind.FalseKeyword,
+        SyntaxKind.NullKeyword,
+      ].includes(node.kind)
+    ) {
+      return "nonundefined";
+    }
+    if (node.kind === SyntaxKind.VoidExpression) return "undefined";
+    if (isConditionalExpression(node)) {
+      return joinDefinedness([
+        expressionDefinedness(node.whenTrue, context),
+        expressionDefinedness(node.whenFalse, context),
+      ]);
+    }
+    if (isAwaitExpression(node)) return expressionDefinedness(node.expression, context);
+    if (isBinaryExpression(node)) {
+      if (
+        node.operatorToken.kind === SyntaxKind.EqualsToken ||
+        node.operatorToken.kind === SyntaxKind.CommaToken
+      ) {
+        return expressionDefinedness(node.right, context);
+      }
+      if (
+        node.operatorToken.kind === SyntaxKind.AmpersandAmpersandToken ||
+        node.operatorToken.kind === SyntaxKind.BarBarToken ||
+        node.operatorToken.kind === SyntaxKind.QuestionQuestionToken
+      ) {
+        return joinDefinedness([
+          expressionDefinedness(node.left, context),
+          expressionDefinedness(node.right, context),
+        ]);
+      }
+    }
+    if (
+      isCallExpression(node) &&
+      isKnownPrimitiveSanitizer(node.expression) &&
+      !model.resolveIdentifier(unwrapTransparentExpression(node.expression))
+    ) {
+      return "nonundefined";
+    }
+    return "unknown";
   }
 
   function expressionProvenance(expression, context) {
@@ -1138,7 +1857,7 @@ function createProvenanceAnalyzer(model) {
       const node = unwrapTransparentExpression(pending.pop());
       if (isIdentifier(node)) {
         const binding = model.resolveIdentifier(node);
-        if (binding) addProvenance(provenance, bindingProvenance(binding, context));
+        if (binding) addProvenance(provenance, bindingProvenance(binding, context, node));
       } else if (isFunctionNode(node)) {
         addProvenance(provenance, callableOutputProvenance(node, context));
       } else if (isClassDeclaration(node) || isClassExpression(node)) {
@@ -1171,7 +1890,9 @@ function createProvenanceAnalyzer(model) {
             pending.push(property.initializer);
           } else if (isShorthandPropertyAssignment(property)) {
             const binding = model.resolveIdentifier(property.name);
-            if (binding) addProvenance(provenance, bindingProvenance(binding, context));
+            if (binding) {
+              addProvenance(provenance, bindingProvenance(binding, context, property.name));
+            }
           } else if (isSpreadAssignment(property)) {
             pending.push(property.expression);
           } else if (isMethodDeclaration(property) || isGetAccessorDeclaration(property)) {
@@ -1233,7 +1954,7 @@ function createProvenanceAnalyzer(model) {
     const binding = model.resolveIdentifier(node);
     if (!binding || seenBindings.has(binding)) return [];
     seenBindings.add(binding);
-    return binding.definitions.flatMap((definition) => {
+    return effectiveDefinitions(binding, node).flatMap((definition) => {
       if (definition.kind === "function") return definition.node.body ? [definition.node] : [];
       if (definition.kind === "expression") {
         return callableDefinitions(definition.node, seenBindings);
@@ -1255,7 +1976,7 @@ function createProvenanceAnalyzer(model) {
     const binding = model.resolveIdentifier(node);
     if (!binding || seenBindings.has(binding)) return [];
     seenBindings.add(binding);
-    return binding.definitions.flatMap((definition) => {
+    return effectiveDefinitions(binding, node).flatMap((definition) => {
       if (definition.kind === "class") return [definition.node];
       if (definition.kind === "expression") return classDefinitions(definition.node, seenBindings);
       return [];
@@ -1289,10 +2010,19 @@ function createProvenanceAnalyzer(model) {
             : argumentsList[index]
           : parameter.initializer;
       for (const { binding, path } of model.bindingEntriesForName(parameter.name)) {
-        const parameterProvenance = parameter.dotDotDotToken
-          ? provenanceForExpressions(argumentsList.slice(index), parentContext)
-          : projectedExpressionProvenance(argument, path, context);
-        context.overrides.set(binding, parameterProvenance);
+        const parameterFact = parameter.dotDotDotToken
+          ? valueFact(
+              provenanceForExpressions(argumentsList.slice(index), parentContext),
+              "nonundefined",
+            )
+          : projectedExpressionFact(argument, path, context);
+        context.overrides.set(binding, parameterFact);
+        if (path.length === 0 && argument) {
+          context.sourceOverrides.set(binding, {
+            context: argument === parameter.initializer ? context : parentContext,
+            expressions: [argument],
+          });
+        }
       }
     }
     return context;
@@ -1334,6 +2064,34 @@ function createProvenanceAnalyzer(model) {
     }
   }
 
+  function effectiveClassAssignments(node, memberName) {
+    const groups = new Map();
+    for (const assignment of model.assignmentsForClass(node)) {
+      if (memberName !== undefined && assignment.member !== memberName) continue;
+      let callableGroups = groups.get(assignment.member);
+      if (!callableGroups) {
+        callableGroups = new Map();
+        groups.set(assignment.member, callableGroups);
+      }
+      const key = assignment.ownerCallable ?? node;
+      const records = callableGroups.get(key) ?? [];
+      records.push(assignment);
+      callableGroups.set(key, records);
+    }
+    const effective = [];
+    for (const callableGroups of groups.values()) {
+      for (const records of callableGroups.values()) {
+        let values = [];
+        for (const assignment of records.sort((left, right) => left.position - right.position)) {
+          if (assignment.write === "replace") values = [assignment];
+          else values.push(assignment);
+        }
+        effective.push(...values);
+      }
+    }
+    return effective;
+  }
+
   function classOutputProvenance(node, context, argumentsList = []) {
     if (context.activeClasses.has(node)) return new Set();
     context.activeClasses.add(node);
@@ -1362,7 +2120,7 @@ function createProvenanceAnalyzer(model) {
           addProvenance(provenance, callableOutputProvenance(member, context));
         }
       }
-      for (const assignment of model.assignmentsForClass(node)) {
+      for (const assignment of effectiveClassAssignments(node)) {
         if (assignment.private || classMemberIsPrivate(node, assignment.member)) continue;
         const assignmentContext = assignment.ownerCallable
           ? assignment.ownerCallable === constructor
@@ -1405,10 +2163,8 @@ function createProvenanceAnalyzer(model) {
           addProvenance(provenance, expressionProvenance(member.initializer, context));
         }
       }
-      for (const assignment of model.assignmentsForClass(node)) {
-        if (assignment.member === memberName) {
-          addProvenance(provenance, expressionProvenance(assignment.node, context));
-        }
+      for (const assignment of effectiveClassAssignments(node, memberName)) {
+        addProvenance(provenance, expressionProvenance(assignment.node, context));
       }
       return provenance;
     } finally {
@@ -1428,7 +2184,7 @@ function createProvenanceAnalyzer(model) {
 
   function knownCallResultCannotContainArgument(node) {
     node = unwrapTransparentExpression(node);
-    if (isKnownPrimitiveSanitizer(node)) return true;
+    if (isKnownPrimitiveSanitizer(node) && !model.resolveIdentifier(node)) return true;
     if (!isIdentifier(node)) return false;
     const binding = model.resolveIdentifier(node);
     return [...(binding?.importSpecifiers ?? [])].some(

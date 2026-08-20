@@ -645,6 +645,329 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "domain barrel",
     },
     {
+      name: "rejects an array default fed by an undefined local binding",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const maybe = undefined; const [surface = exposed] = [maybe]; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects an object default fed by an undefined local binding",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const maybe = undefined; const { surface = exposed } = { surface: maybe }; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a parameter default fed by an undefined local binding",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const maybe = undefined; export const surface = (([value = exposed]) => value)([maybe]);\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw default when the selected value has unknown definedness",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "declare const maybe: unknown; const [surface = exposed] = [maybe]; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows a raw default beside a known non-undefined selected value",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const maybe = {}; const [surface = exposed] = [maybe]; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects raw schema selected through an object literal spread",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const { surface } = { ...{ surface: exposed } }; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows a safe spread overwrite after a raw object property",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const { surface } = { surface: exposed, ...{ surface: {} } }; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a raw spread overwrite after a safe object property",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const { surface } = { surface: {}, ...{ surface: exposed } }; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows a safe property selected from a spread containing a raw sibling",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const { surface } = { ...{ surface: {}, raw: exposed } }; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "allows a safe array slot selected through a local container alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const values = [{}, exposed]; const [surface] = values; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a raw array slot selected through a local container alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const values = [{}, exposed]; const [, surface] = values; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows a safe object rest selected through a local container alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const values = { raw: exposed, safe: {} }; const { raw, ...surface } = values; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a raw identifier assignment after declaration",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal() { let value; value = exposed; return value; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw nullish identifier assignment",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal() { let value; value ??= exposed; return value; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw boolean-or identifier assignment",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal() { let value = {}; value ||= exposed; return value; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw boolean-and identifier assignment",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal() { let value = {}; value &&= exposed; return value; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows an unconditional safe overwrite after a raw identifier value",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal() { let value = exposed; value = {}; return value; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a conditional safe overwrite that can retain a raw identifier value",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal(flag: boolean) { let value = exposed; if (flag) value = {}; return value; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a self-assignment that retains a raw identifier value",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "let value = exposed; value = value; export { value };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows a value captured before a later raw identifier assignment",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "let value = {}; const surface = value; value = exposed; export { surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a raw destructuring assignment after declaration",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export function reveal() { let surface; ({ surface } = { surface: exposed }); return surface; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a public static assignment through a class alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "class Surface {} const Alias = Surface; Alias.schema = exposed; export { Surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects Object.assign exposing raw schema on a class instance",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class Surface { constructor() { Object.assign(this, { schema: exposed }); } }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows a safe static overwrite after a raw class alias assignment",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "class Surface {} const Alias = Surface; Alias.schema = exposed; Alias.schema = {}; export { Surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a conditional safe overwrite of a raw public class value",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "declare const flag: boolean; class Surface {} Surface.schema = exposed; if (flag) Surface.schema = {}; export { Surface };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows private schema mutation with no public value output",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class Surface { private schema: unknown; set() { this.schema = exposed; } ready() { return true; } }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects raw schema passed to an imported Boolean shadow",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          'import Boolean from "./identity";\n' +
+          "export const surface = Boolean(exposed);\n",
+        "packages/database/src/assets/identity.ts": "export default (value: unknown) => value;\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects raw schema passed to an ambient String shadow",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "declare function String(value: unknown): unknown;\n" +
+          "export const surface = String(exposed);\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects raw schema passed to a local Number shadow",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "const Number = (value: unknown) => value; export const surface = Number(exposed);\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows genuine global primitive conversion calls",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export const safe = [Boolean(exposed), String(exposed), Number(exposed)];\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
       name: "fails closed without an uncaught RangeError on deeply nested valid syntax",
       files: {
         "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
