@@ -251,6 +251,131 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "domain barrel",
     },
     {
+      name: "rejects a raw-schema alias returned by an arrow IIFE",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = (() => exposed)();\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema alias yielded by a generator IIFE",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = (function* () { yield exposed; })();\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema alias returned by a local function",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "function reveal() { return exposed; }\n" +
+          "export const surface = reveal();\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema alias returned by an exported function",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export function reveal() { return exposed; }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects raw-schema fields and callable outputs on an exported class",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export class Surface {\n" +
+          "  static schema = exposed;\n" +
+          "  get value() { return exposed; }\n" +
+          "  reveal() { return exposed; }\n" +
+          "}\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema field exposed by an anonymous class instance",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = new (class { schema = exposed; })();\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows callable parameters and locals to shadow a raw-schema alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export const fromParameter = ((exposed) => exposed)({});\n" +
+          "export const fromArrayParameter = (([, exposed]) => exposed)([null, {}]);\n" +
+          "export const fromLocal = (() => {\n" +
+          "  const exposed = {};\n" +
+          "  return exposed;\n" +
+          "})();\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "allows a callable to use schema internally and return only a safe value",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "function inspect() { return assets !== undefined; }\n" +
+          "export const safe = inspect();\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "allows a recursive callable that exposes no raw schema",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          "export function recurse() { return recurse(); }\n",
+      },
+    },
+    {
+      name: "allows an exported class with private schema state and safe callable outputs",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class SafeSurface {\n" +
+          "  private schema = exposed;\n" +
+          "  reveal(exposed = {}) { return exposed; }\n" +
+          "  ready() { return this.schema !== undefined; }\n" +
+          "}\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
       name: "rejects a relative server import that resolves to the database schema",
       files: {
         "apps/server/src/contacts/service.ts":

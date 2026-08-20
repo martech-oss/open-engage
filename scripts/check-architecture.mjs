@@ -3,13 +3,17 @@ import { dirname, extname, relative, resolve } from "node:path";
 
 import {
   SyntaxKind,
+  isArrayBindingPattern,
   isArrayLiteralExpression,
   isAsExpression,
   isArrowFunction,
   isAwaitExpression,
   isBinaryExpression,
   isBindingElement,
+  isBlock,
   isCallExpression,
+  isClassDeclaration,
+  isClassExpression,
   isClassStaticBlockDeclaration,
   isComputedPropertyName,
   isConditionalExpression,
@@ -36,16 +40,15 @@ import {
   isParenthesizedExpression,
   isPropertyAssignment,
   isPropertyAccessExpression,
-  isPrefixUnaryExpression,
-  isPostfixUnaryExpression,
+  isPropertyDeclaration,
+  isPrivateIdentifier,
+  isReturnStatement,
   isShorthandPropertyAssignment,
   isSatisfiesExpression,
   isSetAccessorDeclaration,
   isSpreadAssignment,
   isSpreadElement,
   isStringLiteral,
-  isTaggedTemplateExpression,
-  isTemplateExpression,
   isTypeAssertion,
   isVariableDeclaration,
   isVariableStatement,
@@ -431,10 +434,7 @@ function extractSourceFacts(sourceFiles) {
 
 function extractAstFacts(sourceFile) {
   const edges = [];
-  const importedBindings = new Map();
-  const bindingInitializers = new Map();
-  const locallyExportedBindings = new Set();
-  const exportedExpressions = [];
+  const lexicalModel = createLexicalModel(sourceFile);
   const functionLikeSpans = [];
   let hasStaticOrmAccess = false;
 
@@ -462,36 +462,9 @@ function extractAstFacts(sourceFile) {
     }
     if (isImportDeclaration(node)) {
       addEdge("import", node.moduleSpecifier);
-      const specifier = staticString(node.moduleSpecifier);
-      if (specifier !== undefined && node.importClause) {
-        if (node.importClause.name) importedBindings.set(node.importClause.name.text, specifier);
-        const bindings = node.importClause.namedBindings;
-        if (bindings && isNamespaceImport(bindings)) {
-          importedBindings.set(bindings.name.text, specifier);
-        } else if (bindings && isNamedImports(bindings)) {
-          for (const element of bindings.elements) {
-            importedBindings.set(element.name.text, specifier);
-          }
-        }
-      }
     } else if (isExportDeclaration(node)) {
       if (node.moduleSpecifier) {
         addEdge("export", node.moduleSpecifier, { exportsAll: !node.exportClause });
-      } else if (node.exportClause && isNamedExports(node.exportClause)) {
-        for (const element of node.exportClause.elements) {
-          const localName = element.propertyName ?? element.name;
-          if (isIdentifier(localName)) locallyExportedBindings.add(localName.text);
-        }
-      }
-    } else if (isExportAssignment(node)) {
-      exportedExpressions.push(node.expression);
-    } else if (isVariableDeclaration(node) && isIdentifier(node.name) && node.initializer) {
-      const statement = node.parent?.parent;
-      if (statement && isVariableStatement(statement) && statement.parent === sourceFile) {
-        bindingInitializers.set(node.name.text, node.initializer);
-        if (statement.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword)) {
-          locallyExportedBindings.add(node.name.text);
-        }
       }
     } else if (isImportTypeNode(node)) {
       addEdge(
@@ -521,35 +494,16 @@ function extractAstFacts(sourceFile) {
   }
 
   sourceFile.forEachChild(visit);
-  const bindingProvenance = new Map(
-    [...importedBindings].map(([localName, specifier]) => [localName, new Set([specifier])]),
-  );
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [localName, initializer] of bindingInitializers) {
-      const provenance = expressionProvenance(initializer, bindingProvenance);
-      const current = bindingProvenance.get(localName) ?? new Set();
-      if (!bindingProvenance.has(localName)) bindingProvenance.set(localName, current);
-      for (const specifier of provenance) {
-        if (!current.has(specifier)) {
-          current.add(specifier);
-          changed = true;
-        }
-      }
-    }
-  }
-
+  const provenance = createProvenanceAnalyzer(lexicalModel);
   const exportedSpecifiers = new Set();
-  for (const localName of locallyExportedBindings) {
-    for (const specifier of bindingProvenance.get(localName) ?? []) {
-      exportedSpecifiers.add(specifier);
-    }
+  for (const binding of lexicalModel.exportedBindings) {
+    addProvenance(exportedSpecifiers, provenance.forBinding(binding));
   }
-  for (const expression of exportedExpressions) {
-    for (const specifier of expressionProvenance(expression, bindingProvenance)) {
-      exportedSpecifiers.add(specifier);
-    }
+  for (const expression of lexicalModel.exportedExpressions) {
+    addProvenance(exportedSpecifiers, provenance.forExpression(expression));
+  }
+  for (const definition of lexicalModel.exportedDefinitions) {
+    addProvenance(exportedSpecifiers, provenance.forDefinition(definition));
   }
   for (const specifier of exportedSpecifiers) {
     edges.push({ exportsAll: false, kind: "export", specifier, viaImportedBinding: true });
@@ -557,77 +511,453 @@ function extractAstFacts(sourceFile) {
   return { edges, functionLikeSpans, hasStaticOrmAccess, source: sourceFile.text };
 }
 
-function expressionProvenance(node, bindingProvenance) {
-  node = unwrapTransparentExpression(node);
-  if (isIdentifier(node)) return bindingProvenance.get(node.text) ?? new Set();
+function createLexicalModel(sourceFile) {
+  const rootScope = { bindings: new Map(), parent: undefined };
+  const nodeScopes = new WeakMap();
+  const declarationBindings = new WeakMap();
+  const exportedBindings = new Set();
+  const exportedDefinitions = [];
+  const exportedExpressions = [];
+  const exportedIdentifierNodes = [];
 
-  const provenance = new Set();
-  if (isPropertyAccessExpression(node)) {
-    addProvenance(provenance, expressionProvenance(node.expression, bindingProvenance));
-  } else if (isElementAccessExpression(node)) {
-    addExpressionProvenance(
-      provenance,
-      [node.expression, node.argumentExpression],
-      bindingProvenance,
-    );
-  } else if (isObjectLiteralExpression(node)) {
-    for (const property of node.properties) {
-      if (isPropertyAssignment(property)) {
-        addProvenance(provenance, expressionProvenance(property.initializer, bindingProvenance));
-      } else if (isShorthandPropertyAssignment(property)) {
-        addProvenance(provenance, bindingProvenance.get(property.name.text) ?? []);
-      } else if (isSpreadAssignment(property)) {
-        addProvenance(provenance, expressionProvenance(property.expression, bindingProvenance));
-      }
-    }
-  } else if (isArrayLiteralExpression(node)) {
-    for (const element of node.elements) {
-      addProvenance(
-        provenance,
-        expressionProvenance(
-          isSpreadElement(element) ? element.expression : element,
-          bindingProvenance,
-        ),
-      );
-    }
-  } else if (isConditionalExpression(node)) {
-    addExpressionProvenance(
-      provenance,
-      [node.condition, node.whenTrue, node.whenFalse],
-      bindingProvenance,
-    );
-  } else if (isCallExpression(node) || isNewExpression(node)) {
-    addExpressionProvenance(
-      provenance,
-      [node.expression, ...(node.arguments ?? [])],
-      bindingProvenance,
-    );
-  } else if (isTaggedTemplateExpression(node)) {
-    addExpressionProvenance(provenance, [node.tag, node.template], bindingProvenance);
-  } else if (isTemplateExpression(node)) {
-    addExpressionProvenance(
-      provenance,
-      node.templateSpans.map((span) => span.expression),
-      bindingProvenance,
-    );
-  } else if (isBinaryExpression(node)) {
-    addExpressionProvenance(provenance, [node.left, node.right], bindingProvenance);
-  } else if (isPrefixUnaryExpression(node) || isPostfixUnaryExpression(node)) {
-    addProvenance(provenance, expressionProvenance(node.operand, bindingProvenance));
-  } else if (isAwaitExpression(node) || isYieldExpression(node)) {
-    if (node.expression) {
-      addProvenance(provenance, expressionProvenance(node.expression, bindingProvenance));
-    }
+  function createScope(parent) {
+    return { bindings: new Map(), parent };
   }
-  return provenance;
+
+  function bindIdentifier(identifier, scope, definition) {
+    let binding = scope.bindings.get(identifier.text);
+    if (!binding) {
+      binding = { definitions: [], importSpecifiers: new Set(), name: identifier.text };
+      scope.bindings.set(identifier.text, binding);
+    }
+    if (definition) binding.definitions.push(definition);
+    declarationBindings.set(identifier, binding);
+    nodeScopes.set(identifier, scope);
+    return binding;
+  }
+
+  function bindName(name, scope, definition) {
+    if (!name) return [];
+    if (isIdentifier(name)) return [bindIdentifier(name, scope, definition)];
+    if (!isObjectBindingPattern(name) && !isArrayBindingPattern(name)) return [];
+    return name.elements.flatMap((element) =>
+      element && isBindingElement(element) ? bindName(element.name, scope, definition) : [],
+    );
+  }
+
+  function hasExportModifier(node) {
+    return node.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword) ?? false;
+  }
+
+  function visitFunction(node, outerScope) {
+    let declarationBinding;
+    if (isFunctionDeclaration(node) && node.name) {
+      [declarationBinding] = bindName(node.name, outerScope, { kind: "function", node });
+    }
+    if (isFunctionDeclaration(node) && node.parent === sourceFile && hasExportModifier(node)) {
+      if (declarationBinding) exportedBindings.add(declarationBinding);
+      else exportedDefinitions.push({ kind: "function", node });
+    }
+
+    const functionScope = createScope(outerScope);
+    if (isFunctionExpression(node) && node.name) {
+      bindName(node.name, functionScope, { kind: "function", node });
+    }
+    for (const parameter of node.parameters ?? []) {
+      bindName(parameter.name, functionScope, { kind: "parameter", node: parameter });
+    }
+    for (const parameter of node.parameters ?? []) {
+      if (parameter.initializer) visit(parameter.initializer, functionScope);
+    }
+    if (node.body) visit(node.body, functionScope);
+  }
+
+  function visitClass(node, outerScope) {
+    let declarationBinding;
+    if (isClassDeclaration(node) && node.name) {
+      [declarationBinding] = bindName(node.name, outerScope, { kind: "class", node });
+    }
+    if (isClassDeclaration(node) && node.parent === sourceFile && hasExportModifier(node)) {
+      if (declarationBinding) exportedBindings.add(declarationBinding);
+      else exportedDefinitions.push({ kind: "class", node });
+    }
+
+    const classScope = createScope(outerScope);
+    if (isClassExpression(node) && node.name) {
+      bindName(node.name, classScope, { kind: "class", node });
+    }
+    for (const clause of node.heritageClauses ?? []) visit(clause, classScope);
+    for (const member of node.members) visit(member, classScope);
+  }
+
+  function visit(node, scope) {
+    nodeScopes.set(node, scope);
+
+    if (isImportDeclaration(node)) {
+      const specifier = staticString(node.moduleSpecifier);
+      if (specifier !== undefined && node.importClause) {
+        const importedNames = [];
+        if (node.importClause.name) importedNames.push(node.importClause.name);
+        const bindings = node.importClause.namedBindings;
+        if (bindings && isNamespaceImport(bindings)) importedNames.push(bindings.name);
+        else if (bindings && isNamedImports(bindings)) {
+          for (const element of bindings.elements) importedNames.push(element.name);
+        }
+        for (const name of importedNames) {
+          const binding = bindIdentifier(name, scope);
+          binding.importSpecifiers.add(specifier);
+        }
+      }
+      return;
+    }
+    if (isExportDeclaration(node)) {
+      if (!node.moduleSpecifier && node.exportClause && isNamedExports(node.exportClause)) {
+        for (const element of node.exportClause.elements) {
+          const localName = element.propertyName ?? element.name;
+          if (isIdentifier(localName)) exportedIdentifierNodes.push(localName);
+        }
+      }
+      node.forEachChild((child) => visit(child, scope));
+      return;
+    }
+    if (isExportAssignment(node)) {
+      exportedExpressions.push(node.expression);
+      visit(node.expression, scope);
+      return;
+    }
+    if (isFunctionNode(node)) {
+      visitFunction(node, scope);
+      return;
+    }
+    if (isClassDeclaration(node) || isClassExpression(node)) {
+      visitClass(node, scope);
+      return;
+    }
+    if (isBlock(node)) {
+      const blockScope = createScope(scope);
+      node.forEachChild((child) => visit(child, blockScope));
+      return;
+    }
+    if (isVariableDeclaration(node)) {
+      const definition = node.initializer
+        ? { kind: "expression", node: node.initializer }
+        : undefined;
+      const bindings = bindName(node.name, scope, definition);
+      const statement = node.parent?.parent;
+      if (
+        statement &&
+        isVariableStatement(statement) &&
+        statement.parent === sourceFile &&
+        hasExportModifier(statement)
+      ) {
+        for (const binding of bindings) exportedBindings.add(binding);
+      }
+      if (node.initializer) visit(node.initializer, scope);
+      return;
+    }
+    node.forEachChild((child) => visit(child, scope));
+  }
+
+  function resolveIdentifier(identifier) {
+    const declarationBinding = declarationBindings.get(identifier);
+    if (declarationBinding) return declarationBinding;
+    let scope = nodeScopes.get(identifier) ?? rootScope;
+    while (scope) {
+      const binding = scope.bindings.get(identifier.text);
+      if (binding) return binding;
+      scope = scope.parent;
+    }
+    return undefined;
+  }
+
+  visit(sourceFile, rootScope);
+  for (const identifier of exportedIdentifierNodes) {
+    const binding = resolveIdentifier(identifier);
+    if (binding) exportedBindings.add(binding);
+  }
+
+  return {
+    bindingsForName: (name) => bindNameBindings(name, declarationBindings),
+    exportedBindings,
+    exportedDefinitions,
+    exportedExpressions,
+    resolveIdentifier,
+  };
 }
 
-function addExpressionProvenance(target, expressions, bindingProvenance) {
-  for (const expression of expressions) {
-    if (expression) {
-      addProvenance(target, expressionProvenance(expression, bindingProvenance));
+function bindNameBindings(name, declarationBindings) {
+  if (!name) return [];
+  if (isIdentifier(name)) {
+    const binding = declarationBindings.get(name);
+    return binding ? [binding] : [];
+  }
+  if (!isObjectBindingPattern(name) && !isArrayBindingPattern(name)) return [];
+  return name.elements.flatMap((element) =>
+    element && isBindingElement(element) ? bindNameBindings(element.name, declarationBindings) : [],
+  );
+}
+
+function isFunctionNode(node) {
+  return (
+    isFunctionDeclaration(node) ||
+    isFunctionExpression(node) ||
+    isArrowFunction(node) ||
+    isMethodDeclaration(node) ||
+    isGetAccessorDeclaration(node) ||
+    isSetAccessorDeclaration(node) ||
+    isConstructorDeclaration(node)
+  );
+}
+
+function createProvenanceAnalyzer(model) {
+  function createContext(parent) {
+    return {
+      activeCallables: parent?.activeCallables ?? new Set(),
+      activeClasses: parent?.activeClasses ?? new Set(),
+      cache: new Map(),
+      overrides: new Map(parent?.overrides ?? []),
+      resolving: new Set(),
+    };
+  }
+
+  function bindingProvenance(binding, context) {
+    if (context.overrides.has(binding)) return context.overrides.get(binding);
+    if (context.cache.has(binding)) return context.cache.get(binding);
+    if (context.resolving.has(binding)) return new Set();
+
+    context.resolving.add(binding);
+    const provenance = new Set(binding.importSpecifiers);
+    for (const definition of binding.definitions) {
+      addProvenance(provenance, definitionProvenance(definition, context));
+    }
+    context.resolving.delete(binding);
+    context.cache.set(binding, provenance);
+    return provenance;
+  }
+
+  function definitionProvenance(definition, context) {
+    if (definition.kind === "expression") return expressionProvenance(definition.node, context);
+    if (definition.kind === "function") return callableOutputProvenance(definition.node, context);
+    if (definition.kind === "class") return classOutputProvenance(definition.node, context);
+    return new Set();
+  }
+
+  function expressionProvenance(expression, context) {
+    const provenance = new Set();
+    const pending = [expression];
+    while (pending.length > 0) {
+      const node = unwrapTransparentExpression(pending.pop());
+      if (isIdentifier(node)) {
+        const binding = model.resolveIdentifier(node);
+        if (binding) addProvenance(provenance, bindingProvenance(binding, context));
+      } else if (isFunctionNode(node)) {
+        addProvenance(provenance, callableOutputProvenance(node, context));
+      } else if (isClassDeclaration(node) || isClassExpression(node)) {
+        addProvenance(provenance, classOutputProvenance(node, context));
+      } else if (isPropertyAccessExpression(node)) {
+        pending.push(node.expression);
+      } else if (isElementAccessExpression(node)) {
+        enqueueExpressions(pending, [node.expression, node.argumentExpression]);
+      } else if (isObjectLiteralExpression(node)) {
+        for (const property of node.properties) {
+          if (isPropertyAssignment(property)) {
+            pending.push(property.initializer);
+          } else if (isShorthandPropertyAssignment(property)) {
+            const binding = model.resolveIdentifier(property.name);
+            if (binding) addProvenance(provenance, bindingProvenance(binding, context));
+          } else if (isSpreadAssignment(property)) {
+            pending.push(property.expression);
+          } else if (isMethodDeclaration(property) || isGetAccessorDeclaration(property)) {
+            addProvenance(provenance, callableOutputProvenance(property, context));
+          }
+        }
+      } else if (isArrayLiteralExpression(node)) {
+        for (const element of node.elements) {
+          pending.push(isSpreadElement(element) ? element.expression : element);
+        }
+      } else if (isConditionalExpression(node)) {
+        enqueueExpressions(pending, [node.whenTrue, node.whenFalse]);
+      } else if (isCallExpression(node)) {
+        const callables = callableDefinitions(node.expression, new Set());
+        if (callables.length > 0) {
+          for (const callable of callables) {
+            addProvenance(provenance, callableOutputProvenance(callable, context, node.arguments));
+          }
+        } else if (isTransparentValueCall(node.expression)) {
+          enqueueExpressions(pending, node.arguments ?? []);
+        }
+      } else if (isNewExpression(node)) {
+        const classes = classDefinitions(node.expression, new Set());
+        if (classes.length > 0) {
+          for (const classNode of classes) {
+            addProvenance(provenance, classOutputProvenance(classNode, context));
+          }
+        }
+      } else if (
+        isBinaryExpression(node) &&
+        binaryOperatorCanReturnOperand(node.operatorToken.kind)
+      ) {
+        enqueueExpressions(pending, [node.left, node.right]);
+      } else if (isAwaitExpression(node) || isYieldExpression(node)) {
+        if (node.expression) pending.push(node.expression);
+      }
+    }
+    return provenance;
+  }
+
+  function callableDefinitions(node, seenBindings) {
+    node = unwrapTransparentExpression(node);
+    if (isFunctionNode(node)) return [node];
+    if (isConditionalExpression(node)) {
+      return [
+        ...callableDefinitions(node.whenTrue, seenBindings),
+        ...callableDefinitions(node.whenFalse, seenBindings),
+      ];
+    }
+    if (!isIdentifier(node)) return [];
+    const binding = model.resolveIdentifier(node);
+    if (!binding || seenBindings.has(binding)) return [];
+    seenBindings.add(binding);
+    return binding.definitions.flatMap((definition) => {
+      if (definition.kind === "function") return [definition.node];
+      if (definition.kind === "expression") {
+        return callableDefinitions(definition.node, seenBindings);
+      }
+      return [];
+    });
+  }
+
+  function classDefinitions(node, seenBindings) {
+    node = unwrapTransparentExpression(node);
+    if (isClassDeclaration(node) || isClassExpression(node)) return [node];
+    if (isConditionalExpression(node)) {
+      return [
+        ...classDefinitions(node.whenTrue, seenBindings),
+        ...classDefinitions(node.whenFalse, seenBindings),
+      ];
+    }
+    if (!isIdentifier(node)) return [];
+    const binding = model.resolveIdentifier(node);
+    if (!binding || seenBindings.has(binding)) return [];
+    seenBindings.add(binding);
+    return binding.definitions.flatMap((definition) => {
+      if (definition.kind === "class") return [definition.node];
+      if (definition.kind === "expression") return classDefinitions(definition.node, seenBindings);
+      return [];
+    });
+  }
+
+  function callableOutputProvenance(node, parentContext, argumentsList = []) {
+    if (parentContext.activeCallables.has(node)) return new Set();
+    parentContext.activeCallables.add(node);
+    const context = createContext(parentContext);
+    try {
+      for (const [index, parameter] of (node.parameters ?? []).entries()) {
+        const argument = argumentsList[index];
+        const argumentProvenance = argument
+          ? expressionProvenance(
+              isSpreadElement(argument) ? argument.expression : argument,
+              parentContext,
+            )
+          : parameter.initializer
+            ? expressionProvenance(parameter.initializer, context)
+            : new Set();
+        for (const binding of model.bindingsForName(parameter.name)) {
+          context.overrides.set(binding, argumentProvenance);
+        }
+      }
+
+      if (isArrowFunction(node) && node.body && !isBlock(node.body)) {
+        return expressionProvenance(node.body, context);
+      }
+      const provenance = new Set();
+      if (node.body) collectCallableOutputs(node.body, context, provenance);
+      return provenance;
+    } finally {
+      parentContext.activeCallables.delete(node);
     }
   }
+
+  function collectCallableOutputs(node, context, provenance) {
+    const pending = [node];
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (isReturnStatement(current) || isYieldExpression(current)) {
+        if (current.expression) {
+          addProvenance(provenance, expressionProvenance(current.expression, context));
+        }
+        continue;
+      }
+      if (
+        current !== node &&
+        (isFunctionNode(current) || isClassDeclaration(current) || isClassExpression(current))
+      ) {
+        continue;
+      }
+      current.forEachChild((child) => pending.push(child));
+    }
+  }
+
+  function classOutputProvenance(node, context) {
+    if (context.activeClasses.has(node)) return new Set();
+    context.activeClasses.add(node);
+    const provenance = new Set();
+    try {
+      for (const member of node.members) {
+        if (isPrivateClassMember(member)) continue;
+        if (isPropertyDeclaration(member) && member.initializer) {
+          addProvenance(provenance, expressionProvenance(member.initializer, context));
+        } else if (isGetAccessorDeclaration(member) || isMethodDeclaration(member)) {
+          addProvenance(provenance, callableOutputProvenance(member, context));
+        }
+      }
+      return provenance;
+    } finally {
+      context.activeClasses.delete(node);
+    }
+  }
+
+  const rootContext = createContext();
+  return {
+    forBinding: (binding) => bindingProvenance(binding, rootContext),
+    forDefinition: (definition) => definitionProvenance(definition, rootContext),
+    forExpression: (expression) => expressionProvenance(expression, rootContext),
+  };
+}
+
+function enqueueExpressions(target, expressions) {
+  for (const expression of expressions) {
+    if (expression) target.push(expression);
+  }
+}
+
+function isPrivateClassMember(member) {
+  return (
+    (member.name && isPrivateIdentifier(member.name)) ||
+    (member.modifiers?.some((modifier) => modifier.kind === SyntaxKind.PrivateKeyword) ?? false)
+  );
+}
+
+function isTransparentValueCall(node) {
+  node = unwrapTransparentExpression(node);
+  if (isIdentifier(node)) return node.text === "structuredClone";
+  if (!isPropertyAccessExpression(node) || !isIdentifier(node.expression)) return false;
+  const transparentMethods = new Map([
+    ["Array", new Set(["from"])],
+    ["Object", new Set(["assign", "freeze", "preventExtensions", "seal"])],
+    ["Promise", new Set(["resolve"])],
+  ]);
+  return transparentMethods.get(node.expression.text)?.has(node.name.text) ?? false;
+}
+
+function binaryOperatorCanReturnOperand(kind) {
+  return [
+    SyntaxKind.AmpersandAmpersandToken,
+    SyntaxKind.BarBarToken,
+    SyntaxKind.QuestionQuestionToken,
+    SyntaxKind.CommaToken,
+    SyntaxKind.EqualsToken,
+  ].includes(kind);
 }
 
 function addProvenance(target, source) {
