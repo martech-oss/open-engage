@@ -1,21 +1,9 @@
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
-import type {
-  CompanyContactDto,
-  CompanyDetail,
-  CompanyEnrichmentInput,
-  CompanyEnrichmentResult,
-  CompanySummary,
-} from "@openengage/core/contacts";
+import type { CompanyContactDto, CompanySummary } from "@openengage/core/contacts";
 
-export type {
-  CompanyContactDto,
-  CompanyDetail,
-  CompanyEnrichmentInput,
-  CompanyEnrichmentResult,
-  CompanySummary,
-};
+export type { CompanyContactDto, CompanySummary };
 
 /** A contact offered when attaching one to a company. */
 export interface ContactOption {

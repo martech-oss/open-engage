@@ -16,8 +16,6 @@ import { websiteProcedures } from "../web/router";
 import { workspaceProcedures } from "../workspaces/router";
 import { os } from "./base";
 
-export type { OrpcContext, OrpcInitialContext } from "./context";
-
 export const orpcRouter = os.router({
   agents: agentProcedures,
   assets: assetProcedures,

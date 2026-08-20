@@ -20,10 +20,6 @@ export function publicRange(range: ReportRange) {
   return { from: range.from, to: range.to };
 }
 
-export function isoDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
-}
-
 export function rate(numerator: number, denominator: number): number {
   return denominator > 0 ? Math.round((numerator / denominator) * 10_000) / 100 : 0;
 }

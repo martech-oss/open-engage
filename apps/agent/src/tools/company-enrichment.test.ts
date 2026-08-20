@@ -26,6 +26,13 @@ describe("company enrichment URL safety", () => {
     "https://192.168.1.1/path",
     "https://user:password@example.com/",
     "https://[::1]/",
+    "https://[fc00::1]/",
+    "https://[fd12:3456:789a::1]/",
+    "https://[fe80::1]/",
+    "https://0177.0.0.1/",
+    "https://0x7f.0.0.1/",
+    "https://2130706433/",
+    "https://%31%32%37.0.0.1/",
   ])("blocks unsafe URL %s", (url) => {
     expect(() => assertSafePublicHttpsUrl(url)).toThrow();
   });
@@ -34,6 +41,30 @@ describe("company enrichment URL safety", () => {
     expect(assertSafePublicHttpsUrl("https://example.com/about").href).toBe(
       "https://example.com/about",
     );
+  });
+
+  it.each([
+    "https://[::ffff:127.0.0.1]/",
+    "https://[::ffff:7f00:1]/",
+    "https://[0:0:0:0:0:ffff:0a00:0001]/",
+    "https://[::ffff:172.16.0.1]/",
+    "https://[::ffff:192.168.0.1]/",
+    "https://[::ffff:169.254.1.1]/",
+    "https://[::ffff:100.64.0.1]/",
+    "https://[::ffff:198.18.0.1]/",
+    "https://[::ffff:224.0.0.1]/",
+    "https://[::ffff:0.0.0.0]/",
+  ])("blocks an IPv4-mapped private or local address %s", (url) => {
+    expect(() => assertSafePublicHttpsUrl(url)).toThrow("Private or local hostname");
+  });
+
+  it.each([
+    ["public hostname", "https://example.com/"],
+    ["public IPv4", "https://8.8.8.8/"],
+    ["public IPv6", "https://[2001:4860:4860::8888]/"],
+    ["public IPv4-mapped IPv6", "https://[::ffff:8.8.8.8]/"],
+  ])("accepts a %s control", (_kind, url) => {
+    expect(assertSafePublicHttpsUrl(url).href).toBe(new URL(url).href);
   });
 });
 

@@ -63,6 +63,11 @@ export function formatShortDate(value: string): string {
   return shortDateFormatter.format(new Date(`${value}T00:00:00`));
 }
 
+/** `2026-07-30` — UTC calendar date for API report/query range inputs. */
+export function formatIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("ja", { numeric: "auto" });
 
 const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [

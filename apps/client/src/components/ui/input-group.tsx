@@ -136,6 +136,7 @@ function InputGroupTextarea({ className, ...props }: React.ComponentProps<"texta
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   InputGroup,
   InputGroupAddon,

@@ -324,7 +324,7 @@ Apple Mail のプライバシー保護は受信時に画像を先読みするた
 ### 6.7 アトリビューションはプロジェクト紐付けが前提
 
 接点は `project_items` に登録されたリソースへの反応だけを記録します
-（`packages/database/src/web/campaign-repository.ts`）。
+（`packages/database/src/projects/campaign-repository.ts`）。
 プロジェクトに紐付けていないメールやフォームは、どれだけ反応があっても
 キャンペーンレポートには現れません。また、ページ閲覧は URL がリソースIDではないため
 接点になりません。

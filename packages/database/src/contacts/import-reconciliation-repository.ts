@@ -2,6 +2,7 @@ import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { changedExactlyOne } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
+import { decodeReconciliationContactIds } from "./import-part-state";
 import { contactImportParts, importJobs } from "./schema";
 
 const IMPORT_RECONCILIATION_SCAN_LIMIT = 100;
@@ -36,7 +37,9 @@ export class ContactImportReconciliationRepository extends DatabaseRepository {
         ),
       )
       .get();
-    return row?.contactIds ? { ...row, contactIds: decodeContactIds(row.contactIds) } : null;
+    return row?.contactIds
+      ? { ...row, contactIds: decodeReconciliationContactIds(row.contactIds) }
+      : null;
   }
 
   public async scanPending(): Promise<ContactImportReconciliation[]> {
@@ -53,7 +56,9 @@ export class ContactImportReconciliationRepository extends DatabaseRepository {
       .orderBy(asc(contactImportParts.updatedAt), asc(contactImportParts.jobId))
       .limit(IMPORT_RECONCILIATION_SCAN_LIMIT);
     return rows.flatMap((row) =>
-      row.contactIds ? [{ ...row, contactIds: decodeContactIds(row.contactIds) }] : [],
+      row.contactIds
+        ? [{ ...row, contactIds: decodeReconciliationContactIds(row.contactIds) }]
+        : [],
     );
   }
 
@@ -78,12 +83,4 @@ function pendingReconciliation() {
     isNotNull(contactImportParts.reconciliationContactIds),
     isNull(contactImportParts.reconciliationPublishedAt),
   );
-}
-
-function decodeContactIds(value: string): string[] {
-  const parsed: unknown = JSON.parse(value);
-  if (!Array.isArray(parsed) || parsed.some((id) => typeof id !== "string")) {
-    throw new Error("contact_import_parts.reconciliation_contact_ids is malformed");
-  }
-  return parsed;
 }

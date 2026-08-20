@@ -174,5 +174,3 @@ export function useContactsPageController(initialSearch: ContactSearch) {
     refreshOptions,
   };
 }
-
-export type ContactsPageController = ReturnType<typeof useContactsPageController>;

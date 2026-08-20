@@ -1,21 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpcQuery } from "@/lib/orpc";
-import type {
-  EmailBrandProfile,
-  EmailSegmentOption,
-  EmailTemplate,
-  EmailTrackingSettings,
-  MessageVariable,
-} from "@openengage/core/messaging";
+import type { EmailBrandProfile, EmailTemplate, MessageVariable } from "@openengage/core/messaging";
 
 export type { EmailTemplate, MessageVariable };
-export type { EmailBrandProfile, EmailTrackingSettings };
+export type { EmailBrandProfile };
 
 /** Retained aliases so the table and form components read the same. */
 export type EmailTemplateRow = EmailTemplate;
 export type MessageVariableRow = MessageVariable;
-export type SegmentOption = EmailSegmentOption;
 
 export function emailArchivedTemplatesQueryOptions() {
   return orpcQuery.emails.listTemplates.queryOptions({ input: { archived: true } });

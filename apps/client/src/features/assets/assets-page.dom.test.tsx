@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { WorkspaceRole } from "@openengage/core/shared";
 
 import type { AssetSummary, AssetSearch } from "./asset-api";
 import { AssetsPage } from "./assets-page";
@@ -23,12 +25,28 @@ const asset: AssetSummary = {
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
 
+const archivedAsset: AssetSummary = {
+  ...asset,
+  id: "asset-b",
+  name: "Archived guide",
+  archivedAt: "2026-08-20T01:00:00.000Z",
+};
+
+const callbacks = vi.hoisted(() => ({
+  goToNextPage: vi.fn<(cursor?: string) => void>(),
+  goToPreviousPage: vi.fn<() => void>(),
+  invalidateAssetsList: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  restore: vi.fn<(input: unknown) => Promise<void>>().mockResolvedValue(undefined),
+  remove: vi.fn<(input: unknown) => Promise<void>>().mockResolvedValue(undefined),
+}));
+const queryClient = {};
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
-    data: { items: [asset], total: 1, nextCursor: undefined },
+    data: { items: [asset, archivedAsset], total: 2, nextCursor: "next-cursor" },
     isFetching: false,
   }),
-  useQueryClient: () => ({}),
+  useQueryClient: () => queryClient,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -38,24 +56,28 @@ vi.mock("@/hooks/use-debounced-search", () => ({ useDebouncedSearch: () => undef
 vi.mock("@/hooks/use-cursor-pagination", () => ({
   useCursorPagination: () => ({
     cursor: undefined,
-    hasPreviousPage: false,
-    goToNextPage: vi.fn<(nextCursor?: string) => void>(),
-    goToPreviousPage: vi.fn<() => void>(),
+    hasPreviousPage: true,
+    goToNextPage: callbacks.goToNextPage,
+    goToPreviousPage: callbacks.goToPreviousPage,
   }),
 }));
 
 vi.mock("@/components/data-table", () => ({
   DataTable: ({
     columns,
+    pagination,
     rows,
   }: {
     columns: Array<{ key: string; cell: (row: AssetSummary) => ReactNode }>;
+    pagination: { onNext: () => void; onPrevious: () => void };
     rows: AssetSummary[];
   }) => (
     <div>
       {rows.map((row) => (
         <div key={row.id}>{columns.at(-1)?.cell(row)}</div>
       ))}
+      <button onClick={pagination.onPrevious}>前へ</button>
+      <button onClick={pagination.onNext}>次へ</button>
     </div>
   ),
 }));
@@ -68,8 +90,10 @@ vi.mock("@/components/app-ui", () => ({
     </main>
   ),
   CopyButton: () => <button>URL</button>,
-  ArchiveConfirm: ({ label }: { label: string }) => (
-    <button aria-label={`${label}をアーカイブ`}>archive</button>
+  ArchiveConfirm: ({ label, onConfirm }: { label: string; onConfirm: () => void }) => (
+    <button aria-label={`${label}をアーカイブ`} onClick={onConfirm}>
+      archive
+    </button>
   ),
 }));
 
@@ -101,12 +125,20 @@ vi.mock("./asset-bits", () => ({
 }));
 
 vi.mock("./asset-forms", () => ({
-  AssetDeleteConfirm: ({ name }: { name: string }) => (
-    <button aria-label={`${name}を削除`}>delete</button>
+  AssetDeleteConfirm: ({ name, onConfirm }: { name: string; onConfirm: () => void }) => (
+    <button aria-label={`${name}を削除`} onClick={onConfirm}>
+      delete
+    </button>
   ),
   AssetEditDialog: () => null,
   AssetReplaceDialog: () => null,
-  AssetUploadDialog: () => null,
+  AssetUploadDialog: ({
+    open,
+    onUploaded,
+  }: {
+    open: boolean;
+    onUploaded: (count: number) => void;
+  }) => (open ? <button onClick={() => onUploaded(2)}>アップロード完了</button> : null),
 }));
 
 vi.mock("./asset-api", async (importOriginal) => {
@@ -115,15 +147,18 @@ vi.mock("./asset-api", async (importOriginal) => {
   return {
     ...original,
     assetsQueryOptions: () => ({}),
-    invalidateAssetsList: () => Promise.resolve(),
+    invalidateAssetsList: callbacks.invalidateAssetsList,
     useUpdateAsset: mutation,
     useArchiveAsset: mutation,
-    useRestoreAsset: mutation,
-    useDeleteAsset: mutation,
+    useRestoreAsset: () => ({ mutateAsync: callbacks.restore }),
+    useDeleteAsset: () => ({ mutateAsync: callbacks.remove }),
   };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("AssetsPage role actions", () => {
   it.each([
@@ -167,6 +202,25 @@ describe("AssetsPage role actions", () => {
     expect(screen.queryByRole("button", { name: "アップロード" }) !== null).toBe(upload);
     for (const name of visible) expect(screen.getByLabelText(name)).toBeTruthy();
     for (const name of hidden) expect(screen.queryByLabelText(name)).toBeNull();
+  });
+
+  it("wires pagination, upload refresh, restore, and delete callbacks for an admin", async () => {
+    const role: WorkspaceRole = "admin";
+    render(<AssetsPage initialSearch={search()} role={role} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "次へ" }));
+    fireEvent.click(screen.getByRole("button", { name: "前へ" }));
+    expect(callbacks.goToNextPage).toHaveBeenCalledWith("next-cursor");
+    expect(callbacks.goToPreviousPage).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "アップロード" }));
+    fireEvent.click(screen.getByRole("button", { name: "アップロード完了" }));
+    await waitFor(() => expect(callbacks.invalidateAssetsList).toHaveBeenCalledWith(queryClient));
+
+    fireEvent.click(screen.getByRole("button", { name: "Archived guideを復元" }));
+    fireEvent.click(screen.getByRole("button", { name: "Brand guideを削除" }));
+    await waitFor(() => expect(callbacks.restore).toHaveBeenCalledWith({ id: "asset-b" }));
+    expect(callbacks.remove).toHaveBeenCalledWith({ id: "asset-a" });
   });
 });
 

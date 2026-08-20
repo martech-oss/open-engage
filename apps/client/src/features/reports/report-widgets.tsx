@@ -11,7 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
-import { TableCell } from "@/components/ui/table";
 import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
 
 export function TrendCard({
@@ -101,10 +100,6 @@ export function ReportTableCard({
       <CardContent className="overflow-x-auto px-0">{children}</CardContent>
     </Card>
   );
-}
-
-export function NumberCell({ value }: { value: number }): ReactNode {
-  return <TableCell className="text-right tabular-nums">{value.toLocaleString()}</TableCell>;
 }
 
 export function ReportStatusBadge({ status }: { status: string }): ReactNode {

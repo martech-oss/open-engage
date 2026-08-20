@@ -174,6 +174,7 @@ function ItemFooter({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   Item,
   ItemMedia,

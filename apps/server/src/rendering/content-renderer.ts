@@ -1,6 +1,7 @@
 import type { ContentDocument, EmailBlock } from "@openengage/core/web";
 
 import { escapeHtml } from "./html";
+import { readPath } from "./read-path";
 
 export interface RenderContext {
   contact: Record<string, unknown>;
@@ -77,15 +78,6 @@ function sanitizeLimitedHtml(value: string, context: RenderContext): string {
 
 function escapeAttribute(value: string): string {
   return escapeHtml(value).replaceAll("`", "&#096;");
-}
-
-function readPath(source: Record<string, unknown>, path: string): unknown {
-  let value: unknown = source;
-  for (const key of path.split(".")) {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-    value = (value as Record<string, unknown>)[key];
-  }
-  return value;
 }
 
 function htmlToText(html: string): string {

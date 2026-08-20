@@ -3,14 +3,6 @@ packages:
   - packages/*
 
 catalog:
-  "@orpc/client": 1.14.13
-  "@orpc/contract": 1.14.13
-  "@orpc/openapi": 1.14.13
-  "@orpc/openapi-client": 1.14.13
-  "@orpc/server": 1.14.13
-  "@orpc/tanstack-query": 1.14.13
-  "@orpc/zod": 1.14.13
-  "@types/node": ^24.1.0
   typescript: ^7.0.2
   vitest: ^4.0.17
   zod: ^4.4.3

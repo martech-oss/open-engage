@@ -122,6 +122,7 @@ function DialogDescription({ className, ...props }: DialogPrimitive.Description.
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   Dialog,
   DialogClose,

@@ -7,13 +7,14 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "check": "pnpm format:check && pnpm lint && pnpm architecture:check && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm format:check && pnpm lint && pnpm architecture:check && pnpm quality:unused && pnpm typecheck && pnpm test && pnpm build",
     "architecture:test": "node --test scripts/check-architecture.test.mjs",
     "architecture:check": "pnpm architecture:test && node scripts/check-architecture.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
+    "quality:unused": "knip --no-progress --no-config-hints --no-tag-hints",
     "dev": "pnpm db:migrate:local && pnpm --parallel --filter @openengage/client --filter @openengage/agent dev",
     "dev:client": "pnpm --filter @openengage/client dev",
     "deploy": "pnpm --filter @openengage/server deploy && pnpm --filter @openengage/agent deploy && pnpm --filter @openengage/client deploy",
@@ -26,11 +27,11 @@
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
+    "knip": "^6.32.2",
     "oxfmt": "^0.61.0",
     "oxlint": "^1.76.0",
     "oxlint-tsgolint": "^7.0.2001",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "engines": {
     "node": ">=22.12.0"

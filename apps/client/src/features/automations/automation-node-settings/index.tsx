@@ -73,5 +73,3 @@ export function NodeSettings({
     </div>
   );
 }
-
-export { ConnectionSettings } from "./connection-settings";

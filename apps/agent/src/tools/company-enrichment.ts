@@ -13,18 +13,13 @@ import type { CompanyEnrichmentToolBindings } from "./company-enrichment-types";
 export { extractHtmlPage, selectRelevantLinks } from "./company-enrichment-html";
 export { inspectWebsite } from "./company-enrichment-inspection";
 export { normalizeGatewaySearchResponse } from "./company-enrichment-normalization";
-export { runGatewaySearch } from "./company-enrichment-search";
 export type {
   BrowserLauncher,
   CompanyEnrichmentToolBindings,
-  InspectedPage,
   InspectionBrowser,
   InspectionPage,
-  SearchDigest,
-  SearchSource,
-  WebsiteInspection,
 } from "./company-enrichment-types";
-export { assertSafePublicHttpsUrl, isSafePublicHttpsUrl } from "./company-enrichment-web";
+export { assertSafePublicHttpsUrl } from "./company-enrichment-web";
 
 const fieldNames = companyEnrichmentFieldNameSchema.options;
 

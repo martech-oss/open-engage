@@ -1,3 +1,4 @@
+import { formatIsoDate } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 
 /**
@@ -11,16 +12,12 @@ export const TREND_WINDOW = 7;
 /** Deal value and task counts are headline figures, quoted over the usual 30-day window. */
 const DEAL_SUMMARY_DAYS = 30;
 
-function isoDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
-}
-
 /** ISO date range covering today and the `days - 1` days before it, oldest first. */
 function lastDaysRange(days: number): { from: string; to: string } {
   const today = new Date();
   const from = new Date(today);
   from.setDate(from.getDate() - (days - 1));
-  return { from: isoDate(from), to: isoDate(today) };
+  return { from: formatIsoDate(from), to: formatIsoDate(today) };
 }
 
 export function dashboardQueryOptions() {

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "includeEntryExports": false,
+  "ignoreExportsUsedInFile": true,
+  "exclude": ["duplicates"],
+  "tags": ["-knipignore"],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.mjs"],
+      "project": ["scripts/**/*.mjs"],
+    },
+    "apps/server": {
+      "entry": [
+        "src/index.ts",
+        "src/auth/email-templates/index.ts",
+        "src/auth/email-templates/*.tsx",
+      ],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.ts", "scripts/**/*.mjs", "vitest.config.ts"],
+      "ignoreDependencies": ["cloudflare"],
+    },
+    "apps/client": {
+      "entry": [
+        "src/router.tsx",
+        "src/server.ts",
+        "src/routeTree.gen.ts",
+        "src/routes/**/*.tsx",
+        "!src/routes/**/*.test.tsx",
+      ],
+      "project": ["src/**/*.{ts,tsx,css}", "vite.config.ts", "vitest.config.ts"],
+    },
+    "apps/agent": {
+      "entry": ["src/app.ts", "src/cloudflare.ts", "flue.config.ts", "vite.config.ts"],
+      "project": ["src/**/*.{ts,tsx}", "*.config.ts"],
+      "ignoreDependencies": ["@flue/cli", "cloudflare"],
+    },
+    "packages/core": {
+      "project": ["src/**/*.ts"],
+    },
+    "packages/database": {
+      "entry": ["drizzle.config.ts"],
+      "project": ["src/**/*.ts", "drizzle.config.ts"],
+    },
+    "packages/orpc": {
+      "project": ["src/**/*.ts"],
+    },
+    "packages/sdk": {
+      "project": ["src/**/*.ts"],
+    },
+    "packages/create-openengage": {
+      "entry": ["src/bin.ts"],
+      "project": ["src/**/*.ts", "vitest.config.ts"],
+    },
+  },
+}

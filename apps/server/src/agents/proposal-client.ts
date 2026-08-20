@@ -3,6 +3,7 @@ import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
 import { uuidv7 } from "@openengage/database/shared";
 
 import type { RuntimeEnv } from "../env";
+import { isAbortError } from "../platform/abort";
 
 const PROPOSAL_PART_NAME = "proposal";
 const ABORT_CLEANUP_TIMEOUT_MS = 1_000;
@@ -163,8 +164,4 @@ function isDurableSubmissionTimeout(error: FlueExecutionError): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object";
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
 }

@@ -667,6 +667,7 @@ function SidebarMenuSubButton({
   });
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   Sidebar,
   SidebarContent,

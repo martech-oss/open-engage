@@ -162,5 +162,3 @@ export function useAssetsPageController(initialSearch: AssetSearch, role: Worksp
     refresh,
   };
 }
-
-export type AssetsPageController = ReturnType<typeof useAssetsPageController>;

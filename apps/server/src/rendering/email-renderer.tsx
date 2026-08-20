@@ -34,6 +34,7 @@ import {
   type RenderContext,
   type RenderedContent,
 } from "./content-renderer";
+import { readPath } from "./read-path";
 
 export interface EmailRenderOptions {
   purpose: EmailPurpose;
@@ -364,13 +365,4 @@ function interpolateMarkdown(value: string, context: RenderContext): string {
 function renderHref(value: string, context: RenderContext): string {
   const rendered = interpolate(value, context, false);
   return emailHrefSchema.parse(rendered);
-}
-
-function readPath(source: Record<string, unknown>, path: string): unknown {
-  let value: unknown = source;
-  for (const key of path.split(".")) {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-    value = (value as Record<string, unknown>)[key];
-  }
-  return value;
 }

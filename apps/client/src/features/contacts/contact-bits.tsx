@@ -166,15 +166,6 @@ export function ContactStatusBadge({ status }: { status: Contact["status"] }): R
   );
 }
 
-export function ColorChip({ item }: { item: { name: string; color: string } }): ReactNode {
-  return (
-    <Badge variant="secondary" className="gap-1">
-      <span className="size-1.5 rounded-full" style={{ backgroundColor: item.color }} />
-      {item.name}
-    </Badge>
-  );
-}
-
 export function StatCard({
   label,
   value,

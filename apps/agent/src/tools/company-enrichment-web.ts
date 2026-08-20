@@ -30,21 +30,70 @@ function isBlockedHostname(hostname: string): boolean {
   }
   if (hostname.includes(":")) {
     const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const mappedIpv4 = mappedIpv4Octets(normalized);
     return (
       normalized === "::" ||
       normalized === "::1" ||
       normalized.startsWith("fc") ||
       normalized.startsWith("fd") ||
       /^fe[89ab]/.test(normalized) ||
-      normalized.startsWith("::ffff:127.") ||
-      normalized.startsWith("::ffff:10.") ||
-      normalized.startsWith("::ffff:192.168.")
+      (mappedIpv4 !== null && isBlockedIpv4(mappedIpv4))
     );
   }
-  const parts = hostname.split(".");
-  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return false;
+  const octets = parseIpv4Octets(hostname);
+  if (octets === null) return false;
+  return isBlockedIpv4(octets);
+}
+
+function mappedIpv4Octets(hostname: string): number[] | null {
+  const words = parseIpv6Words(hostname);
+  if (words === null || words.slice(0, 5).some((word) => word !== 0) || words[5] !== 0xffff) {
+    return null;
+  }
+  const high = words[6] ?? 0;
+  const low = words[7] ?? 0;
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff];
+}
+
+function parseIpv6Words(value: string): number[] | null {
+  let normalized = value;
+  if (normalized.includes(".")) {
+    const separator = normalized.lastIndexOf(":");
+    const octets = parseIpv4Octets(normalized.slice(separator + 1));
+    if (separator < 0 || octets === null) return null;
+    const high = (((octets[0] ?? 0) << 8) | (octets[1] ?? 0)).toString(16);
+    const low = (((octets[2] ?? 0) << 8) | (octets[3] ?? 0)).toString(16);
+    normalized = `${normalized.slice(0, separator)}:${high}:${low}`;
+  }
+
+  const compression = normalized.indexOf("::");
+  if (compression !== normalized.lastIndexOf("::")) return null;
+  const left = (compression >= 0 ? normalized.slice(0, compression) : normalized)
+    .split(":")
+    .filter(Boolean);
+  const right = (compression >= 0 ? normalized.slice(compression + 2) : "")
+    .split(":")
+    .filter(Boolean);
+  const omitted = compression >= 0 ? 8 - left.length - right.length : 0;
+  const groups = compression >= 0 ? [...left, ...Array(omitted).fill("0"), ...right] : left;
+  if (
+    groups.length !== 8 ||
+    omitted < 0 ||
+    groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))
+  ) {
+    return null;
+  }
+  return groups.map((group) => Number.parseInt(group, 16));
+}
+
+function parseIpv4Octets(value: string): number[] | null {
+  const parts = value.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return null;
   const octets = parts.map(Number);
-  if (octets.some((part) => part < 0 || part > 255)) return true;
+  return octets.some((part) => part < 0 || part > 255) ? null : octets;
+}
+
+function isBlockedIpv4(octets: number[]): boolean {
   const [a = 0, b = 0] = octets;
   return (
     a === 0 ||

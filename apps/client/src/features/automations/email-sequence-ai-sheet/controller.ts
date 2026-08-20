@@ -163,5 +163,3 @@ export function useEmailSequenceAiController({
     restart: workflow.reset,
   };
 }
-
-export type EmailSequenceAiController = ReturnType<typeof useEmailSequenceAiController>;

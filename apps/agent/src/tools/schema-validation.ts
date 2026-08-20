@@ -11,6 +11,7 @@ import {
   validateEmailSequenceProposal,
 } from "@openengage/core/automations";
 import { type SegmentFilter, segmentFilterSchema } from "@openengage/core/segments";
+import { formatIssuePath } from "@openengage/core/shared";
 
 export interface ValidationIssue {
   phase: "schema" | "graph" | "sequence";
@@ -41,7 +42,7 @@ export function validateSegmentFilterInput(filter: unknown): SegmentFilterValida
       issues: parsed.error.issues.map((issue) => ({
         phase: "schema",
         code: issue.code,
-        path: formatPath(issue.path),
+        path: formatIssuePath(issue.path),
         message: issue.message,
       })),
     };
@@ -60,7 +61,7 @@ export function validateAutomationDefinitionInput(
       issues: parsed.error.issues.map((issue) => ({
         phase: "schema",
         code: issue.code,
-        path: formatPath(issue.path),
+        path: formatIssuePath(issue.path),
         message: issue.message,
       })),
     };
@@ -88,7 +89,7 @@ export function validateEmailSequenceProposalInput(
       issues: parsed.error.issues.map((issue) => ({
         phase: "schema",
         code: issue.code,
-        path: formatPath(issue.path),
+        path: formatIssuePath(issue.path),
         message: issue.message,
       })),
     };
@@ -139,16 +140,6 @@ export const validateEmailSequenceProposalTool = defineTool({
     return { output: toJsonValue(validateEmailSequenceProposalInput(data.proposal)) };
   },
 });
-
-function formatPath(path: readonly PropertyKey[]): string {
-  return path.reduce<string>((result, segment) => {
-    if (typeof segment === "number") return `${result}[${segment}]`;
-    const key = String(segment);
-    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
-      ? `${result}.${key}`
-      : `${result}[${JSON.stringify(key)}]`;
-  }, "$");
-}
 
 function toJsonValue(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;

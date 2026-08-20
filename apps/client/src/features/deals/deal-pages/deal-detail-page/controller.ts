@@ -118,5 +118,3 @@ export function useDealDetailController(dealId: string) {
     },
   };
 }
-
-export type DealDetailController = ReturnType<typeof useDealDetailController>;

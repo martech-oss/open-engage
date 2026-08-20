@@ -34,6 +34,22 @@ async function run(root) {
   }
 }
 
+function sourceLines(count) {
+  return [
+    "export {};",
+    ...Array.from({ length: count - 1 }, (_, index) => `// line ${index + 2}`),
+  ].join("\n");
+}
+
+function componentLines(count) {
+  return [
+    "export const Fixture = () => {",
+    ...Array.from({ length: count - 3 }, () => "  void 0;"),
+    "  return null;",
+    "};",
+  ].join("\n");
+}
+
 await test("architecture policy accepts and rejects controlled repositories", async (t) => {
   const scenarios = [
     {
@@ -303,6 +319,40 @@ await test("architecture policy accepts and rejects controlled repositories", as
         "packages/database/src/client.ts": "export {};\n",
       },
       want: "domain barrel",
+    },
+    {
+      name: "allows a handwritten source file at exactly 500 actual lines",
+      files: { "apps/server/src/exact-limit.ts": sourceLines(500) },
+    },
+    {
+      name: "rejects a handwritten source file at 501 actual lines",
+      files: { "apps/server/src/over-limit.ts": sourceLines(501) },
+      want: "over 500 lines",
+    },
+    {
+      name: "allows a client TSX function at exactly 250 lines",
+      files: { "apps/client/src/exact-function.tsx": componentLines(250) },
+    },
+    {
+      name: "rejects a client TSX function at 251 lines",
+      files: { "apps/client/src/over-function.tsx": componentLines(251) },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: "allows the documented shadcn sidebar exception",
+      files: { "apps/client/src/components/ui/sidebar.tsx": sourceLines(700) },
+    },
+    {
+      name: "excludes exact generated and declaration outputs",
+      files: {
+        "apps/client/src/example.gen.tsx": sourceLines(700),
+        "apps/client/worker-configuration.d.ts": sourceLines(700),
+      },
+    },
+    {
+      name: "fails closed when TypeScript cannot parse a source file",
+      files: { "apps/client/src/broken.tsx": "export function Broken( {\n" },
+      want: "TypeScript could not parse",
     },
   ];
 

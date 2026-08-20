@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import { formatIsoDate } from "@/lib/format";
 import { orpc } from "@/lib/orpc";
 import type {
   AutomationsReport,
@@ -45,8 +46,8 @@ thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 29);
 
 export const reportSearchDefaults: ReportSearch = {
   view: "overview",
-  from: isoDate(thirtyDaysAgo),
-  to: isoDate(today),
+  from: formatIsoDate(thirtyDaysAgo),
+  to: formatIsoDate(today),
   currency: "",
 };
 
@@ -137,8 +138,4 @@ export function reportWorkspaceQueryOptions(search: ReportSearch) {
     queryKey: ["reports", "workspace", search] as const,
     queryFn: ({ signal }) => loadReportWorkspace(search, signal),
   });
-}
-
-function isoDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
 }

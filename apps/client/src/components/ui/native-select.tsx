@@ -52,4 +52,5 @@ function NativeSelectOptGroup({ className, ...props }: React.ComponentProps<"opt
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export { NativeSelect, NativeSelectOptGroup, NativeSelectOption };

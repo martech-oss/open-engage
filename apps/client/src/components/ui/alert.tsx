@@ -66,4 +66,5 @@ function AlertAction({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export { Alert, AlertTitle, AlertDescription, AlertAction };

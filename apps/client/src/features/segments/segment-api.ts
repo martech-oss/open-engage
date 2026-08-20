@@ -73,10 +73,6 @@ export function usePreviewSegment() {
   return useMutation(orpcQuery.segments.preview.mutationOptions());
 }
 
-export function useValidateSegment() {
-  return useMutation(orpcQuery.segments.validate.mutationOptions());
-}
-
 export function useGenerateSegment() {
   return useMutation(orpcQuery.segments.generate.mutationOptions());
 }

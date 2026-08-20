@@ -86,4 +86,5 @@ function ProgressValue({ className, ...props }: ProgressPrimitive.Value.Props) {
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export { Progress, ProgressTrack, ProgressIndicator, ProgressLabel, ProgressValue };

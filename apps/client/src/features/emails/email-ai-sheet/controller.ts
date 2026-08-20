@@ -163,5 +163,3 @@ export function useEmailAiController({
     handleOpenChange,
   };
 }
-
-export type EmailAiController = ReturnType<typeof useEmailAiController>;
