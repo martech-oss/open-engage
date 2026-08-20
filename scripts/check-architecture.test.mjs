@@ -61,14 +61,100 @@ await test("architecture policy accepts and rejects controlled repositories", as
         "apps/server/src/auth/service.ts":
           'import { createDatabase } from "@openengage/database/client";\n' +
           'import { authSchema } from "@openengage/database/schema";\n' +
-          "export const auth = createDatabase({}).orm; void authSchema;\n",
+          "const database = createDatabase({});\n" +
+          "export const auth = database.orm;\n" +
+          'export const quotedAuth = database["orm"];\n' +
+          "export const templateAuth = database[`orm`];\n" +
+          "export const { orm: destructuredAuth } = database;\n" +
+          "void authSchema;\n",
       },
+    },
+    {
+      name: "rejects a schema re-export hidden behind a database domain bridge",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts": 'export * from "../schema";\n',
+        "packages/database/src/schema.ts": "export const schema = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a relative server import that resolves to the database schema",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          'import "../../../../packages/database/src/schema";\n',
+        "packages/database/src/schema.ts": "export const schema = {};\n",
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "allows the database client to assemble the schema internally",
+      files: {
+        "packages/database/src/client.ts": 'import { schema } from "./schema";\nvoid schema;\n',
+        "packages/database/src/schema.ts": "export const schema = {};\n",
+      },
+    },
+    {
+      name: "rejects a quoted database orm element access outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          'declare const database: unknown;\nvoid database["orm"];\n',
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "rejects a static template database orm element access outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          "declare const database: unknown;\nvoid database[`orm`];\n",
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "rejects shorthand database orm destructuring outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          "declare const database: unknown;\nconst { orm } = database;\nvoid orm;\n",
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "rejects aliased database orm destructuring outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          "declare const database: unknown;\nconst { orm: adapter } = database;\nvoid adapter;\n",
+      },
+      want: "Better Auth adapter",
     },
     {
       name: "resolves client aliases when detecting cycles",
       files: {
         "apps/client/src/a.ts": 'import "@/b";\n',
         "apps/client/src/b.ts": 'import "@/a";\n',
+      },
+      want: "dependency cycle",
+    },
+    {
+      name: "resolves commented dynamic client aliases when detecting cycles",
+      files: {
+        "apps/client/src/a.ts": 'void import(/* chunk */ "@/b");\n',
+        "apps/client/src/b.ts": 'import "@/a";\n',
+      },
+      want: "dependency cycle",
+    },
+    {
+      name: "resolves template dynamic client aliases when detecting cycles",
+      files: {
+        "apps/client/src/a.ts": "void import(`@/b`);\n",
+        "apps/client/src/b.ts": 'import "@/a";\n',
+      },
+      want: "dependency cycle",
+    },
+    {
+      name: "resolves type-only declarations and import types when detecting cycles",
+      files: {
+        "apps/client/src/a.ts": 'import type { B } from "@/b";\nexport type A = B;\n',
+        "apps/client/src/b.ts": 'export type B = import("@/a").A;\n',
       },
       want: "dependency cycle",
     },

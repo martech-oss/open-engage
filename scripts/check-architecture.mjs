@@ -1,6 +1,24 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 
+import {
+  SyntaxKind,
+  isBindingElement,
+  isCallExpression,
+  isComputedPropertyName,
+  isElementAccessExpression,
+  isExportDeclaration,
+  isIdentifier,
+  isImportDeclaration,
+  isImportTypeNode,
+  isLiteralTypeNode,
+  isNoSubstitutionTemplateLiteral,
+  isObjectBindingPattern,
+  isPropertyAccessExpression,
+  isStringLiteral,
+} from "typescript/unstable/ast";
+import { API as TypeScriptApi } from "typescript/unstable/sync";
+
 // Files allowed to stay over 600 lines: a ratchet, like drizzleImportAllowlist
 // above. Shrink (via splitting) as files come back under the line, never grow
 // it for a new large file - split that file instead.
@@ -54,6 +72,7 @@ for (const sourceRoot of sourceRoots) await collectSourceFiles(sourceRoot, files
 const sourceSet = new Set(files);
 const graph = new Map(files.map((file) => [file, []]));
 const violations = [];
+const sourceFacts = extractSourceFacts(files);
 
 // Maps a package's bare specifier (e.g. "@openengage/core/contacts") to the
 // source file it resolves to, read straight from each package.json's
@@ -73,27 +92,47 @@ for (const packageDir of await readdir(resolve(root, "packages"), { withFileType
   }
 }
 
+const databaseRootBarrel = resolve(root, "packages/database/src/index.ts");
+const databaseClientEntrypoint = resolve(root, "packages/database/src/client.ts");
+const databaseTestingEntrypoint = resolve(root, "packages/database/src/testing.ts");
+const databaseEntrypoints = new Map([
+  [databaseRootBarrel, "root"],
+  [databaseClientEntrypoint, "client"],
+  [resolve(root, "packages/database/src/schema.ts"), "schema"],
+  [databaseTestingEntrypoint, "testing"],
+]);
+const databaseSpecifiers = new Map([
+  ["@openengage/database", "root"],
+  ["@openengage/database/client", "client"],
+  ["@openengage/database/schema", "schema"],
+  ["@openengage/database/testing", "testing"],
+]);
 for (const file of files) {
-  const source = await readFile(file, "utf8");
-  const imports = [
-    ...source.matchAll(/(?:import|export)\s+(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g),
-    ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
-  ].map((match) => match[1]);
+  const { edges, hasStaticOrmAccess, source } = sourceFacts.get(file);
+  const imports = edges.map(({ specifier }) => specifier);
   const workspacePath = relative(root, file);
   const isTest = isTestFile(workspacePath);
   const isBetterAuthAdapter = workspacePath === "apps/server/src/auth/service.ts";
+  const importedDatabaseEntrypoints = new Set(
+    edges.flatMap((edge) => [...resolveDatabaseEntrypoints(file, edge)]),
+  );
 
-  if (imports.includes("@openengage/database")) {
+  if (file !== databaseTestingEntrypoint && importedDatabaseEntrypoints.has("root")) {
     violations.push(
       `${workspacePath}: import an owned @openengage/database subpath, not the database package root`,
     );
   }
-  if (!isTest && imports.includes("@openengage/database/testing")) {
+  if (!isTest && importedDatabaseEntrypoints.has("testing")) {
     violations.push(
       `${workspacePath}: production code must not use the database testing entrypoint`,
     );
   }
-  if (imports.includes("@openengage/database/schema") && !isBetterAuthAdapter) {
+  if (
+    importedDatabaseEntrypoints.has("schema") &&
+    file !== databaseRootBarrel &&
+    file !== databaseClientEntrypoint &&
+    !isBetterAuthAdapter
+  ) {
     violations.push(
       `${workspacePath}: only the exact Better Auth adapter may import the database schema entrypoint`,
     );
@@ -102,14 +141,14 @@ for (const file of files) {
     workspacePath.startsWith("apps/server/src/") &&
     !isTest &&
     !isBetterAuthAdapter &&
-    /\.\s*orm\b/.test(source)
+    hasStaticOrmAccess
   ) {
     violations.push(`${workspacePath}: only the exact Better Auth adapter may access database.orm`);
   }
   if (
     isBetterAuthAdapter &&
-    imports.includes("@openengage/database/schema") &&
-    !imports.includes("@openengage/database/client")
+    importedDatabaseEntrypoints.has("schema") &&
+    !importedDatabaseEntrypoints.has("client")
   ) {
     violations.push(
       `${workspacePath}: the Better Auth adapter must import createDatabase from @openengage/database/client`,
@@ -142,9 +181,12 @@ for (const file of files) {
   const databaseDomainBarrel = /^packages\/database\/src\/([^/]+)\/index\.ts$/.exec(workspacePath);
   if (databaseDomainBarrel) {
     const ownerRoot = `packages/database/src/${databaseDomainBarrel[1]}/`;
-    for (const specifier of imports.filter((value) => value.startsWith("."))) {
-      const target = resolveImport(file, specifier);
-      const targetPath = target ? relative(root, target) : "";
+    const barrelTargets = new Set([
+      ...edges.map((edge) => resolveModuleSpecifier(file, edge.specifier)).filter(Boolean),
+      ...collectReexportTargets(file),
+    ]);
+    for (const target of barrelTargets) {
+      const targetPath = relative(root, target);
       if (!targetPath.startsWith(ownerRoot) || /(?:^|\/)schema\.tsx?$/.test(targetPath)) {
         violations.push(
           `${workspacePath}: database domain barrel must export owned repositories/types only`,
@@ -185,7 +227,12 @@ for (const file of files) {
 
   if (
     !workspacePath.startsWith("packages/core/src/") &&
-    /export\s+\*\s+from\s+["']@openengage\/(?:core|orpc)["']/.test(source)
+    edges.some(
+      ({ exportsAll, kind, specifier }) =>
+        kind === "export" &&
+        exportsAll &&
+        (specifier === "@openengage/core" || specifier === "@openengage/orpc"),
+    )
   ) {
     violations.push(
       `${workspacePath}: must not re-export the entire @openengage/core or @openengage/orpc surface`,
@@ -241,26 +288,14 @@ for (const file of files) {
     );
   }
 
-  for (const specifier of imports.filter((value) => value.startsWith("."))) {
-    const target = resolveImport(file, specifier);
+  for (const { specifier } of edges) {
+    const target = resolveModuleSpecifier(file, specifier);
     if (target) {
       graph.get(file).push(target);
       enforceServerFolderDirection(workspacePath, relative(root, target), violations);
+    } else if (workspacePath.startsWith("apps/client/src/") && specifier.startsWith("@/")) {
+      violations.push(`${workspacePath}: unresolved client alias ${specifier}`);
     }
-  }
-  if (workspacePath.startsWith("apps/client/src/")) {
-    for (const specifier of imports.filter((value) => value.startsWith("@/"))) {
-      const target = resolveImport(
-        resolve(root, "apps/client/src/__alias_importer__.ts"),
-        `./${specifier.slice(2)}`,
-      );
-      if (target) graph.get(file).push(target);
-      else violations.push(`${workspacePath}: unresolved client alias ${specifier}`);
-    }
-  }
-  for (const specifier of imports) {
-    const target = packageSpecifiers.get(specifier);
-    if (target && sourceSet.has(target)) graph.get(file).push(target);
   }
 
   if (!largeFileAllowlist.includes(workspacePath) && source.split("\n").length > 600) {
@@ -317,15 +352,165 @@ async function collectSourceFiles(directory, output) {
   }
 }
 
+function extractSourceFacts(sourceFiles) {
+  if (sourceFiles.length === 0) return new Map();
+
+  const api = new TypeScriptApi({ cwd: root });
+  let snapshot;
+  try {
+    snapshot = api.updateSnapshot({ openFiles: sourceFiles });
+    return new Map(
+      sourceFiles.map((file) => {
+        const project = snapshot.getDefaultProjectForFile(file);
+        const sourceFile = project?.program.getSourceFile(file);
+        if (!sourceFile) throw new Error(`TypeScript could not parse ${relative(root, file)}`);
+        return [file, extractAstFacts(sourceFile)];
+      }),
+    );
+  } finally {
+    snapshot?.dispose();
+    api.close();
+  }
+}
+
+function extractAstFacts(sourceFile) {
+  const edges = [];
+  let hasStaticOrmAccess = false;
+
+  function addEdge(kind, node, metadata = {}) {
+    const specifier = staticString(node);
+    if (specifier !== undefined) edges.push({ kind, specifier, ...metadata });
+  }
+
+  function visit(node) {
+    if (isImportDeclaration(node)) {
+      addEdge("import", node.moduleSpecifier);
+    } else if (isExportDeclaration(node) && node.moduleSpecifier) {
+      addEdge("export", node.moduleSpecifier, { exportsAll: !node.exportClause });
+    } else if (isImportTypeNode(node)) {
+      addEdge(
+        "import-type",
+        isLiteralTypeNode(node.argument) ? node.argument.literal : node.argument,
+      );
+    } else if (isCallExpression(node) && node.expression.kind === SyntaxKind.ImportKeyword) {
+      // Computed dynamic imports cannot form a canonical static dependency edge and are
+      // intentionally ignored. String literals and no-substitution templates are retained.
+      addEdge("dynamic-import", node.arguments[0]);
+    }
+
+    if (
+      (isPropertyAccessExpression(node) && isIdentifier(node.name) && node.name.text === "orm") ||
+      (isElementAccessExpression(node) && staticString(node.argumentExpression) === "orm") ||
+      (isBindingElement(node) &&
+        isObjectBindingPattern(node.parent) &&
+        staticPropertyName(node.propertyName ?? node.name) === "orm")
+    ) {
+      hasStaticOrmAccess = true;
+    }
+
+    node.forEachChild(visit);
+  }
+
+  sourceFile.forEachChild(visit);
+  return { edges, hasStaticOrmAccess, source: sourceFile.text };
+}
+
+function staticString(node) {
+  if (!node) return undefined;
+  if (isStringLiteral(node) || isNoSubstitutionTemplateLiteral(node)) return node.text;
+  return undefined;
+}
+
+function staticPropertyName(node) {
+  if (!node) return undefined;
+  if (isIdentifier(node)) return node.text;
+  if (isComputedPropertyName(node)) return staticString(node.expression);
+  return staticString(node);
+}
+
+function resolveModuleSpecifier(importer, specifier) {
+  if (specifier.startsWith(".")) return resolveImport(importer, specifier);
+  if (specifier.startsWith("@/") && relative(root, importer).startsWith("apps/client/src/")) {
+    return resolveImport(
+      resolve(root, "apps/client/src/__alias_importer__.ts"),
+      `./${specifier.slice(2)}`,
+    );
+  }
+  const packageTarget = packageSpecifiers.get(specifier);
+  return packageTarget && sourceSet.has(packageTarget) ? packageTarget : undefined;
+}
+
+function resolveDatabaseEntrypoints(importer, edge) {
+  const directSpecifier = databaseSpecifiers.get(edge.specifier);
+  if (directSpecifier) return new Set([directSpecifier]);
+
+  const target = resolveModuleSpecifier(importer, edge.specifier);
+  return target ? collectDatabaseEntrypoints(target) : new Set();
+}
+
+function collectDatabaseEntrypoints(file) {
+  const entrypoints = new Set();
+  const visited = new Set();
+
+  function collect(current) {
+    if (visited.has(current)) return;
+    visited.add(current);
+
+    const directEntrypoint = databaseEntrypoints.get(current);
+    if (directEntrypoint) {
+      entrypoints.add(directEntrypoint);
+      return;
+    }
+    for (const edge of sourceFacts.get(current)?.edges ?? []) {
+      if (edge.kind !== "export") continue;
+      const directSpecifier = databaseSpecifiers.get(edge.specifier);
+      if (directSpecifier) {
+        entrypoints.add(directSpecifier);
+        continue;
+      }
+      const target = resolveModuleSpecifier(current, edge.specifier);
+      if (target) collect(target);
+    }
+  }
+
+  collect(file);
+  return entrypoints;
+}
+
+function collectReexportTargets(file) {
+  const targets = new Set();
+  const visited = new Set([file]);
+
+  function collect(current) {
+    for (const edge of sourceFacts.get(current)?.edges ?? []) {
+      if (edge.kind !== "export") continue;
+      const target = resolveModuleSpecifier(current, edge.specifier);
+      if (!target) continue;
+      targets.add(target);
+      if (visited.has(target)) continue;
+      visited.add(target);
+      collect(target);
+    }
+  }
+
+  collect(file);
+  return targets;
+}
+
 function resolveImport(importer, specifier) {
   const base = resolve(dirname(importer), specifier);
-  for (const candidate of [
+  const explicitTypeScriptFile = /\.tsx?$/.test(base) ? [base] : [];
+  const emittedJavaScriptSource = /\.[cm]?js$/.test(base)
+    ? [base.replace(/\.[cm]?js$/, ".ts"), base.replace(/\.[cm]?js$/, ".tsx")]
+    : [];
+  for (const candidate of new Set([
+    ...explicitTypeScriptFile,
     `${base}.ts`,
     `${base}.tsx`,
-    base.replace(/\.js$/, ".ts"),
+    ...emittedJavaScriptSource,
     resolve(base, "index.ts"),
     resolve(base, "index.tsx"),
-  ]) {
+  ])) {
     if (sourceSet.has(candidate)) return candidate;
   }
   return undefined;
