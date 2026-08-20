@@ -343,9 +343,19 @@ await test("architecture policy accepts and rejects controlled repositories", as
       files: { "apps/client/src/components/ui/sidebar.tsx": sourceLines(700) },
     },
     {
-      name: "excludes exact generated and declaration outputs",
+      name: "rejects an arbitrary generated-looking source file at 501 lines",
+      files: { "apps/client/src/example.gen.tsx": sourceLines(501) },
+      want: "over 500 lines",
+    },
+    {
+      name: "rejects an arbitrary generated-looking client TSX function at 251 lines",
+      files: { "apps/client/src/example-function.gen.tsx": componentLines(251) },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: "excludes the exact TanStack generated route tree and declaration outputs",
       files: {
-        "apps/client/src/example.gen.tsx": sourceLines(700),
+        "apps/client/src/routeTree.gen.ts": sourceLines(700),
         "apps/client/worker-configuration.d.ts": sourceLines(700),
       },
     },

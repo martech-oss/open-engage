@@ -63,6 +63,12 @@ describe("company enrichment URL safety", () => {
     ["public IPv4", "https://8.8.8.8/"],
     ["public IPv6", "https://[2001:4860:4860::8888]/"],
     ["public IPv4-mapped IPv6", "https://[::ffff:8.8.8.8]/"],
+    ["public 192.0.1.1 IPv4", "https://192.0.1.1/"],
+    ["public 192.0.1.1 IPv4-mapped IPv6", "https://[::ffff:192.0.1.1]/"],
+    ["globally reachable PCP anycast IPv4", "https://192.0.0.9/"],
+    ["globally reachable PCP anycast IPv4-mapped IPv6", "https://[::ffff:192.0.0.9]/"],
+    ["globally reachable TURN anycast IPv4", "https://192.0.0.10/"],
+    ["globally reachable TURN anycast IPv4-mapped IPv6", "https://[::ffff:192.0.0.10]/"],
   ])("accepts a %s control", (_kind, url) => {
     expect(assertSafePublicHttpsUrl(url).href).toBe(new URL(url).href);
   });

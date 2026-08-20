@@ -115,7 +115,6 @@ platform / projects / reports / scoring / segments / web / workspaces
 | ----------------- | ------------------------------------------------------------------------------------- |
 | `layout.tsx`      | `PageHeader`, `PageLayout`(ページ共通の見出し+アクション枠)                           |
 | `metrics.tsx`     | `MetricGrid`, `MetricCard`(サマリーカードのグリッド)                                  |
-| `resources.tsx`   | `ResourceGrid`, `ResourceCard`(カード一覧のグリッド)                                  |
 | `form-fields.tsx` | `FormInput`, `FormTextarea`, `FormNativeSelect`(ラベル+エラー表示付きフォーム部品)    |
 | `dialogs.tsx`     | `AppDialog`, `FormDialog`, `ConfirmDialog`, `ArchiveConfirm`(確認/フォームダイアログ) |
 | `feedback.tsx`    | `EmptyState`, `SimpleEmpty`, `ErrorAlert`, `SuccessAlert`, `LoadingButton`            |
