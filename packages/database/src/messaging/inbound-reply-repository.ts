@@ -1,4 +1,4 @@
-import { and, eq, notExists, sql } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 
 import { contactEventProjectionRows } from "../contacts/event-repository";
 import { contactEventOutbox, contactEventProjections, contactEvents } from "../contacts/schema";
@@ -53,53 +53,27 @@ export class MessagingInboundReplyRepository extends DatabaseRepository {
     receivedAt: string;
   }): Promise<void> {
     const orm = this.database.orm;
-    const existingReply = orm
+    const winningClaim = orm
       .select({ id: deliveryEvents.id })
       .from(deliveryEvents)
       .where(
         and(
+          eq(deliveryEvents.id, input.deliveryEventId),
           eq(deliveryEvents.workspaceId, input.workspaceId),
+          eq(deliveryEvents.deliveryId, input.deliveryId),
           eq(deliveryEvents.provider, "cloudflare"),
           eq(deliveryEvents.providerEventId, input.providerEventId),
+          eq(deliveryEvents.type, "replied"),
         ),
       )
       .limit(1);
-    const newReply = notExists(existingReply);
+    const ownsClaim = exists(winningClaim);
     const projectionRows = contactEventProjectionRows({
       id: input.contactEventId,
       workspaceId: input.workspaceId,
       createdAt: input.receivedAt,
     });
     await orm.batch([
-      orm.insert(inboundEmails).select(
-        sql`SELECT
-          ${input.inbound.id}, ${input.workspaceId}, ${input.contactId}, ${input.deliveryId},
-          ${input.inbound.messageId}, ${input.inbound.sender}, ${input.inbound.recipient},
-          ${input.inbound.subject}, ${input.inbound.textBody}, ${input.inbound.htmlBody},
-          ${input.inbound.attachmentManifest}, ${input.receivedAt}
-        WHERE ${newReply}`,
-      ),
-      orm.insert(contactEvents).select(
-        sql`SELECT
-          ${input.contactEventId}, ${input.workspaceId}, ${input.contactId}, NULL,
-          'email_replied', 'delivery', ${input.deliveryId}, ${input.contactEventProperties},
-          ${input.receivedAt}, NULL, ${input.receivedAt}
-        WHERE ${newReply}`,
-      ),
-      orm.insert(contactEventOutbox).select(
-        sql`SELECT
-          ${input.contactEventId}, ${input.workspaceId}, 'pending', 0, NULL,
-          NULL, NULL, NULL, ${input.receivedAt}, NULL
-        WHERE ${newReply}`,
-      ),
-      ...projectionRows.map((row) =>
-        orm.insert(contactEventProjections).select(
-          sql`SELECT
-            ${row.eventId}, ${row.workspaceId}, ${row.projection}, ${row.status},
-            ${row.createdAt}, ${null}
-          WHERE ${newReply}`,
-        ),
-      ),
       orm
         .insert(deliveryEvents)
         .values({
@@ -114,6 +88,35 @@ export class MessagingInboundReplyRepository extends DatabaseRepository {
           createdAt: input.receivedAt,
         })
         .onConflictDoNothing(),
+      orm.insert(inboundEmails).select(
+        sql`SELECT
+          ${input.inbound.id}, ${input.workspaceId}, ${input.contactId}, ${input.deliveryId},
+          ${input.inbound.messageId}, ${input.inbound.sender}, ${input.inbound.recipient},
+          ${input.inbound.subject}, ${input.inbound.textBody}, ${input.inbound.htmlBody},
+          ${input.inbound.attachmentManifest}, ${input.receivedAt}
+        WHERE ${ownsClaim}`,
+      ),
+      orm.insert(contactEvents).select(
+        sql`SELECT
+          ${input.contactEventId}, ${input.workspaceId}, ${input.contactId}, NULL,
+          'email_replied', 'delivery', ${input.deliveryId}, ${input.contactEventProperties},
+          ${input.receivedAt}, NULL, ${input.receivedAt}
+        WHERE ${ownsClaim}`,
+      ),
+      orm.insert(contactEventOutbox).select(
+        sql`SELECT
+          ${input.contactEventId}, ${input.workspaceId}, 'pending', 0, NULL,
+          NULL, NULL, NULL, ${input.receivedAt}, NULL
+        WHERE ${ownsClaim}`,
+      ),
+      ...projectionRows.map((row) =>
+        orm.insert(contactEventProjections).select(
+          sql`SELECT
+            ${row.eventId}, ${row.workspaceId}, ${row.projection}, ${row.status},
+            ${row.createdAt}, ${null}
+          WHERE ${ownsClaim}`,
+        ),
+      ),
     ]);
   }
 }
