@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,9 +42,46 @@ vi.mock("@tanstack/react-query", () => ({
   }),
   useQueryClient: () => ({}),
   useSuspenseQuery: () => ({
-    data: { stages: [], tags: [], companies: [], segments: [] },
+    data: {
+      stages: [],
+      tags: [{ id: "tag-a", name: "Priority", color: "#ff0000" }],
+      companies: [],
+      segments: [],
+    },
     error: null,
   }),
+}));
+
+vi.mock("./contact-bits", () => ({
+  ContactAvatar: () => null,
+  ContactScoreBadge: () => null,
+  ContactStatusDot: () => null,
+  contactName: (value: ContactSummary) =>
+    [value.firstName, value.lastName].filter(Boolean).join(" ") || value.email || "Unknown",
+  ControlledSelect: ({
+    value,
+    onValueChange,
+    placeholder,
+    options,
+  }: {
+    value: string;
+    onValueChange: (value: string) => void;
+    placeholder: string;
+    options: Array<{ value: string; label: string }>;
+  }) => (
+    <select
+      aria-label={placeholder}
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
 }));
 
 vi.mock("@/components/app-ui", () => ({
@@ -153,6 +190,27 @@ describe("ContactsPage keyed selection", () => {
     expect(screen.queryByText("1件を選択中")).toBeNull();
     expect(screen.queryByRole("button", { name: "アーカイブ" })).toBeNull();
     expect(doubles.bulkUpdateContacts).not.toHaveBeenCalled();
+  });
+
+  it("requires a bulk resource before applying and submits it after selection", async () => {
+    render(<ContactsPage initialSearch={search("alpha")} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alice Aを選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "タグを追加" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "適用" }));
+    expect(screen.getByText("一括操作の対象を選択してください")).toBeTruthy();
+    expect(doubles.bulkUpdateContacts).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("タグを選択"), { target: { value: "tag-a" } });
+    fireEvent.click(screen.getByRole("button", { name: "適用" }));
+
+    await waitFor(() =>
+      expect(doubles.bulkUpdateContacts).toHaveBeenCalledWith({
+        contactIds: ["contact-a"],
+        action: "add_tag",
+        resourceId: "tag-a",
+      }),
+    );
   });
 });
 

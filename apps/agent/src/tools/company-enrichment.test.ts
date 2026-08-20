@@ -127,6 +127,46 @@ describe("HTML inspection", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("prefers rendered content over a sparse static copy of the same page", async () => {
+    const page = {
+      route: vi.fn<InspectionPage["route"]>().mockResolvedValue(undefined),
+      goto: vi.fn<InspectionPage["goto"]>().mockResolvedValue(null),
+      url: vi.fn<InspectionPage["url"]>().mockReturnValue("https://example.com/"),
+      evaluate: vi.fn<InspectionPage["evaluate"]>().mockResolvedValue({
+        title: "Rendered Example",
+        description: "Rendered description",
+        text: "Rendered company information ".repeat(60),
+        links: [],
+        jsonLd: [],
+        imageCandidates: [],
+      }),
+    } satisfies InspectionPage;
+    const browser = {
+      newPage: vi.fn<InspectionBrowser["newPage"]>().mockResolvedValue(page),
+      close: vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined),
+    } satisfies InspectionBrowser;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("<html><title>Static Example</title><body>Too sparse</body></html>", {
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    const result = await inspectWebsite(
+      "https://example.com/",
+      browserBinding,
+      fetcher,
+      undefined,
+      vi.fn<BrowserLauncher>().mockResolvedValue(browser),
+    );
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]).toMatchObject({
+      mode: "browser",
+      title: "Rendered Example",
+      description: "Rendered description",
+    });
+  });
+
   it("closes Playwright when rendering fails", async () => {
     const close = vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined);
     const failedPage = {

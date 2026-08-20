@@ -1,33 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type SerializedValue =
-  | ["undefined" | "null"]
-  | ["string" | "boolean" | "number" | "bigint", string]
-  | ["array", SerializedValue[]]
-  | ["object", Array<[string, SerializedValue]>];
+export type AiRequestKeyPart = string | number | boolean | null | undefined;
 
-/** Stable, tuple-boundary-preserving identity for any AI request inputs. */
-export function createAiProposalWorkflowKey(parts: readonly unknown[]): string {
+type SerializedValue = ["undefined" | "null"] | ["string" | "boolean" | "number", string];
+
+/** Stable, tuple-boundary-preserving identity for primitive AI request inputs. */
+export function createAiProposalWorkflowKey(parts: readonly AiRequestKeyPart[]): string {
   return JSON.stringify(["tuple", parts.map(serializeValue)]);
 }
 
-function serializeValue(value: unknown): SerializedValue {
+function serializeValue(value: AiRequestKeyPart): SerializedValue {
   if (value === undefined) return ["undefined"];
   if (value === null) return ["null"];
   if (typeof value === "string") return ["string", value];
   if (typeof value === "boolean") return ["boolean", String(value)];
   if (typeof value === "number") return ["number", Object.is(value, -0) ? "-0" : String(value)];
-  if (typeof value === "bigint") return ["bigint", value.toString()];
-  if (Array.isArray(value)) return ["array", value.map(serializeValue)];
-  if (typeof value === "object") {
-    return [
-      "object",
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, serializeValue(entry)]),
-    ];
-  }
-  throw new TypeError(`AI request keys must be JSON-serializable; received ${typeof value}`);
+  throw new TypeError(
+    `AI request key parts must be a primitive string, number, boolean, null, or undefined; received ${describeUnsupportedKeyPart(value)}`,
+  );
+}
+
+function describeUnsupportedKeyPart(value: never): string {
+  if (typeof value !== "object" || value === null) return typeof value;
+  return Object.prototype.toString.call(value);
 }
 
 type WorkflowToken = {
