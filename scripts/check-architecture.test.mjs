@@ -79,6 +79,47 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "domain barrel",
     },
     {
+      name: "rejects a named imported binding re-exported through a domain bridge",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\nexport { assets };\n',
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects an aliased imported binding re-exported through a domain bridge",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as publicAssets } from "./schema";\n' +
+          "export { publicAssets as assets };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a namespace imported binding re-exported through a domain bridge",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import * as assetSchema from "./schema";\nexport { assetSchema };\n',
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a default imported binding re-exported through a domain bridge",
+      files: {
+        "packages/database/src/assets/index.ts": 'export { default } from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import databaseClient from "../client";\nexport default databaseClient;\n',
+        "packages/database/src/client.ts": "export default {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
       name: "rejects a relative server import that resolves to the database schema",
       files: {
         "apps/server/src/contacts/service.ts":
@@ -86,6 +127,32 @@ await test("architecture policy accepts and rejects controlled repositories", as
         "packages/database/src/schema.ts": "export const schema = {};\n",
       },
       want: "Better Auth adapter",
+    },
+    {
+      name: "rejects an external relative import of a physical owner schema",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          'import "../../../../packages/database/src/contacts/schema";\n',
+        "packages/database/src/contacts/schema.ts": "export const contacts = {};\n",
+      },
+      want: "raw owner schema",
+    },
+    {
+      name: "rejects a physical owner schema even in the Better Auth adapter",
+      files: {
+        "apps/server/src/auth/service.ts":
+          'import "../../../../packages/database/src/auth/schema";\n',
+        "packages/database/src/auth/schema.ts": "export const authSchema = {};\n",
+      },
+      want: "raw owner schema",
+    },
+    {
+      name: "allows database internals to import their physical owner schema",
+      files: {
+        "packages/database/src/contacts/repository.ts":
+          'import { contacts } from "./schema";\nvoid contacts;\n',
+        "packages/database/src/contacts/schema.ts": "export const contacts = {};\n",
+      },
     },
     {
       name: "allows the database client to assemble the schema internally",
@@ -125,6 +192,33 @@ await test("architecture policy accepts and rejects controlled repositories", as
           "declare const database: unknown;\nconst { orm: adapter } = database;\nvoid adapter;\n",
       },
       want: "Better Auth adapter",
+    },
+    {
+      name: "rejects aliased orm assignment destructuring outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          "declare const database: unknown;\n" +
+          "let adapter;\n({ orm: adapter } = database);\nvoid adapter;\n",
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "rejects shorthand orm assignment destructuring outside auth",
+      files: {
+        "apps/server/src/contacts/service.ts":
+          "declare const database: unknown;\nlet orm;\n({ orm } = database);\nvoid orm;\n",
+      },
+      want: "Better Auth adapter",
+    },
+    {
+      name: "allows orm assignment destructuring in the exact Better Auth adapter",
+      files: {
+        "apps/server/src/auth/service.ts":
+          "declare const database: unknown;\n" +
+          "let adapter;\nlet orm;\n" +
+          "({ orm: adapter } = database);\n({ orm } = database);\n" +
+          "void adapter;\nvoid orm;\n",
+      },
     },
     {
       name: "resolves client aliases when detecting cycles",

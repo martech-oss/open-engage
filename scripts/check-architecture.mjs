@@ -3,18 +3,27 @@ import { dirname, extname, relative, resolve } from "node:path";
 
 import {
   SyntaxKind,
+  isBinaryExpression,
   isBindingElement,
   isCallExpression,
   isComputedPropertyName,
   isElementAccessExpression,
   isExportDeclaration,
+  isExportAssignment,
   isIdentifier,
   isImportDeclaration,
   isImportTypeNode,
   isLiteralTypeNode,
+  isNamedExports,
+  isNamedImports,
   isNoSubstitutionTemplateLiteral,
+  isNamespaceImport,
   isObjectBindingPattern,
+  isObjectLiteralExpression,
+  isParenthesizedExpression,
+  isPropertyAssignment,
   isPropertyAccessExpression,
+  isShorthandPropertyAssignment,
   isStringLiteral,
 } from "typescript/unstable/ast";
 import { API as TypeScriptApi } from "typescript/unstable/sync";
@@ -116,6 +125,10 @@ for (const file of files) {
   const importedDatabaseEntrypoints = new Set(
     edges.flatMap((edge) => [...resolveDatabaseEntrypoints(file, edge)]),
   );
+  const importsRawOwnerSchema = edges.some((edge) => {
+    const target = resolveModuleSpecifier(file, edge.specifier);
+    return target && isDatabaseOwnerSchema(target);
+  });
 
   if (file !== databaseTestingEntrypoint && importedDatabaseEntrypoints.has("root")) {
     violations.push(
@@ -135,6 +148,11 @@ for (const file of files) {
   ) {
     violations.push(
       `${workspacePath}: only the exact Better Auth adapter may import the database schema entrypoint`,
+    );
+  }
+  if (!workspacePath.startsWith("packages/database/src/") && importsRawOwnerSchema) {
+    violations.push(
+      `${workspacePath}: database raw owner schema internals must not be imported outside the database package`,
     );
   }
   if (
@@ -375,6 +393,8 @@ function extractSourceFacts(sourceFiles) {
 
 function extractAstFacts(sourceFile) {
   const edges = [];
+  const importedBindings = new Map();
+  const locallyExportedBindings = [];
   let hasStaticOrmAccess = false;
 
   function addEdge(kind, node, metadata = {}) {
@@ -385,8 +405,30 @@ function extractAstFacts(sourceFile) {
   function visit(node) {
     if (isImportDeclaration(node)) {
       addEdge("import", node.moduleSpecifier);
-    } else if (isExportDeclaration(node) && node.moduleSpecifier) {
-      addEdge("export", node.moduleSpecifier, { exportsAll: !node.exportClause });
+      const specifier = staticString(node.moduleSpecifier);
+      if (specifier !== undefined && node.importClause) {
+        if (node.importClause.name) importedBindings.set(node.importClause.name.text, specifier);
+        const bindings = node.importClause.namedBindings;
+        if (bindings && isNamespaceImport(bindings)) {
+          importedBindings.set(bindings.name.text, specifier);
+        } else if (bindings && isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            importedBindings.set(element.name.text, specifier);
+          }
+        }
+      }
+    } else if (isExportDeclaration(node)) {
+      if (node.moduleSpecifier) {
+        addEdge("export", node.moduleSpecifier, { exportsAll: !node.exportClause });
+      } else if (node.exportClause && isNamedExports(node.exportClause)) {
+        for (const element of node.exportClause.elements) {
+          const localName = element.propertyName ?? element.name;
+          if (isIdentifier(localName)) locallyExportedBindings.push(localName.text);
+        }
+      }
+    } else if (isExportAssignment(node)) {
+      const localName = unwrappedIdentifierText(node.expression);
+      if (localName !== undefined) locallyExportedBindings.push(localName);
     } else if (isImportTypeNode(node)) {
       addEdge(
         "import-type",
@@ -403,7 +445,10 @@ function extractAstFacts(sourceFile) {
       (isElementAccessExpression(node) && staticString(node.argumentExpression) === "orm") ||
       (isBindingElement(node) &&
         isObjectBindingPattern(node.parent) &&
-        staticPropertyName(node.propertyName ?? node.name) === "orm")
+        staticPropertyName(node.propertyName ?? node.name) === "orm") ||
+      (isBinaryExpression(node) &&
+        node.operatorToken.kind === SyntaxKind.EqualsToken &&
+        hasOrmAssignmentTarget(node.left))
     ) {
       hasStaticOrmAccess = true;
     }
@@ -412,7 +457,31 @@ function extractAstFacts(sourceFile) {
   }
 
   sourceFile.forEachChild(visit);
+  for (const localName of locallyExportedBindings) {
+    const specifier = importedBindings.get(localName);
+    if (specifier !== undefined) {
+      edges.push({ exportsAll: false, kind: "export", specifier, viaImportedBinding: true });
+    }
+  }
   return { edges, hasStaticOrmAccess, source: sourceFile.text };
+}
+
+function unwrappedIdentifierText(node) {
+  while (isParenthesizedExpression(node)) node = node.expression;
+  return isIdentifier(node) ? node.text : undefined;
+}
+
+function hasOrmAssignmentTarget(node) {
+  while (isParenthesizedExpression(node)) node = node.expression;
+  if (!isObjectLiteralExpression(node)) return false;
+
+  return node.properties.some((property) => {
+    if (isShorthandPropertyAssignment(property)) return property.name.text === "orm";
+    if (!isPropertyAssignment(property)) return false;
+    return (
+      staticPropertyName(property.name) === "orm" || hasOrmAssignmentTarget(property.initializer)
+    );
+  });
 }
 
 function staticString(node) {
@@ -518,6 +587,10 @@ function resolveImport(importer, specifier) {
 
 function isTestFile(workspacePath) {
   return /(?:^|\/)test(?:\/|$)|\.(?:test|spec)\.tsx?$/.test(workspacePath);
+}
+
+function isDatabaseOwnerSchema(file) {
+  return /^packages\/database\/src\/.+\/schema\.tsx?$/.test(relative(root, file));
 }
 
 function enforceServerFolderDirection(importer, target, output) {
