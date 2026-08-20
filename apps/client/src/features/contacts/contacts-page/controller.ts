@@ -45,12 +45,11 @@ export function useContactsPageController(initialSearch: ContactSearch) {
   const nextCursor = contactsQuery.data?.nextCursor;
   const filters = useContactFilters(initialSearch);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const { selected, setSelected } = useKeyedContactSelection(paginationKey);
+  const { selected, setSelected, bulkAction, setBulkAction, bulkResourceId, setBulkResourceId } =
+    useKeyedContactSelection(paginationKey);
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showSegmentSave, setShowSegmentSave] = useState(false);
-  const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
-  const [bulkResourceId, setBulkResourceId] = useState("");
   const { busy, error, run, setError } = useFormSubmission("操作に失敗しました");
 
   const refreshContacts = useCallback(async () => {

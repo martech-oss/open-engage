@@ -36,7 +36,7 @@ const contact: ContactSummary = {
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
-    data: { items: [contact], total: 1, nextCursor: undefined },
+    data: { items: [contact], total: 1, nextCursor: "page-2" },
     error: null,
     isFetching: false,
   }),
@@ -95,14 +95,27 @@ vi.mock("@/components/data-table", () => ({
   DataTable: ({
     columns,
     rows,
+    pagination,
   }: {
     columns: Array<{ cell: (row: ContactSummary) => ReactNode }>;
     rows: ContactSummary[];
+    pagination: {
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+      onNext: () => void;
+      onPrevious: () => void;
+    };
   }) => (
     <div>
       {rows.map((row) => (
         <div key={row.id}>{columns[0]?.cell(row)}</div>
       ))}
+      <button disabled={!pagination.hasPreviousPage} onClick={pagination.onPrevious}>
+        前へ
+      </button>
+      <button disabled={!pagination.hasNextPage} onClick={pagination.onNext}>
+        次へ
+      </button>
     </div>
   ),
 }));
@@ -212,7 +225,42 @@ describe("ContactsPage keyed selection", () => {
       }),
     );
   });
+
+  it("resets the bulk action and resource across an immediate filter A → B → A", () => {
+    const searchA = search("alpha");
+    const searchB = search("beta");
+    const view = render(<ContactsPage initialSearch={searchA} />);
+    chooseTagBulkAction();
+
+    view.rerender(<ContactsPage initialSearch={searchB} />);
+    view.rerender(<ContactsPage initialSearch={searchA} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alice Aを選択" }));
+
+    expect(screen.queryByLabelText("タグを選択")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "タグを追加" }));
+    expect(screen.getByLabelText("タグを選択")).toHaveProperty("value", "");
+  });
+
+  it.each(["次へ", "前へ"])("resets the bulk action and resource on %s navigation", (direction) => {
+    render(<ContactsPage initialSearch={search("alpha")} />);
+    if (direction === "前へ") fireEvent.click(screen.getByRole("button", { name: "次へ" }));
+    chooseTagBulkAction();
+
+    fireEvent.click(screen.getByRole("button", { name: direction }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alice Aを選択" }));
+
+    expect(screen.queryByLabelText("タグを選択")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "タグを追加" }));
+    expect(screen.getByLabelText("タグを選択")).toHaveProperty("value", "");
+  });
 });
+
+function chooseTagBulkAction(): void {
+  fireEvent.click(screen.getByRole("checkbox", { name: "Alice Aを選択" }));
+  fireEvent.click(screen.getByRole("button", { name: "タグを追加" }));
+  fireEvent.change(screen.getByLabelText("タグを選択"), { target: { value: "tag-a" } });
+  expect(screen.getByLabelText("タグを選択")).toHaveProperty("value", "tag-a");
+}
 
 function search(q: string): ContactSearch {
   return { ...contactSearchDefaults, q };

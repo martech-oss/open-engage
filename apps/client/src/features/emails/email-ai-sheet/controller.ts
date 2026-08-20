@@ -38,6 +38,7 @@ export function useEmailAiController({
   );
   const [imageRequest, setImageRequest] = useState<EmailImageRequest | null>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedEmailImage | null>(null);
+  const [imageGenerationStarted, setImageGenerationStarted] = useState(false);
   const [error, setError] = useState("");
   const requestKey = createAiProposalWorkflowKey([
     "email-template",
@@ -46,10 +47,16 @@ export function useEmailAiController({
     purpose,
   ]);
   const workflow = useAiProposalWorkflow({ open, requestKey, onReset: clearState });
+  const imageRequestFingerprint = createAiProposalWorkflowKey([
+    imageRequest?.requestId,
+    imageRequest?.afterBlockId,
+    imageRequest?.prompt,
+    imageRequest?.alt,
+  ]);
   const imageWorkflow = useAiProposalWorkflow({
     open,
-    requestKey: createAiProposalWorkflowKey([requestKey, "image"]),
-    onReset: clearImageState,
+    requestKey: createAiProposalWorkflowKey([requestKey, "image", imageRequestFingerprint]),
+    onReset: clearGeneratedImage,
   });
 
   async function submitGeneration(): Promise<void> {
@@ -57,6 +64,7 @@ export function useEmailAiController({
     const token = workflow.beginRequest();
     setError("");
     imageWorkflow.reset();
+    setImageGenerationStarted(false);
     try {
       const next = await generate.mutateAsync(
         mode === "create" ? { mode, purpose, prompt } : { mode, purpose, prompt, current },
@@ -66,6 +74,7 @@ export function useEmailAiController({
           setResult(next);
           setPreview(null);
           setImageRequest(next.imageRequests[0] ?? null);
+          setImageGenerationStarted(false);
         })
       ) {
         return;
@@ -87,6 +96,7 @@ export function useEmailAiController({
     if (!imageRequest) return;
     const token = imageWorkflow.beginRequest();
     setError("");
+    setImageGenerationStarted(true);
     try {
       const image = await generateImage.mutateAsync({
         requestId: imageRequest.requestId,
@@ -102,7 +112,7 @@ export function useEmailAiController({
   }
 
   function applyProposal(): void {
-    if (!result || !workflow.canApply) return;
+    if (!result || !workflow.canApply || (imageGenerationStarted && !generatedImage)) return;
     onApply({
       ...result.proposal,
       content:
@@ -124,15 +134,21 @@ export function useEmailAiController({
     setPreview(null);
     setImageRequest(null);
     setGeneratedImage(null);
+    setImageGenerationStarted(false);
     setError("");
     generate.reset();
     previewMutation.reset();
     generateImage.reset();
   }
 
-  function clearImageState(): void {
+  function clearGeneratedImage(): void {
     setGeneratedImage(null);
     generateImage.reset();
+  }
+
+  function changeImageRequest(next: EmailImageRequest): void {
+    imageWorkflow.reset();
+    setImageRequest(next);
   }
 
   function handleOpenChange(nextOpen: boolean): void {
@@ -149,10 +165,10 @@ export function useEmailAiController({
     result,
     preview,
     imageRequest,
-    setImageRequest,
+    setImageRequest: changeImageRequest,
     generatedImage,
     error,
-    canApply: workflow.canApply,
+    canApply: workflow.canApply && (!imageGenerationStarted || Boolean(generatedImage)),
     generatePending: generate.isPending,
     previewPending: previewMutation.isPending,
     imagePending: generateImage.isPending,

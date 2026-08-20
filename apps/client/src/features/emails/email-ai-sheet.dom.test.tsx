@@ -146,6 +146,83 @@ describe("EmailAiSheet request authority", () => {
     await settle(imageB, generatedImage("asset-b", "current image"));
     expect(await screen.findByAltText("current image")).toBeTruthy();
   });
+
+  it.each([
+    ["prompt", "画像プロンプト", "edited image prompt"],
+    ["alt text", "代替テキスト", "edited image alt"],
+  ])("rejects pending image success after editing the %s", async (_field, label, value) => {
+    const pendingImage = deferred<GeneratedEmailImage>();
+    mutations.generate.mutateAsync.mockResolvedValue(emailResult("proposal", "image-a"));
+    mutations.preview.mutateAsync.mockResolvedValue({ subject: "preview", html: "html", text: "" });
+    mutations.image.mutateAsync.mockReturnValue(pendingImage.promise);
+    render(<EmailAiSheet {...emailProps()} />);
+    startEmailGeneration("request with image");
+    await screen.findByText("proposal");
+    fireEvent.click(screen.getByRole("button", { name: "画像を生成" }));
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await settle(pendingImage, generatedImage("asset-stale", "stale old image"));
+
+    expect(screen.queryByAltText("stale old image")).toBeNull();
+    expect(applyButton().disabled).toBe(true);
+  });
+
+  it("rejects a pending image error after editing its request", async () => {
+    const pendingImage = deferred<GeneratedEmailImage>();
+    mutations.generate.mutateAsync.mockResolvedValue(emailResult("proposal", "image-a"));
+    mutations.preview.mutateAsync.mockResolvedValue({ subject: "preview", html: "html", text: "" });
+    mutations.image.mutateAsync.mockReturnValue(pendingImage.promise);
+    render(<EmailAiSheet {...emailProps()} />);
+    startEmailGeneration("request with image");
+    await screen.findByText("proposal");
+    fireEvent.click(screen.getByRole("button", { name: "画像を生成" }));
+
+    fireEvent.change(screen.getByLabelText("画像プロンプト"), {
+      target: { value: "edited while pending" },
+    });
+    await reject(pendingImage, new Error("stale image failure"));
+
+    expect(screen.queryByText("stale image failure")).toBeNull();
+  });
+
+  it("clears an accepted image and disables apply when its request changes", async () => {
+    mutations.generate.mutateAsync.mockResolvedValue(emailResult("proposal", "image-a"));
+    mutations.preview.mutateAsync.mockResolvedValue({ subject: "preview", html: "html", text: "" });
+    mutations.image.mutateAsync.mockResolvedValue(generatedImage("asset-a", "accepted image"));
+    render(<EmailAiSheet {...emailProps()} />);
+    startEmailGeneration("request with image");
+    await screen.findByText("proposal");
+    fireEvent.click(screen.getByRole("button", { name: "画像を生成" }));
+    await screen.findByAltText("accepted image");
+    expect(applyButton().disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("代替テキスト"), {
+      target: { value: "edited after generation" },
+    });
+
+    expect(screen.queryByAltText("accepted image")).toBeNull();
+    expect(applyButton().disabled).toBe(true);
+  });
+
+  it("applies an image generated for the unchanged request fingerprint", async () => {
+    const onApply = vi.fn<(proposal: EmailGenerationProposal) => void>();
+    mutations.generate.mutateAsync.mockResolvedValue(emailResult("proposal", "image-a"));
+    mutations.preview.mutateAsync.mockResolvedValue({ subject: "preview", html: "html", text: "" });
+    mutations.image.mutateAsync.mockResolvedValue(generatedImage("asset-a", "accepted image"));
+    render(<EmailAiSheet {...emailProps({ onApply })} />);
+    startEmailGeneration("request with image");
+    await screen.findByText("proposal");
+    fireEvent.click(screen.getByRole("button", { name: "画像を生成" }));
+    await screen.findByAltText("accepted image");
+
+    fireEvent.click(applyButton());
+
+    expect(onApply).toHaveBeenCalledOnce();
+    expect(onApply.mock.calls[0]?.[0].content.blocks[0]).toMatchObject({
+      type: "image",
+      source: { kind: "asset", assetId: "asset-a" },
+    });
+  });
 });
 
 function emailProps(
@@ -166,6 +243,12 @@ function emailProps(
 function startEmailGeneration(prompt: string): void {
   fireEvent.change(screen.getByLabelText("作りたいメール"), { target: { value: prompt } });
   fireEvent.click(screen.getByRole("button", { name: "提案を生成" }));
+}
+
+function applyButton(): HTMLButtonElement {
+  return screen.getByRole("button", {
+    name: "この提案を下書きに適用",
+  }) as HTMLButtonElement;
 }
 
 function emailProposal(name: string): EmailGenerationProposal {
@@ -213,5 +296,12 @@ async function settle<T>(pending: ReturnType<typeof deferred<T>>, value: T): Pro
   await act(async () => {
     pending.resolve(value);
     await pending.promise;
+  });
+}
+
+async function reject<T>(pending: ReturnType<typeof deferred<T>>, reason: unknown): Promise<void> {
+  await act(async () => {
+    pending.reject(reason);
+    await pending.promise.catch(() => undefined);
   });
 }
