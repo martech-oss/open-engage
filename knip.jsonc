@@ -31,7 +31,8 @@
     "apps/agent": {
       "entry": ["src/app.ts", "src/cloudflare.ts", "flue.config.ts", "vite.config.ts"],
       "project": ["src/**/*.{ts,tsx}", "*.config.ts"],
-      "ignoreDependencies": ["@flue/cli", "cloudflare"],
+      // @flue/vite's generated virtual worker imports agents; no source file can expose it to Knip.
+      "ignoreDependencies": ["@flue/cli", "agents", "cloudflare"],
     },
     "packages/core": {
       "project": ["src/**/*.ts"],
