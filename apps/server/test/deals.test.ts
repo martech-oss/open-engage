@@ -84,6 +84,32 @@ describe("Deals CRM", () => {
     ).toBe(expectedFallback);
   });
 
+  it("keeps the remaining pipeline as the sole default when the default and a candidate archive concurrently", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const defaultPipeline = (await client.deals.options()).pipelines[0]!;
+    const candidate = await client.deals.createPipeline({ name: "Concurrent candidate" });
+    const remaining = await client.deals.createPipeline({ name: "Concurrent remaining" });
+
+    const archives = await Promise.allSettled([
+      client.deals.archivePipeline({ id: defaultPipeline.id }),
+      client.deals.archivePipeline({ id: candidate.id }),
+    ]);
+    expect(archives).toEqual([
+      expect.objectContaining({ status: "fulfilled" }),
+      expect.objectContaining({ status: "fulfilled" }),
+    ]);
+
+    const active = await env.DB.prepare(
+      `SELECT id, is_default AS isDefault
+       FROM deal_pipelines
+       WHERE workspace_id = ? AND archived_at IS NULL
+       ORDER BY id`,
+    )
+      .bind(workspaceId)
+      .all<{ id: string; isDefault: number }>();
+    expect(active.results).toEqual([{ id: remaining.id, isDefault: 1 }]);
+  });
+
   it("manages a deal through its pipeline and task lifecycle", async () => {
     const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
       timezone: "Asia/Tokyo",

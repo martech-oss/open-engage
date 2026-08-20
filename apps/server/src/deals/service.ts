@@ -20,14 +20,6 @@ import { DealRepository } from "@openengage/database/deals";
 import { writeAuditLog } from "@openengage/database/platform";
 import { ensureLoaded } from "@openengage/database/shared";
 
-import {
-  serializeDeal,
-  serializePipeline,
-  serializeStage,
-  serializeTask,
-  serializeTaskListItem,
-} from "./records";
-
 /** Deals list needs a pipeline; a missing one is distinct from an empty list. */
 export type DealListOutcome = { kind: "pipeline_not_found" } | { kind: "ok"; data: DealListData };
 export type DealWriteOutcome =
@@ -65,26 +57,7 @@ export async function getDealOptions(
 ): Promise<DealOptions> {
   const repository = new DealRepository(database, workspace);
   await repository.ensureDefaultPipeline();
-  const rows = await repository.getDealOptionRows();
-
-  const stagesByPipeline = new Map<string, typeof rows.stages>();
-  for (const stage of rows.stages) {
-    const stages = stagesByPipeline.get(stage.pipelineId) ?? [];
-    stages.push(stage);
-    stagesByPipeline.set(stage.pipelineId, stages);
-  }
-
-  return {
-    pipelines: rows.pipelines.map((pipeline) => ({
-      id: pipeline.id,
-      name: pipeline.name,
-      isDefault: Boolean(pipeline.isDefault),
-      stages: (stagesByPipeline.get(pipeline.id) ?? []).map(serializeStage),
-    })),
-    contacts: rows.contacts,
-    companies: rows.companies,
-    members: rows.members,
-  };
+  return repository.getDealOptions();
 }
 
 export async function listDeals(
@@ -112,7 +85,7 @@ export async function listDeals(
   return {
     kind: "ok",
     data: {
-      items: items.map(serializeDeal),
+      items,
       summary: {
         openCount: Number(summary?.openCount ?? 0),
         openValue: Number(summary?.openValue ?? 0),
@@ -131,7 +104,7 @@ export async function listWorkspaceDealTasks(
 ): Promise<DealTaskListItem[]> {
   const repository = new DealRepository(database, workspace);
   const rows = await repository.listWorkspaceTasks(status);
-  return rows.map(serializeTaskListItem);
+  return rows;
 }
 
 export async function getDealDetail(
@@ -143,7 +116,7 @@ export async function getDealDetail(
   const deal = await repository.getDeal(id);
   if (!deal) return null;
   const tasks = await repository.listDealTasks(deal.id);
-  return { deal: serializeDeal(deal), tasks: tasks.map(serializeTask) };
+  return { deal, tasks };
 }
 
 export async function createDeal(
@@ -164,7 +137,7 @@ export async function createDeal(
       resourceId: deal.id,
     }),
   );
-  return { kind: "ok", deal: serializeDeal(deal) };
+  return { kind: "ok", deal };
 }
 
 /** Patch semantics: unset fields keep the stored value, so the merge happens here. */
@@ -212,7 +185,7 @@ export async function updateDeal(
     }),
   );
   const deal = await repository.getDeal(current.id);
-  return { kind: "ok", deal: serializeDeal(ensureLoaded(deal, "Updated deal")) };
+  return { kind: "ok", deal: ensureLoaded(deal, "Updated deal") };
 }
 
 export async function moveDeal(
@@ -237,7 +210,7 @@ export async function moveDeal(
       metadata: { previousStageId: deal.stageId, stageId },
     }),
   );
-  return { kind: "ok", deal: serializeDeal(ensureLoaded(updated, "Moved deal")) };
+  return { kind: "ok", deal: ensureLoaded(updated, "Moved deal") };
 }
 
 export async function archiveDeal(
@@ -270,7 +243,7 @@ export async function createDealTask(
     return { kind: "invalid_assignee" };
   }
   const task = await repository.createDealTask(dealId, input);
-  return { kind: "ok", task: serializeTask(task) };
+  return { kind: "ok", task };
 }
 
 export async function updateDealTask(
@@ -303,7 +276,7 @@ export async function updateDealTask(
     completedAt,
     updatedAt: now,
   });
-  return { kind: "ok", task: serializeTask(ensureLoaded(task, "Updated deal task")) };
+  return { kind: "ok", task: ensureLoaded(task, "Updated deal task") };
 }
 
 export async function deleteDealTask(
@@ -325,18 +298,15 @@ export async function createDealPipeline(
   const repository = new DealRepository(database, workspace);
   const created = await repository.createPipeline(input);
   if (created.kind === "conflict") return { kind: "conflict" };
-  const loaded = ensureLoaded(
-    await repository.getPipelineWithStages(created.id),
-    "Created deal pipeline",
-  );
+  const loaded = ensureLoaded(await repository.getPipeline(created.id), "Created deal pipeline");
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.pipeline.create",
       resourceType: "deal_pipeline",
-      resourceId: loaded.pipeline.id,
+      resourceId: loaded.id,
     }),
   );
-  return { kind: "ok", pipeline: serializePipeline(loaded.pipeline, loaded.stages) };
+  return { kind: "ok", pipeline: loaded };
 }
 
 export async function updateDealPipeline(
@@ -349,7 +319,7 @@ export async function updateDealPipeline(
   const repository = new DealRepository(database, workspace);
   const result = await repository.updatePipeline(id, input);
   if (result !== "ok") return { kind: result };
-  const loaded = ensureLoaded(await repository.getPipelineWithStages(id), "Updated deal pipeline");
+  const loaded = ensureLoaded(await repository.getPipeline(id), "Updated deal pipeline");
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.pipeline.update",
@@ -357,7 +327,7 @@ export async function updateDealPipeline(
       resourceId: id,
     }),
   );
-  return { kind: "ok", pipeline: serializePipeline(loaded.pipeline, loaded.stages) };
+  return { kind: "ok", pipeline: loaded };
 }
 
 export async function archiveDealPipeline(

@@ -1,18 +1,16 @@
-import { and, eq, exists, inArray, isNull, ne, sql } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, eq, exists, isNull, ne, sql } from "drizzle-orm";
 
 import type { ProjectBriefMutation } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 
-import { member } from "../auth/schema";
 import { auditLogs } from "../platform/schema";
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { ProjectBriefCommandGuards } from "./project-brief-command-guards";
 import {
   conditionalProjectAudit,
   encodeBriefDefinition,
-  projectBriefRevisionAuditMetadata,
   type ProjectAuditInput,
 } from "./project-brief-persistence";
 import { insertProjectBriefVersionStatement } from "./project-brief-version-statement";
@@ -29,6 +27,7 @@ export interface ExpectedBriefVersion {
 }
 
 export class ProjectBriefCommandRepository extends WorkspaceRepository<WorkspaceContext> {
+  private readonly guards = new ProjectBriefCommandGuards(this.database, this.context);
   public async createBrief(
     input: ProjectBriefMutation,
   ): Promise<
@@ -39,11 +38,11 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
     const definition = encodeBriefDefinition(input.definition);
     const membersAreEligible = and(
       ne(sql`${input.ownerUserId}`, input.approverUserId),
-      exists(this.eligibleMember(input.ownerUserId)),
-      exists(this.eligibleMember(input.approverUserId)),
+      exists(this.guards.eligibleMember(input.ownerUserId)),
+      exists(this.guards.eligibleMember(input.approverUserId)),
     );
     const createPrecondition = and(
-      exists(this.eligibleMember(this.context.userId)),
+      exists(this.guards.eligibleMember(this.context.userId)),
       membersAreEligible,
     );
     const insertProject = this.database.orm.insert(projects).select(
@@ -77,7 +76,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
       insertAudit,
     ]);
     if (briefResult.meta.changes === 1) return { kind: "done", id };
-    return (await this.isEligibleMember(this.context.userId))
+    return (await this.guards.isEligibleMember(this.context.userId))
       ? { kind: "invalid_member" }
       : { kind: "forbidden_actor" };
   }
@@ -86,11 +85,11 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
     projectId: string,
     input: ProjectBriefMutation & ExpectedBriefVersion,
   ): Promise<ProjectBriefCommandOutcome> {
-    if (!(await this.assignedMembersAreEligible(input.ownerUserId, input.approverUserId))) {
+    if (!(await this.guards.assignedMembersAreEligible(input.ownerUserId, input.approverUserId))) {
       return { kind: "invalid_member" };
     }
     const now = nowIso();
-    const precondition = this.briefPrecondition(projectId, {
+    const precondition = this.guards.briefPrecondition(projectId, {
       statuses: ["draft"],
       expectedRowVersion: input.expectedRowVersion,
       ownerActor: true,
@@ -115,7 +114,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
         {
           action: "project.brief.update",
           projectId,
-          metadataSql: this.revisionAuditMetadata(projectId),
+          metadataSql: this.guards.revisionAuditMetadata(projectId),
         },
         precondition,
         now,
@@ -131,7 +130,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
           rowVersion: sql`${projectBriefs.rowVersion} + 1`,
           updatedAt: now,
         })
-        .where(this.briefMutationWhere(projectId, precondition)),
+        .where(this.guards.briefMutationWhere(projectId, precondition)),
     ]);
     if (briefResult.meta.changes === 1 && projectResult.meta.changes === 1) {
       return { kind: "done" };
@@ -143,7 +142,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
     projectId: string,
     input: ExpectedBriefVersion,
   ): Promise<ProjectBriefCommandOutcome> {
-    if (!(await this.currentAssignedMembersAreEligible(projectId))) {
+    if (!(await this.guards.currentAssignedMembersAreEligible(projectId))) {
       return { kind: "invalid_member" };
     }
     return this.transition({
@@ -155,7 +154,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
       audit: {
         action: "project.brief.submit",
         projectId,
-        metadataSql: this.revisionAuditMetadata(projectId),
+        metadataSql: this.guards.revisionAuditMetadata(projectId),
       },
       set: {
         status: "pending_approval",
@@ -176,7 +175,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
       audit: {
         action: "project.brief.withdraw",
         projectId,
-        metadataSql: this.revisionAuditMetadata(projectId, { reason: input.reason }),
+        metadataSql: this.guards.revisionAuditMetadata(projectId, { reason: input.reason }),
       },
       set: { status: "draft", submittedAt: null },
     });
@@ -189,11 +188,11 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
       comment: string;
     },
   ): Promise<ProjectBriefCommandOutcome> {
-    if (!(await this.isEligibleMember(this.context.userId))) {
+    if (!(await this.guards.isEligibleMember(this.context.userId))) {
       return { kind: "forbidden_actor" };
     }
     const now = nowIso();
-    const precondition = this.briefPrecondition(projectId, {
+    const precondition = this.guards.briefPrecondition(projectId, {
       statuses: ["pending_approval"],
       expectedRowVersion: input.expectedRowVersion,
       approverActor: true,
@@ -219,7 +218,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
       {
         action: `project.brief.${input.decision}`,
         projectId,
-        metadataSql: this.revisionAuditMetadata(projectId, { comment: input.comment }),
+        metadataSql: this.guards.revisionAuditMetadata(projectId, { comment: input.comment }),
       },
       precondition,
       now,
@@ -234,7 +233,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
         rowVersion: sql`${projectBriefs.rowVersion} + 1`,
         updatedAt: now,
       })
-      .where(this.briefMutationWhere(projectId, precondition));
+      .where(this.guards.briefMutationWhere(projectId, precondition));
 
     if (input.decision === "approved") {
       const [, , , result] = await this.database.orm.batch([
@@ -262,7 +261,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
     input: ExpectedBriefVersion,
   ): Promise<ProjectBriefCommandOutcome> {
     const now = nowIso();
-    const precondition = this.briefPrecondition(projectId, {
+    const precondition = this.guards.briefPrecondition(projectId, {
       statuses: ["approved", "completed"],
       expectedRowVersion: input.expectedRowVersion,
       ownerOrAdminActor: true,
@@ -281,7 +280,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
         {
           action: "project.brief.reopen",
           projectId,
-          metadataSql: this.revisionAuditMetadata(projectId),
+          metadataSql: this.guards.revisionAuditMetadata(projectId),
         },
         precondition,
         now,
@@ -298,7 +297,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
           completedAt: null,
           updatedAt: now,
         })
-        .where(this.briefMutationWhere(projectId, precondition)),
+        .where(this.guards.briefMutationWhere(projectId, precondition)),
     ]);
     return result.meta.changes === 1 ? { kind: "done" } : { kind: "conflict" };
   }
@@ -316,7 +315,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
       audit: {
         action: "project.brief.complete",
         projectId,
-        metadataSql: this.revisionAuditMetadata(projectId),
+        metadataSql: this.guards.revisionAuditMetadata(projectId),
       },
       set: { status: "completed", completedAt: now },
       now,
@@ -328,7 +327,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
     input: ExpectedBriefVersion,
   ): Promise<ProjectBriefCommandOutcome> {
     const now = nowIso();
-    const precondition = this.briefPrecondition(projectId, {
+    const precondition = this.guards.briefPrecondition(projectId, {
       statuses: ["draft", "pending_approval", "approved", "completed"],
       expectedRowVersion: input.expectedRowVersion,
       adminActor: true,
@@ -340,7 +339,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
         {
           action: "project.brief.archive",
           projectId,
-          metadataSql: this.revisionAuditMetadata(projectId),
+          metadataSql: this.guards.revisionAuditMetadata(projectId),
         },
         precondition,
         now,
@@ -373,7 +372,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
     now?: string | undefined;
   }): Promise<ProjectBriefCommandOutcome> {
     const now = input.now ?? nowIso();
-    const precondition = this.briefPrecondition(input.projectId, input);
+    const precondition = this.guards.briefPrecondition(input.projectId, input);
     const [, result] = await this.database.orm.batch([
       conditionalProjectAudit(this.database.orm, this.context, input.audit, precondition, now),
       this.database.orm
@@ -383,156 +382,8 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
           rowVersion: sql`${projectBriefs.rowVersion} + 1`,
           updatedAt: now,
         })
-        .where(this.briefMutationWhere(input.projectId, precondition)),
+        .where(this.guards.briefMutationWhere(input.projectId, precondition)),
     ]);
     return result.meta.changes === 1 ? { kind: "done" } : { kind: "conflict" };
-  }
-
-  private briefPrecondition(
-    projectId: string,
-    input: {
-      statuses: string[];
-      expectedRowVersion?: number | undefined;
-      ownerActor?: boolean | undefined;
-      approverActor?: boolean | undefined;
-      ownerOrAdminActor?: boolean | undefined;
-      adminActor?: boolean | undefined;
-      validateCurrentMembers?: boolean | undefined;
-      validateAssignedMembers?: { ownerUserId: string; approverUserId: string } | undefined;
-    },
-  ) {
-    const admin = this.context.role === "owner" || this.context.role === "admin";
-    const liveAdministrator = exists(this.administrativeMember(this.context.userId));
-    const ownerActorCondition = and(
-      eq(projectBriefs.ownerUserId, this.context.userId),
-      exists(this.eligibleMember(this.context.userId)),
-    );
-    const approverActorCondition = and(
-      eq(projectBriefs.approverUserId, this.context.userId),
-      exists(this.eligibleMember(this.context.userId)),
-    );
-    const assigned = input.validateAssignedMembers;
-    return this.database.orm
-      .select({ projectId: projectBriefs.projectId })
-      .from(projectBriefs)
-      .innerJoin(
-        projects,
-        and(
-          eq(projects.id, projectBriefs.projectId),
-          eq(projects.workspaceId, projectBriefs.workspaceId),
-        ),
-      )
-      .where(
-        and(
-          this.inWorkspace(projectBriefs),
-          eq(projectBriefs.projectId, projectId),
-          isNull(projects.archivedAt),
-          inArray(projectBriefs.status, input.statuses),
-          input.expectedRowVersion === undefined
-            ? undefined
-            : eq(projectBriefs.rowVersion, input.expectedRowVersion),
-          input.ownerActor ? ownerActorCondition : undefined,
-          input.approverActor ? approverActorCondition : undefined,
-          input.ownerOrAdminActor ? (admin ? liveAdministrator : ownerActorCondition) : undefined,
-          input.adminActor ? (admin ? liveAdministrator : sql`0`) : undefined,
-          input.validateCurrentMembers
-            ? and(
-                exists(this.eligibleMember(projectBriefs.ownerUserId)),
-                exists(this.eligibleMember(projectBriefs.approverUserId)),
-              )
-            : undefined,
-          assigned
-            ? and(
-                ne(sql`${assigned.ownerUserId}`, assigned.approverUserId),
-                exists(this.eligibleMember(assigned.ownerUserId)),
-                exists(this.eligibleMember(assigned.approverUserId)),
-              )
-            : undefined,
-        ),
-      );
-  }
-
-  private briefMutationWhere(
-    projectId: string,
-    precondition: ReturnType<typeof this.briefPrecondition>,
-  ) {
-    return and(
-      this.inWorkspace(projectBriefs),
-      eq(projectBriefs.projectId, projectId),
-      exists(precondition),
-    );
-  }
-
-  private eligibleMember(userId: string | AnySQLiteColumn) {
-    return this.database.orm
-      .select({ id: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.organizationId, this.context.workspaceId),
-          sql`${member.userId} = ${userId}`,
-          inArray(member.role, ["owner", "admin", "marketer"]),
-        ),
-      );
-  }
-
-  private administrativeMember(userId: string) {
-    return this.database.orm
-      .select({ id: member.id })
-      .from(member)
-      .where(
-        and(
-          eq(member.organizationId, this.context.workspaceId),
-          eq(member.userId, userId),
-          inArray(member.role, ["owner", "admin"]),
-        ),
-      );
-  }
-
-  private async assignedMembersAreEligible(
-    ownerUserId: string,
-    approverUserId: string,
-  ): Promise<boolean> {
-    if (ownerUserId === approverUserId) return false;
-    const rows = await this.database.orm
-      .select({ userId: member.userId })
-      .from(member)
-      .where(
-        and(
-          eq(member.organizationId, this.context.workspaceId),
-          inArray(member.userId, [ownerUserId, approverUserId]),
-          inArray(member.role, ["owner", "admin", "marketer"]),
-        ),
-      );
-    return new Set(rows.map((row) => row.userId)).size === 2;
-  }
-
-  private async isEligibleMember(userId: string): Promise<boolean> {
-    return Boolean(await this.eligibleMember(userId).get());
-  }
-
-  private async currentAssignedMembersAreEligible(projectId: string): Promise<boolean> {
-    const row = await this.database.orm
-      .select({
-        ownerUserId: projectBriefs.ownerUserId,
-        approverUserId: projectBriefs.approverUserId,
-      })
-      .from(projectBriefs)
-      .where(
-        and(
-          this.inWorkspace(projectBriefs),
-          eq(projectBriefs.projectId, projectId),
-          eq(projectBriefs.status, "draft"),
-        ),
-      )
-      .get();
-    return row ? this.assignedMembersAreEligible(row.ownerUserId, row.approverUserId) : true;
-  }
-
-  private revisionAuditMetadata(
-    projectId: string,
-    additional: Record<string, string | number | boolean | null> = {},
-  ) {
-    return projectBriefRevisionAuditMetadata(this.context.workspaceId, projectId, additional);
   }
 }

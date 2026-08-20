@@ -2,11 +2,11 @@ import { and, eq, isNull, ne, sql, type SQL, type SQLWrapper } from "drizzle-orm
 
 import { PROJECT_RESOURCE_TYPES, type ProjectResourceType } from "@openengage/core/projects";
 
-import { automations } from "../automations/schema";
-import type { OpenEngageDatabase } from "../client";
-import { emailTemplates } from "../messaging/schema";
-import { segments } from "../segments/schema";
-import { customRedirects, forms, landingPages } from "../web/schema";
+import { automations } from "../../automations/schema";
+import type { OpenEngageDatabase } from "../../client";
+import { emailTemplates } from "../../messaging/schema";
+import { segments } from "../../segments/schema";
+import { customRedirects, forms, landingPages } from "../../web/schema";
 
 export interface ResolvedProjectResource {
   name: string;
