@@ -3,13 +3,16 @@ import { dirname, extname, relative, resolve } from "node:path";
 
 import {
   SyntaxKind,
+  isArrayLiteralExpression,
   isAsExpression,
   isArrowFunction,
+  isAwaitExpression,
   isBinaryExpression,
   isBindingElement,
   isCallExpression,
   isClassStaticBlockDeclaration,
   isComputedPropertyName,
+  isConditionalExpression,
   isConstructorDeclaration,
   isElementAccessExpression,
   isExportDeclaration,
@@ -27,18 +30,26 @@ import {
   isNonNullExpression,
   isNoSubstitutionTemplateLiteral,
   isNamespaceImport,
+  isNewExpression,
   isObjectBindingPattern,
   isObjectLiteralExpression,
   isParenthesizedExpression,
   isPropertyAssignment,
   isPropertyAccessExpression,
+  isPrefixUnaryExpression,
+  isPostfixUnaryExpression,
   isShorthandPropertyAssignment,
   isSatisfiesExpression,
   isSetAccessorDeclaration,
+  isSpreadAssignment,
+  isSpreadElement,
   isStringLiteral,
+  isTaggedTemplateExpression,
+  isTemplateExpression,
   isTypeAssertion,
   isVariableDeclaration,
   isVariableStatement,
+  isYieldExpression,
 } from "typescript/unstable/ast";
 import { API as TypeScriptApi } from "typescript/unstable/sync";
 
@@ -475,14 +486,12 @@ function extractAstFacts(sourceFile) {
     } else if (isExportAssignment(node)) {
       exportedExpressions.push(node.expression);
     } else if (isVariableDeclaration(node) && isIdentifier(node.name) && node.initializer) {
-      bindingInitializers.set(node.name.text, node.initializer);
       const statement = node.parent?.parent;
-      if (
-        statement &&
-        isVariableStatement(statement) &&
-        statement.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword)
-      ) {
-        locallyExportedBindings.add(node.name.text);
+      if (statement && isVariableStatement(statement) && statement.parent === sourceFile) {
+        bindingInitializers.set(node.name.text, node.initializer);
+        if (statement.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword)) {
+          locallyExportedBindings.add(node.name.text);
+        }
       }
     } else if (isImportTypeNode(node)) {
       addEdge(
@@ -553,18 +562,72 @@ function expressionProvenance(node, bindingProvenance) {
   if (isIdentifier(node)) return bindingProvenance.get(node.text) ?? new Set();
 
   const provenance = new Set();
-  if (isPropertyAccessExpression(node) || isElementAccessExpression(node)) {
+  if (isPropertyAccessExpression(node)) {
     addProvenance(provenance, expressionProvenance(node.expression, bindingProvenance));
+  } else if (isElementAccessExpression(node)) {
+    addExpressionProvenance(
+      provenance,
+      [node.expression, node.argumentExpression],
+      bindingProvenance,
+    );
   } else if (isObjectLiteralExpression(node)) {
     for (const property of node.properties) {
       if (isPropertyAssignment(property)) {
         addProvenance(provenance, expressionProvenance(property.initializer, bindingProvenance));
       } else if (isShorthandPropertyAssignment(property)) {
         addProvenance(provenance, bindingProvenance.get(property.name.text) ?? []);
+      } else if (isSpreadAssignment(property)) {
+        addProvenance(provenance, expressionProvenance(property.expression, bindingProvenance));
       }
+    }
+  } else if (isArrayLiteralExpression(node)) {
+    for (const element of node.elements) {
+      addProvenance(
+        provenance,
+        expressionProvenance(
+          isSpreadElement(element) ? element.expression : element,
+          bindingProvenance,
+        ),
+      );
+    }
+  } else if (isConditionalExpression(node)) {
+    addExpressionProvenance(
+      provenance,
+      [node.condition, node.whenTrue, node.whenFalse],
+      bindingProvenance,
+    );
+  } else if (isCallExpression(node) || isNewExpression(node)) {
+    addExpressionProvenance(
+      provenance,
+      [node.expression, ...(node.arguments ?? [])],
+      bindingProvenance,
+    );
+  } else if (isTaggedTemplateExpression(node)) {
+    addExpressionProvenance(provenance, [node.tag, node.template], bindingProvenance);
+  } else if (isTemplateExpression(node)) {
+    addExpressionProvenance(
+      provenance,
+      node.templateSpans.map((span) => span.expression),
+      bindingProvenance,
+    );
+  } else if (isBinaryExpression(node)) {
+    addExpressionProvenance(provenance, [node.left, node.right], bindingProvenance);
+  } else if (isPrefixUnaryExpression(node) || isPostfixUnaryExpression(node)) {
+    addProvenance(provenance, expressionProvenance(node.operand, bindingProvenance));
+  } else if (isAwaitExpression(node) || isYieldExpression(node)) {
+    if (node.expression) {
+      addProvenance(provenance, expressionProvenance(node.expression, bindingProvenance));
     }
   }
   return provenance;
+}
+
+function addExpressionProvenance(target, expressions, bindingProvenance) {
+  for (const expression of expressions) {
+    if (expression) {
+      addProvenance(target, expressionProvenance(expression, bindingProvenance));
+    }
+  }
 }
 
 function addProvenance(target, source) {

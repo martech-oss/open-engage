@@ -191,6 +191,66 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "domain barrel",
     },
     {
+      name: "allows an exported safe binding shadowed by a nested raw-schema alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "export const safe = {};\n" +
+          "function nested() {\n  const safe = assets;\n  return safe;\n}\n" +
+          "void nested;\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects a raw-schema alias nested behind an object spread",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = { ...{ exposed } };\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema alias nested in an exported array",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = [{ exposed }];\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema alias nested in an exported conditional",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = Math.random() > 0.5 ? exposed : {};\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects a raw-schema alias nested in an exported call argument",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets } from "./schema";\n' +
+          "const exposed = assets;\n" +
+          "export const surface = Object.freeze({ exposed });\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
       name: "rejects a relative server import that resolves to the database schema",
       files: {
         "apps/server/src/contacts/service.ts":
