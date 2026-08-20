@@ -100,6 +100,10 @@ async function processContactEvent(
 
     let enrollmentCount = 0;
     for (const projection of await repository.pendingProjections(event.id)) {
+      if (!(await repository.isContactProcessable(event.workspaceId, event.contactId))) {
+        await repository.skipPending(event.id, leaseId, new Date().toISOString());
+        break;
+      }
       const result = await runProjection(
         database,
         event as ContactEventRecord & { contactId: string },

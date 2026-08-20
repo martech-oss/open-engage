@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import { and, eq, exists, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 
 import type { GradingCriterion } from "@openengage/core/scoring";
 
@@ -82,6 +82,18 @@ export class ScoringEngineRepository extends DatabaseRepository {
     if (!activeContact) return;
     const statements = [];
     for (const effect of input.effects) {
+      const contactIsProcessable = exists(
+        orm
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.workspaceId, input.workspaceId),
+              eq(contacts.id, input.contactId),
+              ne(contacts.status, "archived"),
+            ),
+          ),
+      );
       const notApplied = notExists(
         orm
           .select({ id: scoreEvents.id })
@@ -116,7 +128,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
             .select(
               sql`SELECT ${input.workspaceId}, ${input.contactId}, ${effect.categoryId},
                          ${effect.delta}, ${input.now}
-                  WHERE ${notApplied}`,
+                  WHERE ${notApplied} AND ${contactIsProcessable}`,
             )
             .onConflictDoUpdate({
               target: [
@@ -137,7 +149,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
             .insert(contactTags)
             .select(
               sql`SELECT ${input.workspaceId}, ${input.contactId}, ${effect.tagId}, ${input.now}
-                  WHERE ${notApplied}`,
+                  WHERE ${notApplied} AND ${contactIsProcessable}`,
             )
             .onConflictDoNothing(),
         );
@@ -145,16 +157,12 @@ export class ScoringEngineRepository extends DatabaseRepository {
       statements.push(
         orm
           .insert(scoreEvents)
-          .values({
-            id: uuidv7(),
-            workspaceId: input.workspaceId,
-            contactId: input.contactId,
-            delta: effect.delta,
-            reason: `rule:${effect.ruleId}`,
-            contactEventId: input.contactEventId,
-            scoringRuleId: effect.ruleId,
-            createdAt: input.now,
-          })
+          .select(
+            sql`SELECT ${uuidv7()}, ${input.workspaceId}, ${input.contactId}, ${effect.delta},
+                       ${`rule:${effect.ruleId}`}, NULL, ${input.contactEventId},
+                       ${effect.ruleId}, ${input.now}
+                WHERE ${notApplied} AND ${contactIsProcessable}`,
+          )
           .onConflictDoNothing(),
       );
     }

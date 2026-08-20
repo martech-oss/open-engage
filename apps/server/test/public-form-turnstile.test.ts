@@ -294,4 +294,80 @@ describe("public form Turnstile", () => {
       }),
     ).rejects.toMatchObject({ code: "TURNSTILE_NOT_CONFIGURED", status: 422 });
   });
+
+  it.each([
+    {
+      transition: "publishing an enabled draft",
+      initialStatus: "draft" as const,
+      initialTurnstileEnabled: true,
+    },
+    {
+      transition: "enabling a published form",
+      initialStatus: "published" as const,
+      initialTurnstileEnabled: false,
+    },
+  ])(
+    "fails closed when $transition and permits it once both Turnstile keys exist",
+    async ({ initialStatus, initialTurnstileEnabled }) => {
+      const fixture = await seedWorkspace(env.DB);
+      const initialClient = clientFor(
+        fixture.token,
+        bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined }),
+      );
+      const form = await initialClient.website.createForm({
+        name: "Transition form",
+        slug: "transition-form",
+        status: initialStatus,
+        definition: { fields: [{ key: "email", type: "email", required: true }] },
+        allowedDomains: [],
+        turnstileEnabled: initialTurnstileEnabled,
+        successMessage: "Thanks",
+      });
+      const publishEnabled = {
+        id: form.id,
+        name: "Transition form",
+        slug: "transition-form",
+        status: "published" as const,
+        definition: { fields: [{ key: "email" as const, type: "email" as const, required: true }] },
+        allowedDomains: [],
+        turnstileEnabled: true,
+        successMessage: "Thanks",
+      };
+
+      for (const incompleteConfiguration of [
+        { TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined },
+        { TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: "secret-test" },
+      ]) {
+        const incompleteClient = clientFor(fixture.token, bindings(incompleteConfiguration));
+        await expect(incompleteClient.website.updateForm(publishEnabled)).rejects.toMatchObject({
+          code: "TURNSTILE_NOT_CONFIGURED",
+          status: 422,
+        });
+        expect(
+          await env.DB.prepare(
+            `SELECT status, turnstile_enabled AS turnstileEnabled
+             FROM forms WHERE id = ?`,
+          )
+            .bind(form.id)
+            .first(),
+        ).toEqual({ status: initialStatus, turnstileEnabled: initialTurnstileEnabled ? 1 : 0 });
+      }
+
+      const configuredClient = clientFor(
+        fixture.token,
+        bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
+      );
+      await expect(configuredClient.website.updateForm(publishEnabled)).resolves.toEqual({
+        id: form.id,
+      });
+      expect(
+        await env.DB.prepare(
+          `SELECT status, turnstile_enabled AS turnstileEnabled
+           FROM forms WHERE id = ?`,
+        )
+          .bind(form.id)
+          .first(),
+      ).toEqual({ status: "published", turnstileEnabled: 1 });
+    },
+  );
 });

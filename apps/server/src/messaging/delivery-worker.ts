@@ -38,6 +38,7 @@ export async function createEmailDelivery(
     action: "send_email";
   },
   job: AutomationJobRow,
+  leaseId: string,
   env: RuntimeEnv,
   database: OpenEngageDatabase,
 ): Promise<void> {
@@ -111,20 +112,23 @@ export async function createEmailDelivery(
     ...rendered,
     html,
   };
-  const created = await repository.insertQueuedDelivery({
-    id: deliveryId,
-    workspaceId: job.workspaceId,
-    contactId: job.contactId,
-    enrollmentId: job.enrollmentId,
-    channel: "email",
-    purpose: "transactional",
-    provider: "cloudflare",
-    recipient: job.contactEmail,
-    topicId: action.topicId ?? null,
-    templateId: template.id,
-    idempotencyKey: payload.idempotencyKey,
-    payload: JSON.stringify(payload),
-  });
+  const created = await repository.insertQueuedDelivery(
+    {
+      id: deliveryId,
+      workspaceId: job.workspaceId,
+      contactId: job.contactId,
+      enrollmentId: job.enrollmentId,
+      channel: "email",
+      purpose: "transactional",
+      provider: "cloudflare",
+      recipient: job.contactEmail,
+      topicId: action.topicId ?? null,
+      templateId: template.id,
+      idempotencyKey: payload.idempotencyKey,
+      payload: JSON.stringify(payload),
+    },
+    { jobId: job.id, workspaceId: job.workspaceId, leaseId },
+  );
   if (created) {
     await env.DELIVERY_QUEUE.send({ kind: "delivery", deliveryId });
   }
@@ -133,6 +137,7 @@ export async function createEmailDelivery(
 export async function createWebhookDelivery(
   endpointId: string,
   job: AutomationJobRow,
+  leaseId: string,
   env: RuntimeEnv,
   database: OpenEngageDatabase,
 ): Promise<void> {
@@ -150,18 +155,21 @@ export async function createWebhookDelivery(
       enrollmentId: job.enrollmentId,
     },
   };
-  const created = await repository.insertQueuedDelivery({
-    id: deliveryId,
-    workspaceId: job.workspaceId,
-    contactId: job.contactId,
-    enrollmentId: job.enrollmentId,
-    channel: "webhook",
-    purpose: "transactional",
-    provider: "webhook",
-    recipient: endpoint.url,
-    idempotencyKey: payload.idempotencyKey,
-    payload: JSON.stringify({ ...payload, endpointId }),
-  });
+  const created = await repository.insertQueuedDelivery(
+    {
+      id: deliveryId,
+      workspaceId: job.workspaceId,
+      contactId: job.contactId,
+      enrollmentId: job.enrollmentId,
+      channel: "webhook",
+      purpose: "transactional",
+      provider: "webhook",
+      recipient: endpoint.url,
+      idempotencyKey: payload.idempotencyKey,
+      payload: JSON.stringify({ ...payload, endpointId }),
+    },
+    { jobId: job.id, workspaceId: job.workspaceId, leaseId },
+  );
   if (created) {
     await env.DELIVERY_QUEUE.send({ kind: "delivery", deliveryId });
   }

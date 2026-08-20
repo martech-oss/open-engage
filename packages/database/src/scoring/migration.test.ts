@@ -21,6 +21,60 @@ const migrationFiles = [
   "0009_chemical_loki.sql",
 ] as const;
 
+const compositeWorkspaceForeignKeyCases = [
+  {
+    shape: "contact_events(workspace_id, contact_id)",
+    insert: `INSERT INTO contact_events
+      (id, workspace_id, contact_id, type, properties, occurred_at, created_at)
+      VALUES ('blocked-event', 'workspace-a', 'contact-b', 'page_viewed', '{}',
+              '2026-01-01', '2026-01-01')`,
+  },
+  {
+    shape: "contact_tags(workspace_id, contact_id)",
+    insert: `INSERT INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
+      VALUES ('workspace-a', 'contact-b', 'tag-a', '2026-01-01')`,
+  },
+  {
+    shape: "contact_tags(workspace_id, tag_id)",
+    insert: `INSERT INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
+      VALUES ('workspace-a', 'contact-a', 'tag-b', '2026-01-01')`,
+  },
+  {
+    shape: "score_events(workspace_id, contact_id)",
+    insert: `INSERT INTO score_events
+      (id, workspace_id, contact_id, delta, reason, created_at)
+      VALUES ('blocked-score', 'workspace-a', 'contact-b', 1, 'test', '2026-01-01')`,
+  },
+  {
+    shape: "contact_category_scores(workspace_id, contact_id)",
+    insert: `INSERT INTO contact_category_scores
+      (workspace_id, contact_id, category_id, score, updated_at)
+      VALUES ('workspace-a', 'contact-b', 'category-a', 1, '2026-01-01')`,
+  },
+  {
+    shape: "contact_category_scores(workspace_id, category_id)",
+    insert: `INSERT INTO contact_category_scores
+      (workspace_id, contact_id, category_id, score, updated_at)
+      VALUES ('workspace-a', 'contact-a', 'category-b', 1, '2026-01-01')`,
+  },
+  {
+    shape: "scoring_rules(workspace_id, category_id)",
+    insert: `INSERT INTO scoring_rules
+      (id, workspace_id, name, event_type, match_type, points, category_id,
+       enabled, created_at, updated_at)
+      VALUES ('blocked-category-rule', 'workspace-a', 'Blocked category', 'page_viewed',
+              'any', 1, 'category-b', 1, '2026-01-01', '2026-01-01')`,
+  },
+  {
+    shape: "scoring_rules(workspace_id, tag_id)",
+    insert: `INSERT INTO scoring_rules
+      (id, workspace_id, name, event_type, match_type, points, tag_id,
+       enabled, created_at, updated_at)
+      VALUES ('blocked-tag-rule', 'workspace-a', 'Blocked tag', 'page_viewed',
+              'any', 1, 'tag-b', 1, '2026-01-01', '2026-01-01')`,
+  },
+] as const;
+
 describe("tenant-safe scoring migration 0009", () => {
   let database: DatabaseSync | undefined;
 
@@ -111,6 +165,27 @@ describe("tenant-safe scoring migration 0009", () => {
         .get(),
     ).toEqual({ contactId: null });
   });
+
+  it.each(compositeWorkspaceForeignKeyCases)(
+    "rejects cross-workspace values for $shape",
+    ({ insert }) => {
+      database = new DatabaseSync(":memory:");
+      database.exec("PRAGMA foreign_keys = ON");
+      applyMigrations(database, migrationFiles.slice(0, 9));
+      seedLegacyFixture(database);
+      applyMigrations(database, migrationFiles.slice(9));
+      database.exec(`
+        INSERT INTO tags (id, workspace_id, name, slug, created_at)
+        VALUES ('tag-a', 'workspace-a', 'Tag A', 'tag-a', '2026-01-01');
+        INSERT INTO scoring_categories
+          (id, workspace_id, name, slug, created_at, updated_at)
+        VALUES ('category-a', 'workspace-a', 'Category A', 'category-a',
+                '2026-01-01', '2026-01-01');
+      `);
+
+      expect(() => database!.exec(insert)).toThrow(/FOREIGN KEY constraint failed/);
+    },
+  );
 });
 
 function applyMigrations(database: DatabaseSync, files: readonly string[]): void {

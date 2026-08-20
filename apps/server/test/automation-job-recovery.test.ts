@@ -3,6 +3,13 @@ import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationNode } from "@openengage/core/automations";
+import {
+  AutomationActionRepository,
+  AutomationJobRecoveryRepository,
+  createDatabase,
+  MessagingWorkerRepository,
+  uuidv7,
+} from "@openengage/database/testing";
 
 import { processAutomationJob } from "../src/automations/worker";
 import { persistDeadLetter } from "../src/platform/maintenance-worker";
@@ -16,7 +23,10 @@ import {
   seedAutomationJob,
 } from "./automation-recovery-test-support";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("automation job recovery", () => {
   it.each(["leased", "running"] as const)(
@@ -221,4 +231,167 @@ describe("automation job recovery", () => {
       .first<{ score: number; scoreEvents: number }>();
     expect(effect).toEqual({ score: 7, scoreEvents: 1 });
   });
+
+  it("blocks a paused fifth-start worker from applying change_score after recovery fails it", async () => {
+    const action: AutomationNode = {
+      id: "stale-score",
+      type: "action",
+      position: { x: 0, y: 0 },
+      config: { action: "change_score", amount: 5 },
+    };
+    const seeded = await seedAutomationJob({
+      status: "leased",
+      attempts: 4,
+      leaseId: "stale-action-lease",
+      leaseUntil: "2000-01-01T00:00:00.000Z",
+      nodeId: action.id,
+      graph: graph([action]),
+    });
+    const originalRepository = new AutomationActionRepository(createDatabase(env.DB));
+    const originalAdjust = originalRepository.adjustContactScoreForJob.bind(originalRepository);
+    let releaseAction!: () => void;
+    let announceAction!: () => void;
+    const actionReleased = new Promise<void>((resolve) => {
+      releaseAction = resolve;
+    });
+    const actionObserved = new Promise<void>((resolve) => {
+      announceAction = resolve;
+    });
+    vi.spyOn(AutomationActionRepository.prototype, "adjustContactScoreForJob").mockImplementation(
+      async (...args) => {
+        announceAction();
+        await actionReleased;
+        return originalAdjust(...args);
+      },
+    );
+    const reconciliationMessages: unknown[] = [];
+    const processing = processAutomationJob(
+      seeded.jobId,
+      "stale-action-lease",
+      runtimeWithJobsQueue(
+        queueStub(async (messages) => {
+          reconciliationMessages.push(...[...messages].map((message) => message.body));
+        }),
+      ),
+    );
+
+    await actionObserved;
+    await new AutomationJobRecoveryRepository(createDatabase(env.DB)).recoverExpiredJobs(
+      "2026-08-20T05:30:00.000Z",
+    );
+    releaseAction();
+    await processing;
+
+    await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "failed", "failed");
+    const effects = await env.DB.prepare(
+      `SELECT c.score,
+              (SELECT COUNT(*) FROM score_events se
+               WHERE se.contact_id = c.id) AS scoreEvents,
+              (SELECT COUNT(*) FROM automation_action_effects aae
+               WHERE aae.job_id = ?) AS actionEffects,
+              (SELECT COUNT(*) FROM deliveries d
+               WHERE d.enrollment_id = ?) AS deliveries
+       FROM contacts c WHERE c.id = ?`,
+    )
+      .bind(seeded.jobId, seeded.enrollmentId, seeded.contactId)
+      .first<{
+        score: number;
+        scoreEvents: number;
+        actionEffects: number;
+        deliveries: number;
+      }>();
+    expect.soft(effects).toEqual({ score: 0, scoreEvents: 0, actionEffects: 0, deliveries: 0 });
+    expect.soft(reconciliationMessages).toEqual([]);
+  });
+
+  it("blocks a paused fifth-start worker from creating a webhook delivery after recovery fails it", async () => {
+    const endpointId = uuidv7();
+    const action: AutomationNode = {
+      id: "stale-webhook",
+      type: "action",
+      position: { x: 0, y: 0 },
+      config: { action: "send_webhook", endpointId },
+    };
+    const seeded = await seedAutomationJob({
+      status: "leased",
+      attempts: 4,
+      leaseId: "stale-delivery-lease",
+      leaseUntil: "2000-01-01T00:00:00.000Z",
+      nodeId: action.id,
+      graph: graph([action]),
+    });
+    await env.DB.prepare(
+      `INSERT INTO webhook_endpoints
+         (id, workspace_id, name, url, encrypted_secret, enabled, created_at, updated_at)
+       VALUES (?, ?, 'Stale endpoint', 'https://example.com/hook', 'unused', 1,
+               '2026-08-20T05:40:00.000Z', '2026-08-20T05:40:00.000Z')`,
+    )
+      .bind(endpointId, seeded.workspaceId)
+      .run();
+
+    const originalRepository = new MessagingWorkerRepository(createDatabase(env.DB));
+    const originalInsert = originalRepository.insertQueuedDelivery.bind(originalRepository);
+    let releaseInsert!: () => void;
+    let announceInsert!: () => void;
+    const insertReleased = new Promise<void>((resolve) => {
+      releaseInsert = resolve;
+    });
+    const insertObserved = new Promise<void>((resolve) => {
+      announceInsert = resolve;
+    });
+    vi.spyOn(MessagingWorkerRepository.prototype, "insertQueuedDelivery").mockImplementation(
+      async (...args) => {
+        announceInsert();
+        await insertReleased;
+        return originalInsert(...args);
+      },
+    );
+    const jobMessages: unknown[] = [];
+    const deliveryMessages: unknown[] = [];
+    const jobsQueue = recordingQueue(jobMessages);
+    const deliveryQueue = recordingQueue(deliveryMessages);
+    const processing = processAutomationJob(
+      seeded.jobId,
+      "stale-delivery-lease",
+      runtimeWithQueues(jobsQueue, deliveryQueue),
+    );
+
+    await insertObserved;
+    await new AutomationJobRecoveryRepository(createDatabase(env.DB)).recoverExpiredJobs(
+      "2026-08-20T05:45:00.000Z",
+    );
+    releaseInsert();
+    await processing;
+
+    await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "failed", "failed");
+    const deliveries = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM deliveries WHERE enrollment_id = ?",
+    )
+      .bind(seeded.enrollmentId)
+      .first<{ count: number }>();
+    expect.soft(deliveries).toEqual({ count: 0 });
+    expect.soft(deliveryMessages).toEqual([]);
+    expect.soft(jobMessages).toEqual([]);
+  });
 });
+
+function recordingQueue(messages: unknown[]): Queue {
+  return {
+    send: async (body: unknown) => {
+      messages.push(body);
+    },
+    sendBatch: async (batch: Iterable<MessageSendRequest<unknown>>) => {
+      messages.push(...[...batch].map((message) => message.body));
+    },
+  } as unknown as Queue;
+}
+
+function runtimeWithQueues(jobsQueue: Queue, deliveryQueue: Queue) {
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "JOBS_QUEUE") return jobsQueue;
+      if (property === "DELIVERY_QUEUE") return deliveryQueue;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}

@@ -4,7 +4,14 @@ import { contacts, contactTags, tags } from "../contacts/schema";
 import { segmentMemberships } from "../segments/schema";
 import { changedExactlyOne } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
-import { AUTOMATION_CONTACT_COLUMNS, type AutomationContactColumn } from "./engine-support";
+import { runningActionLeaseExists } from "./action-authority";
+import {
+  AUTOMATION_CONTACT_COLUMNS,
+  type AutomationContactColumn,
+  type AutomationJobRow,
+} from "./engine-support";
+
+type ContactActionJob = Pick<AutomationJobRow, "id" | "workspaceId" | "contactId">;
 
 export class AutomationContactActionRepository extends DatabaseRepository {
   /** Condition nodes: does the contact carry a tag with this slug? */
@@ -31,32 +38,42 @@ export class AutomationContactActionRepository extends DatabaseRepository {
 
   /** add_tag action: links the tag, keeping an existing link as-is. */
   public async addContactTag(
-    workspaceId: string,
-    contactId: string,
+    job: ContactActionJob,
+    leaseId: string,
     tagId: string,
     now: string,
   ): Promise<void> {
     await this.database.orm
       .insert(contactTags)
-      .values({ workspaceId, contactId, tagId, createdAt: now })
+      .select(
+        sql`SELECT ${job.workspaceId}, ${job.contactId}, ${tagId}, ${now}
+            WHERE ${runningActionLeaseExists(this.database, {
+              jobId: job.id,
+              workspaceId: job.workspaceId,
+              leaseId,
+            })}`,
+      )
       .onConflictDoNothing();
   }
 
   /** remove_tag action: unlinks the tag. */
   public async removeContactTag(
-    workspaceId: string,
-    contactId: string,
+    job: ContactActionJob,
+    leaseId: string,
     tagId: string,
   ): Promise<void> {
-    await this.database.orm
-      .delete(contactTags)
-      .where(
-        and(
-          eq(contactTags.workspaceId, workspaceId),
-          eq(contactTags.contactId, contactId),
-          eq(contactTags.tagId, tagId),
-        ),
-      );
+    await this.database.orm.delete(contactTags).where(
+      and(
+        eq(contactTags.workspaceId, job.workspaceId),
+        eq(contactTags.contactId, job.contactId),
+        eq(contactTags.tagId, tagId),
+        runningActionLeaseExists(this.database, {
+          jobId: job.id,
+          workspaceId: job.workspaceId,
+          leaseId,
+        }),
+      ),
+    );
   }
 
   /**
@@ -65,39 +82,49 @@ export class AutomationContactActionRepository extends DatabaseRepository {
    * on a fresh membership.
    */
   public async addAutomationSegmentMembership(
-    workspaceId: string,
+    job: ContactActionJob,
+    leaseId: string,
     segmentId: string,
-    contactId: string,
     now: string,
   ): Promise<boolean> {
     const result = await this.database.orm
       .insert(segmentMemberships)
-      .values({ workspaceId, segmentId, contactId, source: "automation", joinedAt: now })
+      .select(
+        sql`SELECT ${job.workspaceId}, ${segmentId}, ${job.contactId}, 'automation', ${now}
+            WHERE ${runningActionLeaseExists(this.database, {
+              jobId: job.id,
+              workspaceId: job.workspaceId,
+              leaseId,
+            })}`,
+      )
       .onConflictDoNothing();
     return changedExactlyOne(result);
   }
 
   /** remove_segment action: removes the membership regardless of its source. */
   public async removeSegmentMembership(
-    workspaceId: string,
+    job: ContactActionJob,
+    leaseId: string,
     segmentId: string,
-    contactId: string,
   ): Promise<void> {
-    await this.database.orm
-      .delete(segmentMemberships)
-      .where(
-        and(
-          eq(segmentMemberships.workspaceId, workspaceId),
-          eq(segmentMemberships.segmentId, segmentId),
-          eq(segmentMemberships.contactId, contactId),
-        ),
-      );
+    await this.database.orm.delete(segmentMemberships).where(
+      and(
+        eq(segmentMemberships.workspaceId, job.workspaceId),
+        eq(segmentMemberships.segmentId, segmentId),
+        eq(segmentMemberships.contactId, job.contactId),
+        runningActionLeaseExists(this.database, {
+          jobId: job.id,
+          workspaceId: job.workspaceId,
+          leaseId,
+        }),
+      ),
+    );
   }
 
   /** update_field action targeting one of the known contact columns. */
   public async updateContactColumn(
-    workspaceId: string,
-    contactId: string,
+    job: ContactActionJob,
+    leaseId: string,
     column: AutomationContactColumn,
     value: string,
     now: string,
@@ -114,19 +141,39 @@ export class AutomationContactActionRepository extends DatabaseRepository {
     await this.database.orm
       .update(contacts)
       .set(assignments)
-      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)));
+      .where(
+        and(
+          eq(contacts.workspaceId, job.workspaceId),
+          eq(contacts.id, job.contactId),
+          runningActionLeaseExists(this.database, {
+            jobId: job.id,
+            workspaceId: job.workspaceId,
+            leaseId,
+          }),
+        ),
+      );
   }
 
   /** update_field action targeting a custom field: stores the merged JSON. */
   public async replaceContactCustomFields(
-    workspaceId: string,
-    contactId: string,
+    job: ContactActionJob,
+    leaseId: string,
     customFields: string,
     now: string,
   ): Promise<void> {
     await this.database.orm
       .update(contacts)
       .set({ customFields, updatedAt: now })
-      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)));
+      .where(
+        and(
+          eq(contacts.workspaceId, job.workspaceId),
+          eq(contacts.id, job.contactId),
+          runningActionLeaseExists(this.database, {
+            jobId: job.id,
+            workspaceId: job.workspaceId,
+            leaseId,
+          }),
+        ),
+      );
   }
 }
