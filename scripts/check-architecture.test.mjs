@@ -891,6 +891,49 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "domain barrel",
     },
     {
+      name: "rejects Object.assign exposing raw schema through a local source alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class Surface { constructor() { const source = { schema: exposed }; Object.assign(this, source); } }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "rejects Object.assign exposing raw schema through a spread source alias",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class Surface { constructor() { const source = { schema: exposed }; Object.assign(this, { ...source }); } }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
+      name: "allows Object.assign when a source alias safely overwrites its raw property",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class Surface { constructor() { const raw = { schema: exposed }; const source = { ...raw, schema: {} }; Object.assign(this, source); } }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+    },
+    {
+      name: "rejects Object.assign when a later source alias overwrites a safe property with raw schema",
+      files: {
+        "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',
+        "packages/database/src/assets/bridge.ts":
+          'import { assets as exposed } from "./schema";\n' +
+          "export class Surface { constructor() { const safe = { schema: {} }; const raw = { schema: exposed }; Object.assign(this, safe, raw); } }\n",
+        "packages/database/src/assets/schema.ts": "export const assets = {};\n",
+      },
+      want: "domain barrel",
+    },
+    {
       name: "allows a safe static overwrite after a raw class alias assignment",
       files: {
         "packages/database/src/assets/index.ts": 'export * from "./bridge";\n',

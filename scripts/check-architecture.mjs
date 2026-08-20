@@ -855,8 +855,8 @@ function createLexicalModel(sourceFile) {
     return classesForExpression(receiver);
   }
 
-  function recordClassAssignment(owner, member, node, mutation, targetName) {
-    let write = assignmentWriteKind(mutation.operatorToken?.kind) ?? "replace";
+  function recordClassAssignment(owner, member, node, mutation, targetName, writeOverride) {
+    let write = writeOverride ?? assignmentWriteKind(mutation.operatorToken?.kind) ?? "replace";
     if (write === "replace" && mutationIsConditional(mutation)) write = "merge";
     const records = classAssignments.get(owner) ?? [];
     records.push({
@@ -904,8 +904,12 @@ function createLexicalModel(sourceFile) {
     const receiver = call.arguments[0];
     for (const owner of classesForReceiver(receiver)) {
       for (const source of call.arguments.slice(1)) {
-        for (const { member, node } of objectMutationEntries(source)) {
-          recordClassAssignment(owner, member, node, call);
+        for (const { member, node, write } of objectMutationEntries(
+          source,
+          call,
+          resolveIdentifier,
+        )) {
+          recordClassAssignment(owner, member, node, call, undefined, write);
         }
       }
     }
@@ -1090,8 +1094,22 @@ function assignmentPatternLeaves(name) {
   return leaves;
 }
 
-function objectMutationEntries(expression) {
+function objectMutationEntries(expression, reference, resolveIdentifier, seenBindings = new Set()) {
   const node = unwrapTransparentExpression(expression);
+  if (isIdentifier(node)) {
+    const binding = resolveIdentifier(node);
+    if (!binding || seenBindings.has(binding)) return [];
+    const nestedSeen = new Set(seenBindings);
+    nestedSeen.add(binding);
+    return effectiveLocalObjectDefinitions(binding, reference).flatMap((definition) =>
+      objectMutationEntries(definition.node, reference, resolveIdentifier, nestedSeen).map(
+        (entry) => ({
+          ...entry,
+          write: definition.write === "merge" ? "merge" : entry.write,
+        }),
+      ),
+    );
+  }
   if (!isObjectLiteralExpression(node)) return [];
   const entries = [];
   for (const property of node.properties) {
@@ -1101,10 +1119,48 @@ function objectMutationEntries(expression) {
     } else if (isShorthandPropertyAssignment(property)) {
       entries.push({ member: property.name.text, node: property.name });
     } else if (isSpreadAssignment(property)) {
-      entries.push(...objectMutationEntries(property.expression));
+      entries.push(
+        ...objectMutationEntries(property.expression, reference, resolveIdentifier, seenBindings),
+      );
     }
   }
   return entries;
+}
+
+// Deliberate boundary: Object.assign analysis expands only local bindings that resolve to
+// object literals. Custom helpers, computed sources, and arbitrary receivers stay outside this
+// rule. Mutating a source object's field after its literal initialization is also not modeled,
+// so a later safe field overwrite can remain conservatively tainted.
+function effectiveLocalObjectDefinitions(binding, reference) {
+  const referenceCallable = enclosingCallable(reference);
+  const referencePosition = reference.pos;
+  const moduleDefinitions = [];
+  const callableDefinitions = [];
+  for (const definition of binding.definitions) {
+    if (definition.kind !== "expression") continue;
+    const definitionPosition = definition.position ?? Number.NEGATIVE_INFINITY;
+    if (definition.ownerCallable === undefined) {
+      if (referenceCallable || definitionPosition <= referencePosition) {
+        moduleDefinitions.push(definition);
+      }
+    } else if (
+      definition.ownerCallable === referenceCallable &&
+      definitionPosition <= referencePosition
+    ) {
+      callableDefinitions.push(definition);
+    }
+  }
+  let effective = [];
+  const byPosition = (left, right) =>
+    (left.position ?? Number.NEGATIVE_INFINITY) - (right.position ?? Number.NEGATIVE_INFINITY);
+  for (const definition of [
+    ...moduleDefinitions.sort(byPosition),
+    ...callableDefinitions.sort(byPosition),
+  ]) {
+    if (definition.write === "replace") effective = [definition];
+    else effective.push(definition);
+  }
+  return effective;
 }
 
 function collectThrownExpressions(node) {
