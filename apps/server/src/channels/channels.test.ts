@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { OutboundWebhookAdapter, assertSafeWebhookUrl, hmacHex } from "./index";
+import { hmacHex } from "../platform/signatures";
+import { OutboundWebhookAdapter, assertSafeWebhookUrl } from "./index";
 
 describe("channel policy", () => {
   it("blocks private webhook targets", () => {

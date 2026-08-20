@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
 import { contacts } from "../contacts/schema";
@@ -169,6 +177,8 @@ export const automationJobs = sqliteTable(
     dueAt: text("due_at").notNull(),
     leaseId: text("lease_id"),
     leaseUntil: text("lease_until"),
+    waitEventType: text("wait_event_type"),
+    waitResourceId: text("wait_resource_id"),
     attempts: integer().default(0).notNull(),
     lastError: text("last_error"),
     createdAt: text("created_at").notNull(),
@@ -185,6 +195,13 @@ export const automationJobs = sqliteTable(
     // AutomationEngineRepository.workspacesWithDueJobs), so a global
     // (status, due_at, lease_until) index is the correct shape here.
     index("automation_jobs_due_claim_idx").on(table.status, table.dueAt, table.leaseUntil),
+    index("automation_jobs_wait_event_idx").on(
+      table.status,
+      table.workspaceId,
+      table.contactId,
+      table.waitEventType,
+      table.waitResourceId,
+    ),
     uniqueIndex("automation_jobs_workspace_idempotency_unique").on(
       table.workspaceId,
       table.idempotencyKey,
@@ -192,6 +209,29 @@ export const automationJobs = sqliteTable(
     check(
       "automation_jobs_status_check",
       sql`${table.status} IN ('pending', 'leased', 'queued', 'running', 'succeeded', 'failed', 'cancelled')`,
+    ),
+  ],
+);
+
+/** Commit marker for non-idempotent automation action effects. */
+export const automationActionEffects = sqliteTable(
+  "automation_action_effects",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => automationJobs.id, { onDelete: "cascade" }),
+    nodeId: text("node_id").notNull(),
+    effect: text().notNull(),
+    completedAt: text("completed_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.nodeId, table.effect] }),
+    index("automation_action_effects_workspace_completed_idx").on(
+      table.workspaceId,
+      table.completedAt,
     ),
   ],
 );

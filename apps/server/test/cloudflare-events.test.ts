@@ -1,7 +1,12 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { ContactRepository, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
+import {
+  ContactRepository,
+  DeliveryRecoveryRepository,
+  MessagingWorkerRepository,
+  uuidv7,
+} from "@openengage/database/testing";
 
 import type { RuntimeEnv } from "../src/env";
 import { processCloudflareEmailEvent } from "../src/messaging/cloudflare-events";
@@ -18,6 +23,7 @@ describe("Cloudflare Email Sending events", () => {
       role: "owner",
     });
     const repository = new MessagingWorkerRepository(env.DB);
+    const recovery = new DeliveryRecoveryRepository(env.DB);
 
     for (const kind of kinds) {
       const contact = await contacts.createContact({
@@ -36,13 +42,24 @@ describe("Cloudflare Email Sending events", () => {
         provider: "cloudflare",
         recipient: contact.email,
         idempotencyKey: `event-${kind}`,
-        payload: "{}",
+        payload: JSON.stringify({
+          kind: "email",
+          idempotencyKey: `event-${kind}`,
+          workspaceId,
+          deliveryId,
+          purpose: "transactional",
+          to: contact.email,
+          from: { email: "sender@example.com" },
+          subject: "Lifecycle fixture",
+          html: "<p>Fixture</p>",
+          text: "Fixture",
+        }),
       });
-      await repository.claimDelivery(deliveryId);
-      await repository.markDeliveryAccepted({
+      const claim = await recovery.claimDelivery(deliveryId);
+      expect(claim).not.toBeNull();
+      await recovery.markAccepted({
         deliveryId,
-        workspaceId,
-        provider: "cloudflare",
+        leaseId: claim?.leaseId ?? "missing-lease",
         providerMessageId,
         acceptedAt: "2026-08-05T00:00:00.000Z",
       });

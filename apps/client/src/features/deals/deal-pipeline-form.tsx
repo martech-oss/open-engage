@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldLabel,
   FieldLegend,
   FieldSet,
@@ -141,12 +142,16 @@ export function DealPipelineForm({
         <Checkbox
           id="pipeline-default"
           checked={isDefault}
+          disabled={pipeline?.isDefault ?? false}
           onCheckedChange={(checked) => setIsDefault(Boolean(checked))}
         />
         <FieldContent>
           <FieldLabel htmlFor="pipeline-default">
             <FieldTitle>デフォルトのパイプラインにする</FieldTitle>
           </FieldLabel>
+          {pipeline?.isDefault ? (
+            <FieldDescription>別のパイプラインをデフォルトにすると変更できます。</FieldDescription>
+          ) : null}
         </FieldContent>
       </Field>
       <FieldSet>

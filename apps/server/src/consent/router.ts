@@ -1,4 +1,4 @@
-import { ConsentRepository } from "@openengage/database";
+import { ConsentRepository } from "@openengage/database/consent";
 
 import { authed, requireRole } from "../orpc/base";
 

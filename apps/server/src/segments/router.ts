@@ -1,16 +1,17 @@
-import {
-  ProjectBriefLinkConflictError,
-  SegmentRepository,
-  writeAuditLog,
-} from "@openengage/database";
+import { writeAuditLog } from "@openengage/database/platform";
+import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
+import { SegmentRepository } from "@openengage/database/segments";
+import { isUniqueConstraintError } from "@openengage/database/shared";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { resolveApprovedProjectBriefContext } from "../web/project-brief-context";
+import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
 import { SegmentGenerationError, generateSegment } from "./generation-service";
 import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
 import { loadSegmentCatalog, validateSegmentFilter } from "./validation-service";
+
+const SEGMENT_SLUG_UNIQUE_COLUMNS = ["segments.workspace_id", "segments.slug"] as const;
 
 export const listSegmentsProcedure = authed.segments.list.handler(async ({ context, input }) => {
   return listSegments(context.database, context.workspace, input.kind);
@@ -70,7 +71,9 @@ export const createSegmentProcedure = authed.segments.create.handler(
       if (error instanceof ProjectBriefLinkConflictError) {
         throw errors.BRIEF_REVISION_CONFLICT();
       }
-      if (isSegmentSlugConflict(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isUniqueConstraintError(error, SEGMENT_SLUG_UNIQUE_COLUMNS)) {
+        throw errors.SEGMENT_CONFLICT({ cause: error });
+      }
       throw error;
     }
     if (input.kind === "dynamic") {
@@ -121,7 +124,9 @@ export const updateSegmentProcedure = authed.segments.update.handler(
         ...(filter ? { filter } : {}),
       });
     } catch (error) {
-      if (isSegmentSlugConflict(error)) throw errors.SEGMENT_CONFLICT({ cause: error });
+      if (isUniqueConstraintError(error, SEGMENT_SLUG_UNIQUE_COLUMNS)) {
+        throw errors.SEGMENT_CONFLICT({ cause: error });
+      }
       throw error;
     }
     if (!updated) throw errors.SEGMENT_NOT_FOUND();
@@ -230,9 +235,3 @@ export const segmentProcedures = {
   refresh: refreshSegmentProcedure,
   preview: previewSegmentProcedure,
 };
-
-/** Only the workspace/slug unique key is a user-facing name conflict. */
-function isSegmentSlugConflict(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unique constraint failed:\s*segments\.workspace_id,\s*segments\.slug/i.test(message);
-}

@@ -1,4 +1,7 @@
-import { EmailTrackingSettingsRepository, MessagingRepository } from "@openengage/database";
+import {
+  EmailTrackingSettingsRepository,
+  MessagingRepository,
+} from "@openengage/database/messaging";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";

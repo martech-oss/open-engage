@@ -1,0 +1,89 @@
+import { and, eq, ne, notExists, sql } from "drizzle-orm";
+
+import { contacts } from "../contacts/schema";
+import { scoreEvents } from "../scoring/schema";
+import { DatabaseRepository } from "../shared/repository-base";
+import { uuidv7 } from "../shared/uuid";
+import { runningActionLeaseExists } from "./action-authority";
+import type { AutomationJobRow } from "./engine-support";
+import { automationActionEffects, automationJobs } from "./schema";
+
+/** Atomic ledgers for automation actions whose effects are not naturally idempotent. */
+export class AutomationActionRepository extends DatabaseRepository {
+  public async adjustContactScoreForJob(
+    job: Pick<AutomationJobRow, "id" | "workspaceId" | "contactId" | "enrollmentId" | "nodeId">,
+    leaseId: string,
+    amount: number,
+    now: string,
+  ): Promise<void> {
+    const orm = this.database.orm;
+    const authority = runningActionLeaseExists(this.database, {
+      jobId: job.id,
+      workspaceId: job.workspaceId,
+      leaseId,
+    });
+    const unapplied = notExists(
+      orm
+        .select({ jobId: automationActionEffects.jobId })
+        .from(automationActionEffects)
+        .where(
+          and(
+            eq(automationActionEffects.jobId, job.id),
+            eq(automationActionEffects.nodeId, job.nodeId),
+            eq(automationActionEffects.effect, "change_score"),
+          ),
+        ),
+    );
+    await orm.batch([
+      orm
+        .update(contacts)
+        .set({ score: sql`${contacts.score} + ${amount}`, updatedAt: now })
+        .where(
+          and(
+            eq(contacts.workspaceId, job.workspaceId),
+            eq(contacts.id, job.contactId),
+            ne(contacts.status, "archived"),
+            unapplied,
+            authority,
+          ),
+        ),
+      orm.insert(scoreEvents).select(
+        sql`SELECT ${uuidv7()}, ${job.workspaceId}, ${job.contactId}, ${amount}, 'automation',
+                   ${job.enrollmentId}, NULL, NULL, ${now}
+            WHERE ${unapplied} AND ${authority}
+              AND EXISTS (
+                SELECT 1 FROM ${contacts}
+                WHERE ${contacts.workspaceId} = ${job.workspaceId}
+                  AND ${contacts.id} = ${job.contactId}
+                  AND ${contacts.status} != 'archived'
+              )`,
+      ),
+      orm
+        .insert(automationActionEffects)
+        .select(
+          sql`SELECT ${job.workspaceId}, ${job.id}, ${job.nodeId}, 'change_score', ${now}
+              WHERE ${unapplied} AND ${authority}`,
+        )
+        .onConflictDoNothing(),
+    ]);
+  }
+
+  public async hasRunningLease(
+    job: Pick<AutomationJobRow, "id" | "workspaceId">,
+    leaseId: string,
+  ): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: automationJobs.id })
+      .from(automationJobs)
+      .where(
+        and(
+          eq(automationJobs.id, job.id),
+          eq(automationJobs.workspaceId, job.workspaceId),
+          eq(automationJobs.status, "running"),
+          eq(automationJobs.leaseId, leaseId),
+        ),
+      )
+      .get();
+    return row !== undefined;
+  }
+}

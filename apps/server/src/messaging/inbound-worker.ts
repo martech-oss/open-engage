@@ -1,12 +1,13 @@
 import PostalMime from "postal-mime";
 
-import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
+import { createDatabase } from "@openengage/database/client";
+import { MessagingWorkerRepository } from "@openengage/database/messaging";
+import { uuidv7 } from "@openengage/database/shared";
 
-import { enrollAutomationsForEvent } from "../automations/enrollment";
+import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { RuntimeEnv } from "../env";
-import { verifySignedToken } from "../platform/crypto";
+import { sha256Hex, verifySignedToken } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";
-import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
 const maximumInboundSize = 5 * 1024 * 1024;
 
@@ -68,6 +69,12 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
   }
   const eventId = uuidv7();
   const contactEventId = uuidv7();
+  const providerEventId = await inboundReplyProviderEventId({
+    deliveryId: delivery.id,
+    envelopeSender: message.from,
+    rawMessageId: parsed.messageId ?? null,
+    fallbackId: inboundId,
+  });
   await repository.recordInboundReply({
     workspaceId: payload.workspaceId,
     contactId: payload.contactId,
@@ -83,20 +90,32 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
       attachmentManifest: JSON.stringify(attachments),
     },
     deliveryEventId: eventId,
-    providerEventId: parsed.messageId ?? `reply:${inboundId}`,
+    providerEventId,
     deliveryEventMetadata: JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
     contactEventId,
     contactEventProperties: JSON.stringify({ inboundId }),
     receivedAt,
   });
-  await enrollAutomationsForEvent(database, {
-    id: contactEventId,
-    workspaceId: payload.workspaceId,
-    contactId: payload.contactId,
-    type: "email_replied",
-    resourceId: delivery.id,
-  });
-  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, payload.workspaceId, [
-    payload.contactId,
+  await processPendingPublicFormEvent(database, contactEventId, env.JOBS_QUEUE);
+}
+
+async function inboundReplyProviderEventId(input: {
+  deliveryId: string;
+  envelopeSender: string;
+  rawMessageId: string | null;
+  fallbackId: string;
+}): Promise<string> {
+  const messageId = input.rawMessageId?.trim();
+  if (!messageId) {
+    // Without a provider identity there is no stable dedupe key. Retain the
+    // safe per-receipt behavior so unrelated Message-ID-less mail never folds.
+    return `inbound-reply:v1:missing:${input.fallbackId}`;
+  }
+  const identity = JSON.stringify([
+    "inbound-reply:v1",
+    input.deliveryId,
+    input.envelopeSender.trim().toLowerCase(),
+    messageId,
   ]);
+  return `inbound-reply:v1:${await sha256Hex(identity)}`;
 }

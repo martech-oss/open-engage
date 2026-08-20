@@ -26,6 +26,13 @@ describe("company enrichment URL safety", () => {
     "https://192.168.1.1/path",
     "https://user:password@example.com/",
     "https://[::1]/",
+    "https://[fc00::1]/",
+    "https://[fd12:3456:789a::1]/",
+    "https://[fe80::1]/",
+    "https://0177.0.0.1/",
+    "https://0x7f.0.0.1/",
+    "https://2130706433/",
+    "https://%31%32%37.0.0.1/",
   ])("blocks unsafe URL %s", (url) => {
     expect(() => assertSafePublicHttpsUrl(url)).toThrow();
   });
@@ -34,6 +41,36 @@ describe("company enrichment URL safety", () => {
     expect(assertSafePublicHttpsUrl("https://example.com/about").href).toBe(
       "https://example.com/about",
     );
+  });
+
+  it.each([
+    "https://[::ffff:127.0.0.1]/",
+    "https://[::ffff:7f00:1]/",
+    "https://[0:0:0:0:0:ffff:0a00:0001]/",
+    "https://[::ffff:172.16.0.1]/",
+    "https://[::ffff:192.168.0.1]/",
+    "https://[::ffff:169.254.1.1]/",
+    "https://[::ffff:100.64.0.1]/",
+    "https://[::ffff:198.18.0.1]/",
+    "https://[::ffff:224.0.0.1]/",
+    "https://[::ffff:0.0.0.0]/",
+  ])("blocks an IPv4-mapped private or local address %s", (url) => {
+    expect(() => assertSafePublicHttpsUrl(url)).toThrow("Private or local hostname");
+  });
+
+  it.each([
+    ["public hostname", "https://example.com/"],
+    ["public IPv4", "https://8.8.8.8/"],
+    ["public IPv6", "https://[2001:4860:4860::8888]/"],
+    ["public IPv4-mapped IPv6", "https://[::ffff:8.8.8.8]/"],
+    ["public 192.0.1.1 IPv4", "https://192.0.1.1/"],
+    ["public 192.0.1.1 IPv4-mapped IPv6", "https://[::ffff:192.0.1.1]/"],
+    ["globally reachable PCP anycast IPv4", "https://192.0.0.9/"],
+    ["globally reachable PCP anycast IPv4-mapped IPv6", "https://[::ffff:192.0.0.9]/"],
+    ["globally reachable TURN anycast IPv4", "https://192.0.0.10/"],
+    ["globally reachable TURN anycast IPv4-mapped IPv6", "https://[::ffff:192.0.0.10]/"],
+  ])("accepts a %s control", (_kind, url) => {
+    expect(assertSafePublicHttpsUrl(url).href).toBe(new URL(url).href);
   });
 });
 
@@ -125,6 +162,46 @@ describe("HTML inspection", () => {
 
     expect(result.browserUsed).toBe(true);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("prefers rendered content over a sparse static copy of the same page", async () => {
+    const page = {
+      route: vi.fn<InspectionPage["route"]>().mockResolvedValue(undefined),
+      goto: vi.fn<InspectionPage["goto"]>().mockResolvedValue(null),
+      url: vi.fn<InspectionPage["url"]>().mockReturnValue("https://example.com/"),
+      evaluate: vi.fn<InspectionPage["evaluate"]>().mockResolvedValue({
+        title: "Rendered Example",
+        description: "Rendered description",
+        text: "Rendered company information ".repeat(60),
+        links: [],
+        jsonLd: [],
+        imageCandidates: [],
+      }),
+    } satisfies InspectionPage;
+    const browser = {
+      newPage: vi.fn<InspectionBrowser["newPage"]>().mockResolvedValue(page),
+      close: vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined),
+    } satisfies InspectionBrowser;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("<html><title>Static Example</title><body>Too sparse</body></html>", {
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    const result = await inspectWebsite(
+      "https://example.com/",
+      browserBinding,
+      fetcher,
+      undefined,
+      vi.fn<BrowserLauncher>().mockResolvedValue(browser),
+    );
+
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0]).toMatchObject({
+      mode: "browser",
+      title: "Rendered Example",
+      description: "Rendered description",
+    });
   });
 
   it("closes Playwright when rendering fails", async () => {

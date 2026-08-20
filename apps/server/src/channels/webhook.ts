@@ -1,8 +1,9 @@
 import type { DeliveryEvent } from "@openengage/core/shared";
 
+import { hmacHex, timingSafeEqual } from "../platform/signatures";
 import { isRecord } from "../platform/values";
 import { PermanentChannelError, TransientChannelError } from "./errors";
-import { hmacHex, isStaleTimestamp, timingSafeEqual } from "./signatures";
+import { isStaleTimestamp } from "./signatures";
 import type {
   ChannelAdapter,
   ChannelHealth,

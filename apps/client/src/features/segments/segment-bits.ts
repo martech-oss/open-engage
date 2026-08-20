@@ -1,9 +1,5 @@
 import type { SegmentDefinition, SegmentRow } from "@openengage/core/segments";
 
-export function audienceGroupPath(kind: SegmentRow["kind"]): "/lists" | "/segments" {
-  return kind === "static" ? "/lists" : "/segments";
-}
-
 export function audienceGroupLabel(kind: SegmentRow["kind"]): string {
   return kind === "static" ? "リスト" : "セグメント";
 }

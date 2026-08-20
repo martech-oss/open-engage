@@ -113,6 +113,7 @@ function SheetDescription({ className, ...props }: SheetPrimitive.Description.Pr
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   Sheet,
   SheetTrigger,

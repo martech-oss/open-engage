@@ -1,11 +1,115 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@openengage/database";
+import { uuidv7 } from "@openengage/database/testing";
 
 import { seedMember, seedWorkspaceClient } from "./factory";
 
 describe("Deals CRM", () => {
+  it("rejects direct default demotion but allows a previous default false no-op", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const original = (await client.deals.options()).pipelines[0]!;
+
+    await expect(
+      client.deals.updatePipeline({ id: original.id, isDefault: false }),
+    ).rejects.toMatchObject({ code: "DEFAULT_DEAL_PIPELINE_REQUIRED", status: 409 });
+
+    const replacement = await client.deals.createPipeline({ name: "Replacement" });
+    await client.deals.updatePipeline({ id: replacement.id, isDefault: true });
+    await expect(
+      client.deals.updatePipeline({ id: original.id, isDefault: false }),
+    ).resolves.toMatchObject({ id: original.id, isDefault: false });
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM deal_pipelines WHERE workspace_id = ? AND archived_at IS NULL AND is_default = 1",
+      )
+        .bind(workspaceId)
+        .first<{ count: number }>(),
+    ).toEqual({ count: 1 });
+  });
+
+  it("makes a first custom pipeline default and repairs a raw zero-default workspace", async () => {
+    const first = await seedWorkspaceClient(env.DB);
+    const custom = await first.client.deals.createPipeline({ name: "First custom pipeline" });
+    expect(custom.isDefault).toBe(true);
+
+    const second = await first.client.deals.createPipeline({ name: "Second pipeline" });
+    const sameTime = "2026-01-01T00:00:00.000Z";
+    await env.DB.prepare(
+      "UPDATE deal_pipelines SET is_default = 0, created_at = ? WHERE workspace_id = ? AND archived_at IS NULL",
+    )
+      .bind(sameTime, first.workspaceId)
+      .run();
+    const expectedDefault = [custom.id, second.id].sort((left, right) =>
+      left.localeCompare(right),
+    )[0];
+
+    const repaired = await first.client.deals.options();
+    expect(
+      repaired.pipelines.filter((pipeline) => pipeline.isDefault).map((pipeline) => pipeline.id),
+    ).toEqual([expectedDefault]);
+  });
+
+  it("serializes concurrent promotions and chooses an id-stable archive fallback", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const original = (await client.deals.options()).pipelines[0]!;
+    const first = await client.deals.createPipeline({ name: "First candidate" });
+    const second = await client.deals.createPipeline({ name: "Second candidate" });
+
+    const promotions = await Promise.allSettled([
+      client.deals.updatePipeline({ id: first.id, isDefault: true }),
+      client.deals.updatePipeline({ id: second.id, isDefault: true }),
+    ]);
+    expect(promotions.every((result) => result.status === "fulfilled")).toBe(true);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM deal_pipelines WHERE workspace_id = ? AND archived_at IS NULL AND is_default = 1",
+      )
+        .bind(workspaceId)
+        .first<{ count: number }>(),
+    ).toEqual({ count: 1 });
+
+    await client.deals.updatePipeline({ id: original.id, isDefault: true });
+    await env.DB.prepare(
+      "UPDATE deal_pipelines SET created_at = ? WHERE workspace_id = ? AND id IN (?, ?)",
+    )
+      .bind("2026-01-01T00:00:00.000Z", workspaceId, first.id, second.id)
+      .run();
+    await client.deals.archivePipeline({ id: original.id });
+    const expectedFallback = [first.id, second.id].sort((left, right) =>
+      left.localeCompare(right),
+    )[0];
+    expect(
+      (await client.deals.options()).pipelines.find((pipeline) => pipeline.isDefault)?.id,
+    ).toBe(expectedFallback);
+  });
+
+  it("keeps the remaining pipeline as the sole default when the default and a candidate archive concurrently", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const defaultPipeline = (await client.deals.options()).pipelines[0]!;
+    const candidate = await client.deals.createPipeline({ name: "Concurrent candidate" });
+    const remaining = await client.deals.createPipeline({ name: "Concurrent remaining" });
+
+    const archives = await Promise.allSettled([
+      client.deals.archivePipeline({ id: defaultPipeline.id }),
+      client.deals.archivePipeline({ id: candidate.id }),
+    ]);
+    expect(archives).toEqual([
+      expect.objectContaining({ status: "fulfilled" }),
+      expect.objectContaining({ status: "fulfilled" }),
+    ]);
+
+    const active = await env.DB.prepare(
+      `SELECT id, is_default AS isDefault
+       FROM deal_pipelines
+       WHERE workspace_id = ? AND archived_at IS NULL
+       ORDER BY id`,
+    )
+      .bind(workspaceId)
+      .all<{ id: string; isDefault: number }>();
+    expect(active.results).toEqual([{ id: remaining.id, isDefault: 1 }]);
+  });
+
   it("manages a deal through its pipeline and task lifecycle", async () => {
     const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
       timezone: "Asia/Tokyo",

@@ -42,4 +42,5 @@ function Toggle({
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export { Toggle, toggleVariants };

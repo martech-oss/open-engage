@@ -8,18 +8,18 @@ import {
 import { emailDocumentV2Schema } from "@openengage/core/messaging";
 
 import { emailTemplates } from "../messaging/schema";
-import { isConstraintError, nowIso } from "../shared/database-utils";
-import { defineJsonCodec } from "../shared/json-codec";
-import { WorkspaceRepository } from "../shared/repository-base";
-import { uuidv7 } from "../shared/uuid";
-import { conditionalAudit, uniqueOperationIso } from "../web/project-brief-persistence";
+import { conditionalAudit, uniqueOperationIso } from "../projects/project-brief-persistence";
 import {
   authenticatedProjectActorId,
   approvedProjectLinkPrecondition,
   ProjectBriefLinkConflictError,
   type ApprovedProjectLink,
-} from "../web/project-resource-guard";
-import { projectBriefs, projectItems } from "../web/schema";
+} from "../projects/project-resource-guard";
+import { projectBriefs, projectItems } from "../projects/schema";
+import { isConstraintError, nowIso } from "../shared/database-utils";
+import { defineJsonCodec } from "../shared/json-codec";
+import { WorkspaceRepository } from "../shared/repository-base";
+import { uuidv7 } from "../shared/uuid";
 import { automations, automationVersions } from "./schema";
 
 const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
@@ -450,7 +450,7 @@ function sequenceResources(proposal: EmailSequenceProposal) {
   return [
     { resourceType: "automation" as const, resourceId: proposal.automationId },
     ...proposal.emails.map((email) => ({
-      resourceType: "email" as const,
+      resourceType: "email_sequence" as const,
       resourceId: email.templateId,
     })),
   ];

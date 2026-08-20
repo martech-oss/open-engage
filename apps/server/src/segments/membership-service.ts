@@ -1,9 +1,6 @@
 import { compileSegmentFilter } from "@openengage/core/segments";
-import {
-  SegmentMaintenanceRepository,
-  SegmentRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { SegmentMaintenanceRepository, SegmentRepository } from "@openengage/database/segments";
 
 /** These helpers are called from flows that only carry a workspace id (bulk contact actions, membership refreshes). */
 function segmentRepository(database: OpenEngageDatabase, workspaceId: string): SegmentRepository {

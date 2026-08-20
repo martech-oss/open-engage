@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { contactEvents, contacts, createDatabase } from "@openengage/database";
+import { contactEvents, contacts, createDatabase } from "@openengage/database/testing";
 import { contract } from "@openengage/orpc";
 
 import { enrollInactiveContacts } from "../src/automations/enrollment";

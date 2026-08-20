@@ -4,16 +4,17 @@ import {
   SCORING_EVENT_TYPES,
   type ScoringEventType,
 } from "@openengage/core/scoring";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   ScoringEngineRepository,
   type GradingContactRow,
-  type OpenEngageDatabase,
   type ScoringRuleMatch,
-} from "@openengage/database";
+} from "@openengage/database/scoring";
 
 import { isRecord, primitiveString } from "../platform/values";
 
 export interface ScoringEventInput {
+  id: string;
   workspaceId: string;
   contactId: string;
   type: string;
@@ -44,19 +45,10 @@ export async function applyScoringForEvent(
   if (matched.length === 0) return { total: 0, tagIds: [] };
 
   let total = 0;
-  const categoryTotals = new Map<string, number>();
   const tagIds = new Set<string>();
-  const events: { ruleId: string; delta: number }[] = [];
   for (const rule of matched) {
     if (rule.points !== 0) {
       total += rule.points;
-      events.push({ ruleId: rule.id, delta: rule.points });
-      if (rule.categoryId) {
-        categoryTotals.set(
-          rule.categoryId,
-          (categoryTotals.get(rule.categoryId) ?? 0) + rule.points,
-        );
-      }
     }
     if (rule.tagId) tagIds.add(rule.tagId);
   }
@@ -64,10 +56,13 @@ export async function applyScoringForEvent(
   await repository.applyScore({
     workspaceId: input.workspaceId,
     contactId: input.contactId,
-    total,
-    categoryTotals,
-    tagIds: [...tagIds],
-    events,
+    contactEventId: input.id,
+    effects: matched.map((rule) => ({
+      ruleId: rule.id,
+      delta: rule.points,
+      categoryId: rule.categoryId,
+      tagId: rule.tagId,
+    })),
     now: new Date().toISOString(),
   });
   return { total, tagIds: [...tagIds] };
@@ -114,21 +109,26 @@ export async function recomputeContactGrade(
   contactId: string,
 ): Promise<number | null> {
   const repository = new ScoringEngineRepository(database);
-  const [criteria, contact] = await Promise.all([
+  const [criteria, initialContact] = await Promise.all([
     repository.listEnabledCriteria(workspaceId),
     repository.readGradingContact(workspaceId, contactId),
   ]);
-  if (!contact) return null;
-  const points = clampGradePoints(
-    criteria.reduce(
-      (total, criterion) =>
-        matchesCriterion(criterion, contact) ? total + criterion.steps : total,
-      0,
-    ),
-  );
-  if (points === contact.gradePoints) return points;
-  await repository.setGradePoints(workspaceId, contactId, points);
-  return points;
+  let contact = initialContact;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (!contact) return null;
+    const snapshot = contact;
+    const points = clampGradePoints(
+      criteria.reduce(
+        (total, criterion) =>
+          matchesCriterion(criterion, snapshot) ? total + criterion.steps : total,
+        0,
+      ),
+    );
+    if (points === snapshot.gradePoints) return points;
+    if (await repository.setGradePoints(workspaceId, contactId, snapshot, points)) return points;
+    contact = await repository.readGradingContact(workspaceId, contactId);
+  }
+  throw new Error("Contact changed repeatedly while recomputing its grade");
 }
 
 function matchesCriterion(criterion: GradingCriterion, contact: GradingContactRow): boolean {

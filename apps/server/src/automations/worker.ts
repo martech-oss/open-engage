@@ -5,12 +5,14 @@ import {
   type AutomationNode,
 } from "@openengage/core/automations";
 import {
+  AutomationActionRepository,
   AutomationEngineRepository,
-  createDatabase,
+  AutomationJobRecoveryRepository,
+  AUTOMATION_MAX_STARTS,
   type AutomationContactColumn,
   type AutomationJobRow,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+} from "@openengage/database/automations";
+import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
 
 import { PermanentChannelError } from "../channels";
 import { recordContactEvent } from "../contacts/event-service";
@@ -26,33 +28,48 @@ export async function processAutomationJob(
 ): Promise<void> {
   const database = createDatabase(env.DB);
   const engine = new AutomationEngineRepository(database);
+  const recovery = new AutomationJobRecoveryRepository(database);
   const job = await engine.findJobForProcessing(jobId, leaseId);
   if (!job) return;
   const started = await engine.startLeasedJob(jobId, leaseId, new Date().toISOString());
-  if (!started && job.status !== "running") return;
+  if (!started && job.status !== "running") {
+    if (job.attempts >= AUTOMATION_MAX_STARTS) {
+      await recovery.failJobAndEnrollmentForLease(
+        job.id,
+        leaseId,
+        "Automation attempts exhausted",
+        new Date().toISOString(),
+      );
+    }
+    return;
+  }
 
   try {
     const definition = job.graph;
     const node = definition.nodes.find((candidate) => candidate.id === job.nodeId);
     if (!node) throw new PermanentChannelError(`Automation node ${job.nodeId} is missing`);
-    const result = await executeNode(node, definition, job, env, database, engine);
+    const result = await executeNode(node, definition, job, leaseId, env, database, engine);
     if (result.waitUntil) {
       await engine.parkJobUntil(job.id, leaseId, {
         dueAt: result.waitUntil,
         payload: JSON.stringify({ waiting: true }),
         now: new Date().toISOString(),
+        waitEventType: result.waitEventType ?? null,
+        waitResourceId: result.waitResourceId ?? null,
+        waitStartedAt: result.waitStartedAt ?? null,
       });
       return;
     }
     await finishNode(job, leaseId, definition, result.branch, engine);
   } catch (error) {
-    await engine.releaseJobForRetry(
+    const failure = await recovery.recordJobFailure(
       job.id,
       leaseId,
       error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000),
       new Date().toISOString(),
+      error instanceof PermanentChannelError,
     );
-    throw error;
+    if (failure === "retry" || error instanceof PermanentChannelError) throw error;
   }
 }
 
@@ -60,10 +77,17 @@ export async function executeNode(
   node: AutomationNode,
   definition: AutomationDefinition,
   job: AutomationJobRow,
+  leaseId: string,
   env: RuntimeEnv,
   database: OpenEngageDatabase,
   engine: AutomationEngineRepository,
-): Promise<{ branch?: AutomationEdge["branch"]; waitUntil?: string }> {
+): Promise<{
+  branch?: AutomationEdge["branch"];
+  waitUntil?: string;
+  waitEventType?: string;
+  waitResourceId?: string | null;
+  waitStartedAt?: string;
+}> {
   if (node.type === "source") return { branch: "next" };
   if (node.type === "delay") {
     return {
@@ -87,40 +111,42 @@ export async function executeNode(
       job.workspaceId,
       job.contactId,
       eventType,
-      job.enteredAt,
+      job.createdAt,
       node.config.resourceId ?? null,
     );
     if (found) return { branch: "yes" };
-    if (job.payload["waiting"] === true) return { branch: "timeout" };
+    const deadline = new Date(
+      new Date(job.createdAt).getTime() + node.config.withinMinutes * 60_000,
+    );
+    if (job.payload["waiting"] === true || Date.now() >= deadline.getTime()) {
+      return { branch: "timeout" };
+    }
     return {
-      waitUntil: new Date(Date.now() + node.config.withinMinutes * 60_000).toISOString(),
+      waitUntil: deadline.toISOString(),
+      waitEventType: eventType,
+      waitResourceId: node.config.resourceId ?? null,
+      waitStartedAt: job.createdAt,
     };
   }
 
   const action = node.config;
   const now = new Date().toISOString();
+  const actionRepository = new AutomationActionRepository(database);
   switch (action.action) {
     case "send_email":
-      await createEmailDelivery(action, job, env, database);
+      await createEmailDelivery(action, job, leaseId, env, database);
       break;
     case "send_webhook":
-      await createWebhookDelivery(action.endpointId, job, env, database);
+      await createWebhookDelivery(action.endpointId, job, leaseId, env, database);
       break;
     case "add_tag":
-      await engine.addContactTag(job.workspaceId, job.contactId, action.tagId, now);
+      await engine.addContactTag(job, leaseId, action.tagId, now);
       break;
     case "remove_tag":
-      await engine.removeContactTag(job.workspaceId, job.contactId, action.tagId);
+      await engine.removeContactTag(job, leaseId, action.tagId);
       break;
     case "add_segment":
-      if (
-        await engine.addAutomationSegmentMembership(
-          job.workspaceId,
-          action.segmentId,
-          job.contactId,
-          now,
-        )
-      ) {
+      if (await engine.addAutomationSegmentMembership(job, leaseId, action.segmentId, now)) {
         await recordContactEvent(database, {
           workspaceId: job.workspaceId,
           contactId: job.contactId,
@@ -132,22 +158,18 @@ export async function executeNode(
       }
       break;
     case "remove_segment":
-      await engine.removeSegmentMembership(job.workspaceId, action.segmentId, job.contactId);
+      await engine.removeSegmentMembership(job, leaseId, action.segmentId);
       break;
     case "change_score":
-      await engine.adjustContactScoreForEnrollment(
-        job.workspaceId,
-        job.contactId,
-        job.enrollmentId,
-        action.amount,
-        now,
-      );
+      await actionRepository.adjustContactScoreForJob(job, leaseId, action.amount, now);
       break;
     case "update_field":
-      await updateContactField(job, action.field, action.value, engine);
+      await updateContactField(job, leaseId, action.field, action.value, engine);
       break;
   }
-  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, job.workspaceId, [job.contactId]);
+  if (await actionRepository.hasRunningLease(job, leaseId)) {
+    await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, job.workspaceId, [job.contactId]);
+  }
   return { branch: "next" };
 }
 
@@ -214,6 +236,7 @@ export function compare(left: unknown, operator: string, right: unknown): boolea
 
 export async function updateContactField(
   job: AutomationJobRow,
+  leaseId: string,
   field: string,
   value: unknown,
   engine: AutomationEngineRepository,
@@ -228,8 +251,8 @@ export async function updateContactField(
   const column = columns[field];
   if (column) {
     await engine.updateContactColumn(
-      job.workspaceId,
-      job.contactId,
+      job,
+      leaseId,
       column,
       primitiveString(value),
       new Date().toISOString(),
@@ -242,8 +265,8 @@ export async function updateContactField(
   const fields = { ...job.customFields };
   fields[field] = value;
   await engine.replaceContactCustomFields(
-    job.workspaceId,
-    job.contactId,
+    job,
+    leaseId,
     JSON.stringify(fields),
     new Date().toISOString(),
   );

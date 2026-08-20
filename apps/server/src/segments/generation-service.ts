@@ -8,7 +8,7 @@ import {
   type SegmentResourceRequest,
 } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import type { OpenEngageDatabase } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database/client";
 
 import { loadMarketingAgentContext } from "../agents/marketing-context";
 import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@openengage/database";
+import { uuidv7 } from "@openengage/database/testing";
 
 import { seedWorkspaceClient } from "./factory";
 

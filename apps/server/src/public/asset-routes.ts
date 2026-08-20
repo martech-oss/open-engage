@@ -1,10 +1,10 @@
 import type { Hono } from "hono";
 
-import { PublicAssetRepository } from "@openengage/database";
+import { PublicAssetRepository } from "@openengage/database/assets";
 
+import { serveAssetObject } from "../assets/response";
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
-import { serveAssetObject } from "./asset-response";
 
 /** Only `?v=<checksum prefix>` earns the year-long cache; bare URLs revalidate often. */
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";

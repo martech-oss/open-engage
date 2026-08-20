@@ -1,0 +1,2 @@
+CREATE INDEX `contact_event_outbox_pending_due_idx` ON `contact_event_outbox` (`next_attempt_at`,`created_at`) WHERE "contact_event_outbox"."status" = 'pending';--> statement-breakpoint
+CREATE INDEX `contact_event_outbox_processing_lease_idx` ON `contact_event_outbox` (`lease_expires_at`) WHERE "contact_event_outbox"."status" = 'processing';

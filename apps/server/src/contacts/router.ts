@@ -1,5 +1,5 @@
-import { writeAuditLog } from "@openengage/database";
-import { ContactRepository } from "@openengage/database";
+import { ContactRepository } from "@openengage/database/contacts";
+import { writeAuditLog } from "@openengage/database/platform";
 import { ack, CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";

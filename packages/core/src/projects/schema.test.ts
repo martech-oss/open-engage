@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_MARKETING_CAPABILITY_SNAPSHOT,
+  PROJECT_RESOURCE_TYPES,
   PROJECT_BRIEF_TRANSITIONS,
   approvedMarketingBriefContextSchema,
   canProjectBriefTransition,
@@ -109,6 +110,17 @@ describe("marketingAutomationBriefDefinitionSchema", () => {
 });
 
 describe("project brief compatibility and workflow schemas", () => {
+  it("defines every supported resource type from one exhaustive tuple", () => {
+    expect(PROJECT_RESOURCE_TYPES).toEqual([
+      "automation",
+      "email_sequence",
+      "segment",
+      "form",
+      "landing_page",
+      "redirect",
+    ]);
+  });
+
   it("requires different owner and approver members", () => {
     const input = {
       name: "Activation",
@@ -237,7 +249,7 @@ describe("project brief compatibility and workflow schemas", () => {
   it("keeps unavailable linked resources visible with an explicit availability", () => {
     expect(
       projectLinkedResourceSchema.parse({
-        resourceType: "email",
+        resourceType: "email_sequence",
         resourceId: "deleted-template",
         name: "deleted-template",
         status: null,

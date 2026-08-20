@@ -100,6 +100,11 @@ async function provision(
 ): Promise<void> {
   const projectName = slugify(basename(projectDirectory));
   const resources = cloudflareResourceNames(projectName);
+  const turnstileSiteKey = await text({
+    message: "Turnstile site key (optional)",
+    placeholder: "0x4AAAA...",
+  });
+  if (isCancel(turnstileSiteKey)) return abort();
   await execa("pnpm", ["--filter", "@openengage/server", "exec", "wrangler", "whoami"], {
     cwd: projectDirectory,
   });
@@ -164,6 +169,7 @@ async function provision(
     databaseId,
     transactionalFromEmail: email.fromEmail,
     transactionalFromName: email.fromName,
+    turnstileSiteKey: String(turnstileSiteKey),
     server: await readFile(serverConfigPath, "utf8"),
     agent: await readFile(agentConfigPath, "utf8"),
     client: await readFile(clientConfigPath, "utf8"),

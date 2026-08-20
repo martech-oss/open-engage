@@ -1,13 +1,16 @@
 import type { Hono } from "hono";
-import * as z from "zod";
 
-import { PublicFormRepository, uuidv7 } from "@openengage/database";
+import { uuidv7 } from "@openengage/database/shared";
+import { PublicFormRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
-import { recordContactEvent } from "../contacts/event-service";
+import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
+import { logError } from "../observability";
 import { isRecord, primitiveString, stringOrNull } from "../platform/values";
-import { originAllowed, redactFormPayload } from "./domain";
+import { hasTurnstileConfiguration } from "../web/config";
+import { originAllowed, redactFormPayload } from "../web/domain";
+import { validatePublicFormBody } from "./form-validation";
 import { safeJson } from "./http";
 import { hashIp, verifyTurnstile } from "./shared";
 import { formEmbedScript, renderPublicForm } from "./templates";
@@ -36,6 +39,9 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       context.req.param("formSlug"),
     );
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env)) {
+      return apiError(context, 503, "turnstile_not_configured", "Turnstileが設定されていません");
+    }
     let style = "inline";
     if (
       ["inline", "floating-bar", "floating-box", "modal"].includes(String(form.definition["style"]))
@@ -64,6 +70,9 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       context.req.param("formSlug"),
     );
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env)) {
+      return apiError(context, 503, "turnstile_not_configured", "Turnstileが設定されていません");
+    }
     const domains = form.allowedDomains;
     const frameAncestors =
       domains.length > 0
@@ -74,9 +83,10 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
             `http://*.${domain}`,
           ])
         : ["https:", "http:"];
+    const turnstileSource = form.turnstileEnabled ? " https://challenges.cloudflare.com" : "";
     context.header(
       "Content-Security-Policy",
-      `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' ${frameAncestors.join(" ")}`,
+      `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSource}; connect-src 'self'${turnstileSource}; frame-src 'self'${turnstileSource}; frame-ancestors 'self' ${frameAncestors.join(" ")}`,
     );
     // `oe_v` is stamped by the embed script from the same localStorage key the
     // tracking beacon writes, so a returning visitor is recognised here.
@@ -88,7 +98,13 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         )
       : undefined;
     return context.html(
-      renderPublicForm(form.name, form.definition, context.req.url, answered ? { answered } : {}),
+      renderPublicForm(form.name, form.definition, context.req.url, {
+        ...(answered ? { answered } : {}),
+        ...(visitorId ? { visitorId } : {}),
+        ...(form.turnstileEnabled && context.env.TURNSTILE_SITE_KEY
+          ? { turnstileSiteKey: context.env.TURNSTILE_SITE_KEY }
+          : {}),
+      }),
     );
   });
 
@@ -100,6 +116,9 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       context.req.param("formSlug"),
     );
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env)) {
+      return apiError(context, 503, "turnstile_not_configured", "Turnstileが設定されていません");
+    }
     const allowedDomains = form.allowedDomains;
     const origin = context.req.header("origin");
     const requestHostname = new URL(context.req.url).hostname;
@@ -114,84 +133,83 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
     const body = await safeJson(context);
     if (!isRecord(body)) return apiError(context, 422, "invalid_payload", "入力が不正です");
     if (body["_website"]) return context.json({ data: { accepted: true } }, 202);
-    if (
-      form.turnstileEnabled &&
-      context.env.TURNSTILE_SECRET &&
-      !(await verifyTurnstile(
-        context.env.TURNSTILE_SECRET,
-        primitiveString(body["turnstileToken"]),
-        context.req.header("cf-connecting-ip"),
-      ))
-    ) {
-      return apiError(context, 422, "turnstile_failed", "Turnstile検証に失敗しました");
-    }
     const idempotencyKey =
       context.req.header("idempotency-key") ?? primitiveString(body["idempotencyKey"]);
     if (idempotencyKey.length < 8 || idempotencyKey.length > 191) {
       return apiError(context, 422, "idempotency_key_required", "Idempotency-Keyが必要です");
     }
-    const email = typeof body["email"] === "string" ? body["email"].trim().toLowerCase() : null;
+    if (
+      await repository.submissionExists({
+        workspaceId: form.workspaceId,
+        formId: form.id,
+        idempotencyKey,
+      })
+    ) {
+      return context.json({ data: { accepted: true, duplicate: true } }, 202);
+    }
+    const visitorId = primitiveString(body["oe_v"]);
+    const answered = visitorId
+      ? await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitorId)
+      : new Set<string>();
+    const validationIssues = validatePublicFormBody(form.definition, answered, body);
+    if (validationIssues.length > 0) {
+      return apiError(context, 422, "invalid_form_fields", "入力項目が不正です", {
+        fields: validationIssues,
+      });
+    }
+    if (
+      form.turnstileEnabled &&
+      !(await verifyTurnstile(
+        context.env.TURNSTILE_SECRET ?? "",
+        primitiveString(body["cf-turnstile-response"]) || primitiveString(body["turnstileToken"]),
+        context.req.header("cf-connecting-ip"),
+        { workspaceId: form.workspaceId, formId: form.id, publicKey: idempotencyKey },
+      ))
+    ) {
+      return apiError(context, 422, "turnstile_failed", "Turnstile検証に失敗しました");
+    }
+    const submittedEmail = body["email"];
+    if (typeof submittedEmail !== "string") {
+      return apiError(context, 422, "invalid_form_fields", "入力項目が不正です", {
+        fields: [{ field: "email", reason: "required" }],
+      });
+    }
+    const email = submittedEmail.trim().toLowerCase();
     const now = new Date().toISOString();
-    let contactId: string | null = null;
-    let contactCreated = false;
-    if (email && z.email().safeParse(email).success) {
-      const existingContactId = await repository.findContactIdByEmail(form.workspaceId, email);
-      contactId = existingContactId ?? uuidv7();
-      const contactFields = {
+    const contactCreatedEventId = uuidv7();
+    const formSubmittedEventId = uuidv7();
+    const outcome = await repository.persistSubmission({
+      workspaceId: form.workspaceId,
+      formId: form.id,
+      email,
+      idempotencyKey,
+      contactFields: {
         firstName: stringOrNull(body["firstName"]),
         lastName: stringOrNull(body["lastName"]),
         phone: stringOrNull(body["phone"]),
         customFields: readCustomFields(body),
-      };
-      if (existingContactId) {
-        await repository.updateContactFromFormSubmission(
-          form.workspaceId,
-          contactId,
-          contactFields,
-        );
-      } else {
-        contactCreated = true;
-        await repository.createContactFromFormSubmission(
-          form.workspaceId,
-          contactId,
-          email,
-          contactFields,
-        );
-      }
-    }
-    if (contactCreated && contactId) {
-      await recordContactEvent(database, {
-        workspaceId: form.workspaceId,
-        contactId,
-        type: "contact_created",
-        resourceType: "contact",
-        resourceId: contactId,
-        occurredAt: now,
-        queue: context.env.JOBS_QUEUE,
-      });
-    }
-    try {
-      await repository.insertFormSubmission({
-        workspaceId: form.workspaceId,
-        formId: form.id,
-        contactId,
-        idempotencyKey,
-        payload: redactFormPayload(body),
-        ipHash: await hashIp(context.req.header("cf-connecting-ip")),
-      });
-    } catch {
+      },
+      payload: redactFormPayload(body),
+      ipHash: await hashIp(context.req.header("cf-connecting-ip")),
+      occurredAt: now,
+      submissionId: uuidv7(),
+      contactCreatedEventId,
+      formSubmittedEventId,
+    });
+    if (outcome === "duplicate") {
       return context.json({ data: { accepted: true, duplicate: true } }, 202);
     }
-    await recordContactEvent(database, {
-      workspaceId: form.workspaceId,
-      contactId,
-      type: "form_submitted",
-      resourceType: "form",
-      resourceId: form.id,
-      properties: { formId: form.id },
-      occurredAt: now,
-      queue: context.env.JOBS_QUEUE,
-    });
+    for (const eventId of [contactCreatedEventId, formSubmittedEventId]) {
+      try {
+        await processPendingPublicFormEvent(database, eventId, context.env.JOBS_QUEUE);
+      } catch (error) {
+        logError("public_form.event_processing_failed", error, {
+          workspaceId: form.workspaceId,
+          formId: form.id,
+          eventId,
+        });
+      }
+    }
     return context.json({ data: { accepted: true, message: form.successMessage } }, 202);
   });
 }

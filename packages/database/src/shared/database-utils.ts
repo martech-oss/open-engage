@@ -13,10 +13,25 @@ export function likeContains(column: SQLWrapper, query: string): SQL {
   return sql`${column} LIKE ${`%${escapeLike(query)}%`} ESCAPE '\\'`;
 }
 
-/** D1 surfaces unique and foreign-key failures through constraint messages. */
+/** D1/Drizzle may wrap SQLite failures; only recognised SQLite constraints are conflicts. */
 export function isConstraintError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /constraint|unique|foreign key/i.test(message);
+  return /SQLITE_CONSTRAINT|(?:UNIQUE|FOREIGN KEY|CHECK|NOT NULL) constraint failed/i.test(
+    errorMessages(error).join("\n"),
+  );
+}
+
+/** Matches one exact SQLite UNIQUE column signature through D1/Drizzle cause wrappers. */
+export function isUniqueConstraintError(error: unknown, columns: readonly string[]): boolean {
+  const expected = columns.map(normalizeConstraintColumn);
+  return errorMessages(error).some((message) =>
+    [...message.matchAll(/UNIQUE constraint failed:\s*([^:\n]+)/gi)].some((match) => {
+      const actual = (match[1] ?? "").split(",").map(normalizeConstraintColumn);
+      return (
+        actual.length === expected.length &&
+        actual.every((column, index) => column === expected[index])
+      );
+    }),
+  );
 }
 
 /** The current instant as an ISO-8601 string, for `createdAt`/`updatedAt` columns. */
@@ -38,4 +53,23 @@ export function didChange(result: D1Result): boolean {
 export function ensureLoaded<T>(row: T | null | undefined, what: string): T {
   if (row === null || row === undefined) throw new Error(`${what} could not be loaded`);
   return row;
+}
+
+function errorMessages(error: unknown): string[] {
+  let current: unknown = error;
+  const messages: string[] = [];
+  for (let depth = 0; depth < 5 && current !== null && current !== undefined; depth += 1) {
+    if (current instanceof Error) messages.push(current.message);
+    else if (typeof current === "string") messages.push(current);
+    else messages.push(JSON.stringify(current) ?? "");
+    current =
+      typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  return messages;
+}
+
+function normalizeConstraintColumn(column: string): string {
+  return column.trim().toLowerCase();
 }

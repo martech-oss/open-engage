@@ -1,4 +1,5 @@
-import { AutomationRepository, type OpenEngageDatabase } from "@openengage/database";
+import { AutomationRepository } from "@openengage/database/automations";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 
 export interface AutomationAnalytics {
   enrollments: Array<{ status: string; count: number }>;

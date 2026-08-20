@@ -48,8 +48,6 @@ import { formatLongDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { type ContactProfile } from "@openengage/core/contacts";
 
-export type { ContactProfile };
-
 import { ContactAvatar, contactName, ContactStatusBadge, Section, StatCard } from "./contact-bits";
 import { CompanyEditor, RelationEditor, SegmentEditor } from "./contact-editors";
 

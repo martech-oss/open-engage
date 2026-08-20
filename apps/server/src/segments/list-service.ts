@@ -2,11 +2,8 @@ import type { Contact } from "@openengage/core/contacts";
 import { compileSegmentFilter } from "@openengage/core/segments";
 import type { SegmentFilter, SegmentRow } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  SegmentRepository,
-  type OpenEngageDatabase,
-  type SegmentRecord,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { SegmentRepository, type SegmentRecord } from "@openengage/database/segments";
 
 import {
   nullablePrimitiveString,

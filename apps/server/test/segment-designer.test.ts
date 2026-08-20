@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { createDatabase } from "@openengage/database";
+import { compileSegmentFilter } from "@openengage/core/segments";
+import { SegmentRepository, createDatabase } from "@openengage/database/testing";
 
 import { reconcileContactSegmentMemberships } from "../src/segments/membership-service";
 import { seedWorkspaceClient } from "./factory";
@@ -97,6 +98,55 @@ describe("segment designer support", () => {
     await client.contacts.adjustScore({ contactId: contact.id, delta: -60, reason: "reset" });
     await reconcileContactSegmentMemberships(database, workspaceId, contact.id);
     expect((await client.segments.get({ id: segment.id })).memberCount).toBe(0);
+  });
+
+  it("leaves memberships and evaluation state untouched for a stale filter version", async () => {
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB);
+    const contact = await client.contacts.create({
+      email: "stale-segment@example.com",
+      customFields: {},
+    });
+    const created = await client.segments.create({
+      name: "Original dynamic filter",
+      slug: "original-dynamic-filter",
+      kind: "dynamic",
+      filter: { kind: "condition", field: "email", operator: "contains", value: "no-match" },
+    });
+    const beforeUpdate = await client.segments.get({ id: created.id });
+    await client.segments.update({
+      id: created.id,
+      name: "Updated dynamic filter",
+      slug: "updated-dynamic-filter",
+      description: "",
+      kind: "dynamic",
+      filter: { kind: "condition", field: "email", operator: "contains", value: "still-no-match" },
+      membershipSource: null,
+    });
+    const beforeStaleRefresh = await client.segments.get({ id: created.id });
+
+    const repository = new SegmentRepository(env.DB, {
+      workspaceId,
+      userId,
+      role: "owner",
+    });
+    await repository.replaceDynamicMemberships(
+      created.id,
+      compileSegmentFilter(workspaceId, {
+        kind: "condition",
+        field: "email",
+        operator: "eq",
+        value: contact.email,
+      }),
+      beforeUpdate.filterVersion,
+    );
+
+    await expect(client.segments.get({ id: created.id })).resolves.toMatchObject({
+      filterVersion: beforeStaleRefresh.filterVersion,
+      memberCount: beforeStaleRefresh.memberCount,
+      evaluationStatus: beforeStaleRefresh.evaluationStatus,
+      evaluatedAt: beforeStaleRefresh.evaluatedAt,
+      updatedAt: beforeStaleRefresh.updatedAt,
+    });
   });
 
   it("filters the segment list by static and dynamic kinds", async () => {

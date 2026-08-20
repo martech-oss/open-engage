@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { ContactRepository, CustomRedirectRepository } from "@openengage/database";
+import { ContactRepository, CustomRedirectRepository } from "@openengage/database/testing";
 
 import { seedWorkspace } from "./factory";
 

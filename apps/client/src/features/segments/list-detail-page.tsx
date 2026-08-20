@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Pencil, Plus, UserMinus, Users } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -51,14 +51,11 @@ export function ListDetailPage({ listId }: { listId: string }): ReactNode {
   };
   const {
     cursor,
+    pageIndex,
     hasPreviousPage,
     goToNextPage: goToNextCursor,
     goToPreviousPage: goToPreviousCursor,
-  } = useCursorPagination(listId);
-  const [pageIndex, setPageIndex] = useState(0);
-  useEffect(() => {
-    setPageIndex(0);
-  }, [listId]);
+  } = useCursorPagination(`list:${listId}`);
   const membersQuery = useQuery(contactsQueryOptions(memberSearch, cursor));
   const members = membersQuery.data?.items ?? [];
   const total = membersQuery.data?.total ?? list.memberCount;
@@ -207,14 +204,8 @@ export function ListDetailPage({ listId }: { listId: string }): ReactNode {
             pagination={{
               hasNextPage: Boolean(nextCursor),
               hasPreviousPage,
-              onNext: () => {
-                goToNextCursor(nextCursor);
-                setPageIndex((index) => index + 1);
-              },
-              onPrevious: () => {
-                goToPreviousCursor();
-                setPageIndex((index) => Math.max(0, index - 1));
-              },
+              onNext: () => goToNextCursor(nextCursor),
+              onPrevious: goToPreviousCursor,
               rangeLabel: `${firstRow.toLocaleString()}–${lastRow.toLocaleString()} / ${total.toLocaleString()} 件`,
             }}
           />

@@ -1,8 +1,12 @@
+import { createDatabase } from "@openengage/database/client";
 import {
-  createDatabase,
+  ContactImportPartExecutionRepository,
+  ContactImportRecoveryRepository,
+  ContactImportReconciliationRepository,
   DataJobWorkerRepository,
+  type ContactImportReconciliation,
   type ContactImportRow,
-} from "@openengage/database";
+} from "@openengage/database/contacts";
 
 import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
@@ -15,15 +19,132 @@ export async function processContactImport(
   totalParts: number,
   env: RuntimeEnv,
 ): Promise<void> {
-  const repository = new DataJobWorkerRepository(createDatabase(env.DB));
-  const job = await repository.claimImportJob(jobId);
-  if (!job) return;
-  await repository.markProcessing(jobId);
-  const object = await env.ASSETS_BUCKET.get(`${job.r2Key}/part-${part}.ndjson`);
-  if (!object) throw new PermanentChannelError(`Import part ${part} is missing`);
-  const lines = (await object.text()).split("\n").filter(Boolean);
-  let succeeded = 0;
-  let failed = 0;
+  const database = createDatabase(env.DB);
+  const repository = new ContactImportRecoveryRepository(database);
+  const executionRepository = new ContactImportPartExecutionRepository(database);
+  const reconciliationRepository = new ContactImportReconciliationRepository(database);
+  const now = new Date().toISOString();
+  const claim = await repository.claimPart({
+    jobId,
+    part,
+    totalParts,
+    now,
+    leaseExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+  });
+  if (claim.kind !== "claimed") {
+    if (claim.kind === "manifest_mismatch") {
+      throw new PermanentChannelError("Import queue manifest does not match persisted part state");
+    }
+    return;
+  }
+
+  try {
+    let manifest = claim.candidates;
+    if (!manifest) {
+      const object = await env.ASSETS_BUCKET.get(`${claim.r2Key}/part-${part}.ndjson`);
+      if (!object) throw new PermanentChannelError(`Import part ${part} is missing`);
+      const lines = (await object.text()).split("\n").filter(Boolean);
+      manifest = await executionRepository.reserveCandidates({
+        jobId,
+        part,
+        leaseId: claim.leaseId,
+        now: new Date().toISOString(),
+        processed: lines.length,
+        rows: normalizeImportRows(lines),
+      });
+      if (!manifest) return;
+    }
+    await executionRepository.persistCandidateInsertPhase({
+      jobId,
+      part,
+      leaseId: claim.leaseId,
+      workspaceId: claim.workspaceId,
+      now: new Date().toISOString(),
+      candidates: manifest.candidates,
+    });
+    const completed = await executionRepository.completePersistedPartForLiveLease({
+      jobId,
+      part,
+      totalParts,
+      leaseId: claim.leaseId,
+      now: new Date().toISOString(),
+    });
+    if (completed) {
+      const reconciliation = await reconciliationRepository.readPending(jobId, part);
+      if (reconciliation) {
+        await publishContactImportReconciliation(
+          reconciliationRepository,
+          reconciliation,
+          env.JOBS_QUEUE,
+        );
+      }
+    }
+    if (completed && part + 1 < totalParts) {
+      await env.JOBS_QUEUE.send({
+        kind: "contact_import",
+        importJobId: jobId,
+        part: part + 1,
+        totalParts,
+      });
+    }
+  } catch (error) {
+    const completion = {
+      jobId,
+      part,
+      totalParts,
+      leaseId: claim.leaseId,
+      now: new Date().toISOString(),
+    };
+    const recovered =
+      (await executionRepository.completePersistedPartForLiveLease(completion)) ||
+      (await executionRepository.completePersistedPartForExpiredLease({
+        ...completion,
+        now: new Date().toISOString(),
+      }));
+    if (recovered) return;
+    const message = error instanceof Error ? error.message.slice(0, 2_000) : String(error);
+    if (error instanceof PermanentChannelError || claim.attempts >= 5) {
+      await repository.failPartForLease({
+        jobId,
+        part,
+        leaseId: claim.leaseId,
+        error: claim.attempts >= 5 ? "attempts_exhausted" : message,
+        now: new Date().toISOString(),
+      });
+      if (!(error instanceof PermanentChannelError)) {
+        throw new PermanentChannelError("Contact import attempts exhausted");
+      }
+    } else {
+      await repository.returnPartToPending({
+        jobId,
+        part,
+        leaseId: claim.leaseId,
+        error: message,
+        now: new Date().toISOString(),
+      });
+    }
+    throw error;
+  }
+}
+
+export async function publishContactImportReconciliation(
+  repository: ContactImportReconciliationRepository,
+  reconciliation: ContactImportReconciliation,
+  queue: Queue,
+): Promise<void> {
+  await enqueueSegmentContactReconciliation(
+    queue,
+    reconciliation.workspaceId,
+    reconciliation.contactIds,
+  );
+  await repository.markPublished(
+    reconciliation.jobId,
+    reconciliation.part,
+    new Date().toISOString(),
+  );
+}
+
+function normalizeImportRows(lines: readonly string[]): ContactImportRow[] {
   const rows: ContactImportRow[] = [];
   for (const line of lines) {
     try {
@@ -36,10 +157,7 @@ export async function processContactImport(
         typeof source["external_id"] === "string" && source["external_id"].trim()
           ? source["external_id"].trim()
           : null;
-      if (!email && !externalId) {
-        failed += 1;
-        continue;
-      }
+      if (!email && !externalId) continue;
       const customFields = { ...source };
       for (const key of ["email", "external_id", "first_name", "last_name", "phone", "stage"]) {
         delete customFields[key];
@@ -53,29 +171,11 @@ export async function processContactImport(
         stage: stringValue(source["stage"]) ?? "lead",
         customFields,
       });
-      succeeded += 1;
     } catch {
-      failed += 1;
+      // The manifest's processed count retains malformed rows as failures.
     }
   }
-  const contactIds = await repository.insertContacts(job.workspaceId, rows);
-  await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, job.workspaceId, contactIds);
-  const finished = part + 1 >= totalParts;
-  await repository.recordImportProgress(jobId, {
-    finished,
-    cursor: { part: part + 1, totalParts },
-    processed: lines.length,
-    succeeded,
-    failed,
-  });
-  if (!finished) {
-    await env.JOBS_QUEUE.send({
-      kind: "contact_import",
-      importJobId: jobId,
-      part: part + 1,
-      totalParts,
-    });
-  }
+  return rows;
 }
 
 export async function processContactExport(jobId: string, env: RuntimeEnv): Promise<void> {

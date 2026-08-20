@@ -10,7 +10,8 @@ import {
 } from "@openengage/core/automations";
 import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { type OpenEngageDatabase, uuidv7 } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { uuidv7 } from "@openengage/database/shared";
 
 import { loadMarketingAgentContext } from "../agents/marketing-context";
 import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";

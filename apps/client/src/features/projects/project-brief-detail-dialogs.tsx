@@ -14,6 +14,7 @@ import type {
   ProjectMemberOption,
   ProjectResourceType,
 } from "@openengage/core/projects";
+import { PROJECT_RESOURCE_TYPES } from "@openengage/core/projects";
 
 import { useGenerateProjectBrief } from "./project-brief-api";
 import { mutationFromDetail } from "./project-brief-detail-components";
@@ -236,11 +237,11 @@ export function LinkProjectResourceDialog({
             disabled={busy}
             onChange={(event) => setResourceType(event.target.value as ProjectResourceType)}
           >
-            <NativeSelectOption value="segment">Segment</NativeSelectOption>
-            <NativeSelectOption value="email">Email</NativeSelectOption>
-            <NativeSelectOption value="automation">Automation</NativeSelectOption>
-            <NativeSelectOption value="form">Form</NativeSelectOption>
-            <NativeSelectOption value="page">Page</NativeSelectOption>
+            {PROJECT_RESOURCE_TYPES.map((type) => (
+              <NativeSelectOption key={type} value={type}>
+                {PROJECT_RESOURCE_LABELS[type]}
+              </NativeSelectOption>
+            ))}
           </NativeSelect>
         </Field>
         <Field>
@@ -261,3 +262,12 @@ export function LinkProjectResourceDialog({
     </AppDialog>
   );
 }
+
+const PROJECT_RESOURCE_LABELS = {
+  automation: "Automation",
+  email_sequence: "Email sequence",
+  segment: "Segment",
+  form: "Form",
+  landing_page: "Landing page",
+  redirect: "Redirect",
+} satisfies Record<ProjectResourceType, string>;

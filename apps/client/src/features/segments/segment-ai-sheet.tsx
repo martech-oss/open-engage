@@ -58,13 +58,13 @@ export function SegmentAiSheet({
   const [applying, setApplying] = useState(false);
   const workflow = useAiProposalWorkflow({
     open,
-    workflowKey: createAiProposalWorkflowKey({
-      resource: "segment",
+    requestKey: createAiProposalWorkflowKey([
+      "segment",
       mode,
-      entityId,
-      projectId: briefReference.projectId,
-      briefRevision: briefReference.briefRevision,
-    }),
+      entityId ?? null,
+      briefReference.projectId ?? null,
+      briefReference.briefRevision ?? null,
+    ]),
     onReset: clearState,
   });
   const resourcesReady =
@@ -102,14 +102,14 @@ export function SegmentAiSheet({
               ...briefReference,
             },
       );
-      workflow.acceptResponse(token, () => {
+      workflow.acceptProposal(token, () => {
         setResult(next);
         setSelections({});
       });
     } catch (cause) {
-      if (workflow.isCurrentResponse(token)) {
+      workflow.acceptCurrent(token, () => {
         setError(getErrorMessage(cause, "AIによるセグメント提案を生成できませんでした"));
-      }
+      });
     }
   }
 

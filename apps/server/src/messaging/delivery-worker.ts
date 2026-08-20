@@ -1,16 +1,16 @@
 import type { AutomationNode } from "@openengage/core/automations";
 import { evaluateSendEligibility } from "@openengage/core/consent";
 import { retryDelaySeconds } from "@openengage/core/platform";
+import { type AutomationJobRow } from "@openengage/database/automations";
+import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
+import { ConsentRepository } from "@openengage/database/consent";
 import {
-  ConsentRepository,
-  createDatabase,
+  DeliveryRecoveryRepository,
   EmailTrackingEventRepository,
   MessagingWorkerRepository,
-  uuidv7,
-  type AutomationJobRow,
-  type DeliveryClaimRecord,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+  type DeliveryLeaseRecord,
+} from "@openengage/database/messaging";
+import { uuidv7 } from "@openengage/database/shared";
 
 import {
   OutboundWebhookAdapter,
@@ -31,13 +31,14 @@ import { decryptCredentials } from "../platform/crypto";
 import { renderSubject } from "../rendering/content-renderer";
 import { renderEmailDocument } from "../rendering/email-renderer";
 
-export type DeliveryRow = DeliveryClaimRecord;
+export type DeliveryRow = DeliveryLeaseRecord;
 
 export async function createEmailDelivery(
   action: Extract<AutomationNode, { type: "action" }>["config"] & {
     action: "send_email";
   },
   job: AutomationJobRow,
+  leaseId: string,
   env: RuntimeEnv,
   database: OpenEngageDatabase,
 ): Promise<void> {
@@ -111,20 +112,23 @@ export async function createEmailDelivery(
     ...rendered,
     html,
   };
-  const created = await repository.insertQueuedDelivery({
-    id: deliveryId,
-    workspaceId: job.workspaceId,
-    contactId: job.contactId,
-    enrollmentId: job.enrollmentId,
-    channel: "email",
-    purpose: "transactional",
-    provider: "cloudflare",
-    recipient: job.contactEmail,
-    topicId: action.topicId ?? null,
-    templateId: template.id,
-    idempotencyKey: payload.idempotencyKey,
-    payload: JSON.stringify(payload),
-  });
+  const created = await repository.insertQueuedDelivery(
+    {
+      id: deliveryId,
+      workspaceId: job.workspaceId,
+      contactId: job.contactId,
+      enrollmentId: job.enrollmentId,
+      channel: "email",
+      purpose: "transactional",
+      provider: "cloudflare",
+      recipient: job.contactEmail,
+      topicId: action.topicId ?? null,
+      templateId: template.id,
+      idempotencyKey: payload.idempotencyKey,
+      payload: JSON.stringify(payload),
+    },
+    { jobId: job.id, workspaceId: job.workspaceId, leaseId },
+  );
   if (created) {
     await env.DELIVERY_QUEUE.send({ kind: "delivery", deliveryId });
   }
@@ -133,6 +137,7 @@ export async function createEmailDelivery(
 export async function createWebhookDelivery(
   endpointId: string,
   job: AutomationJobRow,
+  leaseId: string,
   env: RuntimeEnv,
   database: OpenEngageDatabase,
 ): Promise<void> {
@@ -150,18 +155,21 @@ export async function createWebhookDelivery(
       enrollmentId: job.enrollmentId,
     },
   };
-  const created = await repository.insertQueuedDelivery({
-    id: deliveryId,
-    workspaceId: job.workspaceId,
-    contactId: job.contactId,
-    enrollmentId: job.enrollmentId,
-    channel: "webhook",
-    purpose: "transactional",
-    provider: "webhook",
-    recipient: endpoint.url,
-    idempotencyKey: payload.idempotencyKey,
-    payload: JSON.stringify({ ...payload, endpointId }),
-  });
+  const created = await repository.insertQueuedDelivery(
+    {
+      id: deliveryId,
+      workspaceId: job.workspaceId,
+      contactId: job.contactId,
+      enrollmentId: job.enrollmentId,
+      channel: "webhook",
+      purpose: "transactional",
+      provider: "webhook",
+      recipient: endpoint.url,
+      idempotencyKey: payload.idempotencyKey,
+      payload: JSON.stringify({ ...payload, endpointId }),
+    },
+    { jobId: job.id, workspaceId: job.workspaceId, leaseId },
+  );
   if (created) {
     await env.DELIVERY_QUEUE.send({ kind: "delivery", deliveryId });
   }
@@ -169,48 +177,49 @@ export async function createWebhookDelivery(
 
 export async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<void> {
   const database = createDatabase(env.DB);
-  const repository = new MessagingWorkerRepository(database);
-  const delivery = await repository.findDeliveryForProcessing(deliveryId);
-  if (!delivery || !["queued", "failed"].includes(delivery.status)) return;
+  const repository = new DeliveryRecoveryRepository(database);
+  const delivery = await repository.claimDelivery(deliveryId);
+  if (!delivery) return;
 
-  const claimed = await repository.claimDelivery(delivery.id);
-  if (!claimed) return;
-
+  let result: { providerMessageId: string; acceptedAt: string };
   try {
     if (delivery.contactId) {
       const gate = await readConsentGate(delivery, database);
       const decision = evaluateSendEligibility(delivery.purpose, gate);
       if (!decision.allowed) {
-        await repository.markDeliverySuppressed(delivery.id, decision.reason);
+        await repository.markSuppressed(delivery.id, delivery.leaseId, decision.reason);
         return;
       }
     }
     const endpointId =
       delivery.payload.kind === "webhook" ? delivery.payload.endpointId : undefined;
     const adapter = await deliveryAdapter(delivery, endpointId, env, database);
-    const result = await adapter.send(delivery.payload);
-    await repository.markDeliveryAccepted({
-      deliveryId: delivery.id,
-      workspaceId: delivery.workspaceId,
-      provider: delivery.provider,
-      providerMessageId: result.providerMessageId,
-      acceptedAt: result.acceptedAt,
-    });
+    result = await adapter.send(delivery.payload);
   } catch (error) {
     if (error instanceof RecipientSuppressedChannelError) {
-      await repository.markDeliveryProviderSuppressed(delivery.id);
+      await repository.markProviderSuppressed(delivery.id, delivery.leaseId);
       return;
     }
-    const permanent = error instanceof PermanentChannelError;
-    const delay = retryDelaySeconds(delivery.attempts + 1);
-    await repository.recordDeliveryAttemptFailure(delivery.id, {
-      status: permanent ? "failed" : "queued",
-      nextAttemptAt: permanent ? null : new Date(Date.now() + delay * 1000).toISOString(),
+    const terminal = error instanceof PermanentChannelError || delivery.attempts >= 5;
+    const delay = retryDelaySeconds(delivery.attempts);
+    await repository.recordFailure(delivery.id, delivery.leaseId, {
+      status: terminal ? "failed" : "queued",
+      nextAttemptAt: terminal ? null : new Date(Date.now() + delay * 1000).toISOString(),
       lastError:
         error instanceof Error ? error.message.slice(0, 2_000) : String(error).slice(0, 2_000),
     });
-    if (!permanent) throw new TransientChannelError("Delivery will be retried");
+    if (!terminal) throw new TransientChannelError("Delivery will be retried");
+    return;
   }
+  // This write intentionally sits outside the provider-error catch. Once a
+  // provider reports success, a database failure is ambiguous and must leave
+  // the delivery in `sending` for channel-specific stale recovery.
+  await repository.markAccepted({
+    deliveryId: delivery.id,
+    leaseId: delivery.leaseId,
+    providerMessageId: result.providerMessageId,
+    acceptedAt: result.acceptedAt,
+  });
 }
 
 export async function deliveryAdapter(

@@ -76,6 +76,10 @@ export const dealsContract = {
       ...base,
       DEAL_PIPELINE_NOT_FOUND: { status: 404, message: "パイプラインが見つかりません" },
       DEAL_PIPELINE_CONFLICT: { status: 409, message: "同名のパイプラインが既に存在します" },
+      DEFAULT_DEAL_PIPELINE_REQUIRED: {
+        status: 409,
+        message: "デフォルトのパイプラインは直接解除できません",
+      },
       DEAL_STAGE_IN_USE: {
         status: 409,
         message: "商談が残っているステージは削除できません",

@@ -1,7 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { AgentConversationRepository } from "@openengage/database";
+import { AgentConversationRepository } from "@openengage/database/testing";
 
 import { createSessionFixtureClient, seedMember, seedWorkspace } from "./factory";
 

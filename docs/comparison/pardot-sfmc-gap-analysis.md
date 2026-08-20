@@ -171,10 +171,10 @@ Flow ベースのキャンペーン、セグメント、Agentforce Campaigns、�
 | フォームでのカスタムフィールド収集         |   ✅   |  ✅  |     ✅     | `packages/core/src/web/schema.ts` `formFieldSchema`、`apps/server/src/public/templates.ts`                                          |
 | Progressive Profiling / 条件付きフィールド |   ✅   |  ✅  |     ⚠️     | `apps/server/src/public/templates.ts` `selectFields`。回答済み項目を出し分ける。条件付き表示（依存フィールド）は未対応              |
 | Bot 対策                                   |   ✅   |  ✅  |     ✅     | Turnstile（`packages/core/src/web/schema.ts` `turnstileEnabled`）                                                                   |
-| 許可ドメイン制限                           |   ✅   |  ✅  |     ✅     | `apps/server/src/public/domain.ts`                                                                                                  |
+| 許可ドメイン制限                           |   ✅   |  ✅  |     ✅     | `apps/server/src/web/domain.ts`                                                                                                     |
 | ランディングページ（版管理）               |   ✅   |  ✅  |     ✅     | `packages/database/src/web/schema.ts`（`landingPages`, `landingPageVersions`）                                                      |
 | ポップアップ / サイトメッセージ            |   ➖   |  ✅  |     ✅     | `packages/database/src/web/schema.ts`（`siteMessages`）、`apps/server/src/public/site-message-routes.ts`                            |
-| ファイル / Asset ホスティング              |   ✅   |  ✅  |     ✅     | `packages/database/src/web/schema.ts`（`assets`）、`apps/server/src/web/asset-service.ts`                                           |
+| ファイル / Asset ホスティング              |   ✅   |  ✅  |     ✅     | `packages/database/src/assets/schema.ts`（`assets`）、`apps/server/src/assets/service.ts`                                           |
 | Web トラッキング（匿名 Visitor 紐付け）    |   ✅   |  ✅  |     ✅     | `apps/server/src/public/tracking-routes.ts` — 同意必須（`consent: z.literal(true)`）                                                |
 | Custom Redirect（外部リンク計測）          |   ✅   |  ✅  |     ✅     | `packages/database/src/web/custom-redirect-repository.ts`、`apps/server/src/public/custom-redirect-routes.ts`（`GET /r/:ws/:slug`） |
 | Page Action（URL 閲覧での自動加点）        |   ✅   |  ➖  |     ✅     | `scoring_rules` の `page_viewed` × URL 一致（`apps/server/src/scoring/engine.ts`）                                                  |
@@ -241,16 +241,16 @@ Flow ベースのキャンペーン、セグメント、Agentforce Campaigns、�
 
 Pardot / SFMC に直接対応する機能が無い、あるいは提供形態が大きく異なるものです。
 
-| 機能                                 | 内容                                                                     | 根拠                                                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| **AI Email Sequence Designer**       | 目的・対象から、メール文面・配信間隔・分岐・終了条件までを一括で下書き化 | `apps/server/src/automations/email-sequence-service.ts`, `packages/core/src/automations/email-sequence.ts` |
-| **AI セグメント生成**                | 自然言語からセグメント条件（AST）を生成                                  | `apps/server/src/segments/generation-service.ts`                                                           |
-| **AI 企業情報エンリッチメント**      | AI Gateway Web Search と Browser Run で根拠付きの候補を作成              | `apps/server/src/contacts/company-enrichment-service.ts`                                                   |
-| **AI メール画像生成**                | メール用の画像を生成し R2 に保存                                         | `apps/server/src/messaging/email-image-generation-service.ts`                                              |
-| **Deals CRM 内蔵**                   | ステージ型パイプライン、商談、営業タスクを外部 CRM 無しで管理            | `packages/database/src/deals/schema.ts`                                                                    |
-| **Project Brief**                    | 施策ブリーフの生成・版管理・レビュー                                     | `packages/database/src/web/schema.ts`（`projectBriefs`, `projectBriefVersions`, `projectBriefReviews`）    |
-| **Remote MCP エンドポイント**        | AI エージェントから直接ワークスペースを操作                              | `apps/server/src/mcp/`                                                                                     |
-| **単一 Cloudflare アカウントで完結** | D1 / R2 / Queues / Workers のみで動作し、外部 SaaS 依存なし              | `apps/server/`, `apps/agent/`, `apps/client/`                                                              |
+| 機能                                 | 内容                                                                     | 根拠                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| **AI Email Sequence Designer**       | 目的・対象から、メール文面・配信間隔・分岐・終了条件までを一括で下書き化 | `apps/server/src/automations/email-sequence-service.ts`, `packages/core/src/automations/email-sequence.ts`   |
+| **AI セグメント生成**                | 自然言語からセグメント条件（AST）を生成                                  | `apps/server/src/segments/generation-service.ts`                                                             |
+| **AI 企業情報エンリッチメント**      | AI Gateway Web Search と Browser Run で根拠付きの候補を作成              | `apps/server/src/contacts/company-enrichment-service.ts`                                                     |
+| **AI メール画像生成**                | メール用の画像を生成し R2 に保存                                         | `apps/server/src/messaging/email-image-generation-service.ts`                                                |
+| **Deals CRM 内蔵**                   | ステージ型パイプライン、商談、営業タスクを外部 CRM 無しで管理            | `packages/database/src/deals/schema.ts`                                                                      |
+| **Project Brief**                    | 施策ブリーフの生成・版管理・レビュー                                     | `packages/database/src/projects/schema.ts`（`projectBriefs`, `projectBriefVersions`, `projectBriefReviews`） |
+| **Remote MCP エンドポイント**        | AI エージェントから直接ワークスペースを操作                              | `apps/server/src/mcp/`                                                                                       |
+| **単一 Cloudflare アカウントで完結** | D1 / R2 / Queues / Workers のみで動作し、外部 SaaS 依存なし              | `apps/server/`, `apps/agent/`, `apps/client/`                                                                |
 
 ---
 
@@ -324,7 +324,7 @@ Apple Mail のプライバシー保護は受信時に画像を先読みするた
 ### 6.7 アトリビューションはプロジェクト紐付けが前提
 
 接点は `project_items` に登録されたリソースへの反応だけを記録します
-（`packages/database/src/web/campaign-repository.ts`）。
+（`packages/database/src/projects/campaign-repository.ts`）。
 プロジェクトに紐付けていないメールやフォームは、どれだけ反応があっても
 キャンペーンレポートには現れません。また、ページ閲覧は URL がリソースIDではないため
 接点になりません。

@@ -5,12 +5,11 @@ import type {
   SubscriptionTopicOption,
 } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  ConsentRepository,
-  MessagingRepository,
-  SegmentRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ConsentRepository } from "@openengage/database/consent";
+import { MessagingRepository } from "@openengage/database/messaging";
+import { SegmentRepository } from "@openengage/database/segments";
+import { isConstraintError } from "@openengage/database/shared";
 
 export function listMessageVariables(
   database: OpenEngageDatabase,
@@ -31,7 +30,8 @@ export async function createMessageVariable(
 ): Promise<{ id: string }> {
   try {
     return await new MessagingRepository(database, workspace).createMessageVariable(input);
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new VariableConflictError();
   }
 }
@@ -44,7 +44,8 @@ export async function updateMessageVariable(
 ): Promise<boolean> {
   try {
     return await new MessagingRepository(database, workspace).updateMessageVariable(id, input);
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new VariableConflictError();
   }
 }

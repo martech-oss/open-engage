@@ -43,7 +43,7 @@ describe("form custom fields and progressive profiling", () => {
       name: "資料請求",
       slug: "download",
       status: "published",
-      definition: { style: "inline", fields: [...FIELDS], progressiveMaxFields: 1 },
+      definition: { style: "inline", fields: [...FIELDS], progressiveMaxFields: 2 },
       allowedDomains: [],
       turnstileEnabled: false,
       successMessage: "ありがとうございます。",
@@ -105,6 +105,7 @@ describe("form custom fields and progressive profiling", () => {
     const known = await (await publicCall(`/f/${slug}/profiling?oe_v=visitor-form`)).text();
     expect(known).not.toContain('name="custom:job_title"');
     expect(known).toContain('name="custom:industry"');
+    expect(known).toContain('name="oe_v" value="visitor-form"');
   });
 
   it("hands the visitor id from the embed script to the hosted form", async () => {

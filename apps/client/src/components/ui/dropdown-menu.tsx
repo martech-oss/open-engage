@@ -237,6 +237,7 @@ function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<"spa
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   DropdownMenu,
   DropdownMenuPortal,

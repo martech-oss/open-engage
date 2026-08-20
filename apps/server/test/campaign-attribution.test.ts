@@ -1,7 +1,11 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { ContactRepository, createDatabase, CustomRedirectRepository } from "@openengage/database";
+import {
+  ContactRepository,
+  createDatabase,
+  CustomRedirectRepository,
+} from "@openengage/database/testing";
 
 import { recordContactEvent } from "../src/contacts/event-service";
 import { campaignReport } from "../src/reports/campaigns-report";

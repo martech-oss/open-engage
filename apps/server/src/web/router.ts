@@ -1,8 +1,10 @@
-import { CustomRedirectRepository, isConstraintError, WebRepository } from "@openengage/database";
+import { isConstraintError } from "@openengage/database/shared";
+import { CustomRedirectRepository, WebRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { isValidDomain, normalizeDomain } from "../public/domain";
+import { hasTurnstileConfiguration } from "./config";
+import { isValidDomain, normalizeDomain } from "./domain";
 
 export const listFormsProcedure = authed.website.listForms.handler(({ context }) =>
   new WebRepository(context.database, context.workspace).listSignupForms(),
@@ -11,6 +13,13 @@ export const listFormsProcedure = authed.website.listForms.handler(({ context })
 export const createFormProcedure = authed.website.createForm.handler(
   ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    if (
+      input.status === "published" &&
+      input.turnstileEnabled &&
+      !hasTurnstileConfiguration(context.env)
+    ) {
+      throw errors.TURNSTILE_NOT_CONFIGURED();
+    }
     return new WebRepository(context.database, context.workspace).createSignupForm(input);
   },
 );
@@ -18,6 +27,13 @@ export const createFormProcedure = authed.website.createForm.handler(
 export const updateFormProcedure = authed.website.updateForm.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    if (
+      input.status === "published" &&
+      input.turnstileEnabled &&
+      !hasTurnstileConfiguration(context.env)
+    ) {
+      throw errors.TURNSTILE_NOT_CONFIGURED();
+    }
     const { id, ...changes } = input;
     const repository = new WebRepository(context.database, context.workspace);
     if (!(await repository.updateSignupForm(id, changes))) {

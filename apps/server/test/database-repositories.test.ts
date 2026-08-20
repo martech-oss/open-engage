@@ -24,7 +24,7 @@ import {
   tags,
   uuidv7,
   writeAuditLog,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 import type { WorkspaceContext } from "@openengage/orpc";
 
 import { seedWorkspaceContext } from "./factory";

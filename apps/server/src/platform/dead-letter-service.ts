@@ -1,5 +1,6 @@
 import type { DeadLetterRow } from "@openengage/core/platform";
-import { DeadLetterRepository, type OpenEngageDatabase } from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { DeadLetterRepository } from "@openengage/database/platform";
 
 export async function listDeadLetters(
   database: OpenEngageDatabase,

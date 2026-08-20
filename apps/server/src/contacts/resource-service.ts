@@ -8,12 +8,9 @@ import type {
   TagUpdate,
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  ContactRepository,
-  ContactResourceRepository,
-  uuidv7,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
+import { isConstraintError, uuidv7 } from "@openengage/database/shared";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { resourceSlug } from "../platform/values";
@@ -104,7 +101,8 @@ export async function createTag(
       name: input.name,
       color: input.color,
     });
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new ResourceConflictError("tag");
   }
   return { id, slug, name: input.name, color: input.color };
@@ -123,7 +121,8 @@ export async function updateTag(
       name: input.name,
       color: input.color,
     });
-  } catch {
+  } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new ResourceConflictError("tag");
   }
 }
@@ -154,6 +153,7 @@ export async function addContactSegment(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
+  queue?: Queue,
 ): Promise<boolean> {
   const workspaceId = workspace.workspaceId;
   const added = await new ContactResourceRepository(database, workspace).addContactSegment(
@@ -168,6 +168,7 @@ export async function addContactSegment(
     type: "segment_joined",
     resourceType: "segment",
     resourceId: input.resourceId,
+    ...(queue ? { queue } : {}),
   });
   return true;
 }

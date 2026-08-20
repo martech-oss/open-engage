@@ -88,14 +88,11 @@ export const removeTagProcedure = authed.contacts.removeTag.handler(
 export const addSegmentProcedure = authed.contacts.addToSegment.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    if (!(await addContactSegment(context.database, context.workspace, input))) {
+    if (
+      !(await addContactSegment(context.database, context.workspace, input, context.env.JOBS_QUEUE))
+    ) {
       throw errors.RELATION_REJECTED();
     }
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.contactId],
-    );
     return ack;
   },
 );

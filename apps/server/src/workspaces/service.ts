@@ -1,11 +1,9 @@
 import type { EmailBrandProfileWrite } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { Workspace } from "@openengage/core/workspaces";
-import {
-  EmailDesignRepository,
-  type OpenEngageDatabase,
-  WorkspaceSettingsRepository,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { EmailDesignRepository } from "@openengage/database/messaging";
+import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
 export async function getWorkspace(
   database: OpenEngageDatabase,

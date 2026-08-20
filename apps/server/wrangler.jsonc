@@ -78,6 +78,7 @@
     "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
     "TRANSACTIONAL_FROM_NAME": "OpenEngage",
     "REPLY_DOMAIN": "reply.example.com",
+    "TURNSTILE_SITE_KEY": "",
     "RAW_EVENT_RETENTION_DAYS": "90",
     "COMPANY_ENRICHMENT_ENABLED": "false",
   },

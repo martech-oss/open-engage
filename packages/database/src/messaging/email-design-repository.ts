@@ -6,10 +6,10 @@ import {
   type EmailBrandProfileWrite,
 } from "@openengage/core/messaging";
 
+import { assets } from "../assets/schema";
 import { organization } from "../auth/schema";
 import { nowIso } from "../shared/database-utils";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
-import { assets } from "../web/schema";
 import { emailBrandProfiles, generatedEmailImages } from "./schema";
 
 export class EmailDesignRepository extends WorkspaceRepository {

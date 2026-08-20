@@ -68,13 +68,13 @@ export function AutomationAiSheet({
   const [applying, setApplying] = useState(false);
   const workflow = useAiProposalWorkflow({
     open,
-    workflowKey: createAiProposalWorkflowKey({
-      resource: "automation",
+    requestKey: createAiProposalWorkflowKey([
+      "automation",
       mode,
-      entityId,
-      projectId: briefReference.projectId,
-      briefRevision: briefReference.briefRevision,
-    }),
+      entityId ?? null,
+      briefReference.projectId ?? null,
+      briefReference.briefRevision ?? null,
+    ]),
     onReset: clearState,
   });
   const resourceReady =
@@ -107,14 +107,14 @@ export function AutomationAiSheet({
               ...briefReference,
             },
       );
-      workflow.acceptResponse(token, () => {
+      workflow.acceptProposal(token, () => {
         setResult(next);
         setSelections({});
       });
     } catch (cause) {
-      if (workflow.isCurrentResponse(token)) {
+      workflow.acceptCurrent(token, () => {
         setError(getErrorMessage(cause, "AIによる提案を生成できませんでした"));
-      }
+      });
     }
   }
 

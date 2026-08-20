@@ -1,12 +1,13 @@
 import * as agentsSchema from "./agents/schema";
+import * as assetsSchema from "./assets/schema";
 import { authSchema } from "./auth/schema";
 import * as automationsSchema from "./automations/schema";
 import * as consentSchema from "./consent/schema";
 import * as contactsSchema from "./contacts/schema";
-import * as scoreSchema from "./contacts/score-schema";
 import * as dealsSchema from "./deals/schema";
 import * as messagingSchema from "./messaging/schema";
 import * as platformSchema from "./platform/schema";
+import * as projectsSchema from "./projects/schema";
 import * as relationsSchema from "./relations";
 import * as reportsSchema from "./reports/schema";
 import * as scoringSchema from "./scoring/schema";
@@ -15,9 +16,9 @@ import * as webSchema from "./web/schema";
 import * as workspacesSchema from "./workspaces/schema";
 
 export * from "./agents/schema";
+export * from "./assets/schema";
 export * from "./auth/schema";
 export * from "./contacts/schema";
-export * from "./contacts/score-schema";
 export * from "./segments/schema";
 export * from "./deals/schema";
 export * from "./consent/schema";
@@ -26,6 +27,7 @@ export * from "./messaging/schema";
 export * from "./web/schema";
 export * from "./workspaces/schema";
 export * from "./platform/schema";
+export * from "./projects/schema";
 export * from "./reports/schema";
 export * from "./scoring/schema";
 
@@ -36,9 +38,9 @@ export * from "./scoring/schema";
  */
 export const schema = {
   ...agentsSchema,
+  ...assetsSchema,
   ...authSchema,
   ...contactsSchema,
-  ...scoreSchema,
   ...segmentsSchema,
   ...dealsSchema,
   ...consentSchema,
@@ -47,6 +49,7 @@ export const schema = {
   ...webSchema,
   ...workspacesSchema,
   ...platformSchema,
+  ...projectsSchema,
   ...reportsSchema,
   ...scoringSchema,
   ...relationsSchema,

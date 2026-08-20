@@ -1,4 +1,4 @@
-import { CampaignReportRepository } from "@openengage/database";
+import { CampaignReportRepository } from "@openengage/database/projects";
 
 import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";
 

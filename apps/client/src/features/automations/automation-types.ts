@@ -1,6 +1,6 @@
-import type { AutomationDraft, AutomationRow } from "@openengage/core/automations";
+import type { AutomationDraft } from "@openengage/core/automations";
 
-export type { AutomationDraft, AutomationRow };
+export type { AutomationDraft };
 
 export interface AutomationOptions {
   templates: EmailTemplateOption[];

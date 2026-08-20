@@ -1,8 +1,5 @@
-import {
-  CampaignTouchRepository,
-  type OpenEngageDatabase,
-  type TouchCandidate,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { CampaignTouchRepository, type TouchCandidate } from "@openengage/database/projects";
 
 /**
  * Maps a contact event onto the project resource it belongs to. Only events
@@ -12,6 +9,7 @@ import {
 export async function recordCampaignTouches(
   database: OpenEngageDatabase,
   input: {
+    id: string;
     workspaceId: string;
     contactId: string;
     type: string;
@@ -24,6 +22,7 @@ export async function recordCampaignTouches(
   const candidate = await toCandidate(repository, input);
   if (!candidate) return 0;
   return repository.recordTouches({
+    sourceEventId: input.id,
     workspaceId: input.workspaceId,
     contactId: input.contactId,
     candidate,
@@ -50,7 +49,7 @@ async function toCandidate(
     case "email_replied": {
       // These name a delivery; projects list the template behind it.
       const templateId = await repository.resolveTemplateId(input.workspaceId, resourceId);
-      return templateId ? { resourceType: "email", resourceId: templateId } : null;
+      return templateId ? { resourceType: "email_sequence", resourceId: templateId } : null;
     }
     default:
       return null;

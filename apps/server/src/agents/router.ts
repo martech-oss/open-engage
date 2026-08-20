@@ -1,4 +1,4 @@
-import { AgentConversationRepository } from "@openengage/database";
+import { AgentConversationRepository } from "@openengage/database/agents";
 
 import { sessionAuthed } from "../orpc/base";
 

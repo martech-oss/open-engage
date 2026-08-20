@@ -1,10 +1,9 @@
-import {
-  createDatabase,
-  DeadLetterRepository,
-  GeneratedEmailImageRepository,
-  MaintenanceRepository,
-  uuidv7,
-} from "@openengage/database";
+import { AutomationJobRecoveryRepository } from "@openengage/database/automations";
+import { createDatabase } from "@openengage/database/client";
+import { ContactImportRecoveryRepository } from "@openengage/database/contacts";
+import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
+import { DeadLetterRepository, MaintenanceRepository } from "@openengage/database/platform";
+import { uuidv7 } from "@openengage/database/shared";
 
 import { type RuntimeEnv } from "../env";
 import { primitiveString } from "./values";
@@ -16,11 +15,43 @@ export async function persistDeadLetter(
   env: RuntimeEnv,
   error = "Queue retries exhausted",
 ): Promise<void> {
-  const parsed = body as { jobId?: string; deliveryId?: string };
-  const repository = new DeadLetterRepository(createDatabase(env.DB));
+  const parsed = body as {
+    kind?: string;
+    jobId?: string;
+    importJobId?: string;
+    part?: number;
+    totalParts?: number;
+    deliveryId?: string;
+  };
+  const database = createDatabase(env.DB);
+  const repository = new DeadLetterRepository(database);
   let workspaceId: string | null = null;
-  if (parsed.jobId) {
+  if (
+    parsed.kind === "contact_import" &&
+    parsed.importJobId &&
+    typeof parsed.part === "number" &&
+    typeof parsed.totalParts === "number"
+  ) {
+    const imports = new ContactImportRecoveryRepository(database);
+    workspaceId = await imports.findJobWorkspace(parsed.importJobId);
+    await imports.failPartFromDeadLetter({
+      jobId: parsed.importJobId,
+      part: parsed.part,
+      totalParts: parsed.totalParts,
+      error,
+      now: new Date().toISOString(),
+    });
+  } else if (parsed.jobId) {
     workspaceId = await repository.findJobWorkspace(parsed.jobId);
+    const leaseId = (body as { leaseId?: unknown }).leaseId;
+    if (typeof leaseId === "string") {
+      await new AutomationJobRecoveryRepository(database).failJobAndEnrollmentForLease(
+        parsed.jobId,
+        leaseId,
+        error,
+        new Date().toISOString(),
+      );
+    }
   } else if (parsed.deliveryId) {
     workspaceId = await repository.findDeliveryWorkspace(parsed.deliveryId);
   }
@@ -57,6 +88,9 @@ export async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   await repository.rollupDailyMetrics(yesterday);
   await repository.purgeExpiredIdempotencyKeys(new Date().toISOString());
+  await repository.purgeProcessedContactEventWork(
+    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+  );
   await repository.reconcileContactScores(new Date().toISOString());
   await purgeExpiredGeneratedEmailImages(env);
 }

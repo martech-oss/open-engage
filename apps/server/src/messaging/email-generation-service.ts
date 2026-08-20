@@ -6,11 +6,8 @@ import {
   type GenerateEmailInput,
 } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import {
-  EmailDesignRepository,
-  MessagingRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { EmailDesignRepository, MessagingRepository } from "@openengage/database/messaging";
 
 import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
 import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";

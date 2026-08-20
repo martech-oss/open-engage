@@ -9,10 +9,9 @@ import type {
   ContactScoreAdjust,
   ContactUpdate,
   SegmentOption,
-  Tag as TagOption,
 } from "@openengage/core/contacts";
 
-export type { CompanyOption, ContactOptions, SegmentOption, TagOption };
+export type { CompanyOption, ContactOptions, SegmentOption };
 
 export type ContactStatus = "active" | "archived" | "anonymous" | "all";
 export type ContactSort = "updatedAt" | "createdAt" | "score" | "name" | "email";

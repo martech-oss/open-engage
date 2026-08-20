@@ -8,8 +8,9 @@ import {
   type SegmentValidationIssue,
   type SegmentValidationResult,
 } from "@openengage/core/segments";
-import type { WorkspaceContext } from "@openengage/core/shared";
-import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
+import { formatIssuePath, type WorkspaceContext } from "@openengage/core/shared";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { SegmentRepository } from "@openengage/database/segments";
 
 const SYSTEM_EVENTS = [
   "contact_created",
@@ -89,7 +90,7 @@ export async function validateSegmentFilter(
       issues: parsed.error.issues.map((issue) => ({
         phase: "schema",
         code: issue.code,
-        path: formatPath(issue.path),
+        path: formatIssuePath(issue.path),
         message: issue.message,
       })),
     };
@@ -205,14 +206,4 @@ function customFieldDataType(value: string): "text" | "number" | "boolean" | "da
   return value === "number" || value === "boolean" || value === "date" || value === "select"
     ? value
     : "text";
-}
-
-function formatPath(path: readonly PropertyKey[]): string {
-  return path.reduce<string>((result, segment) => {
-    if (typeof segment === "number") return `${result}[${segment}]`;
-    const key = String(segment);
-    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
-      ? `${result}.${key}`
-      : `${result}[${JSON.stringify(key)}]`;
-  }, "$");
 }

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -73,6 +74,7 @@ export const contacts = sqliteTable(
     uniqueIndex("contacts_workspace_email_unique")
       .on(table.workspaceId, table.email)
       .where(sql`${table.email} IS NOT NULL`),
+    uniqueIndex("contacts_workspace_id_unique").on(table.workspaceId, table.id),
     check("contacts_status_check", sql`${table.status} IN ('active', 'archived', 'anonymous')`),
   ],
 );
@@ -146,7 +148,10 @@ export const tags = sqliteTable(
     color: text().default("#64748b").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => [uniqueIndex("tags_workspace_slug_unique").on(table.workspaceId, table.slug)],
+  (table) => [
+    uniqueIndex("tags_workspace_slug_unique").on(table.workspaceId, table.slug),
+    uniqueIndex("tags_workspace_id_unique").on(table.workspaceId, table.id),
+  ],
 );
 
 export const contactTags = sqliteTable(
@@ -169,6 +174,16 @@ export const contactTags = sqliteTable(
       columns: [table.workspaceId, table.contactId, table.tagId],
       name: "contact_tags_workspace_id_contact_id_tag_id_pk",
     }),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "contact_tags_workspace_contact_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.tagId],
+      foreignColumns: [tags.workspaceId, tags.id],
+      name: "contact_tags_workspace_tag_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -205,6 +220,83 @@ export const contactEvents = sqliteTable(
       table.contactId,
       table.occurredAt,
     ),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "contact_events_workspace_contact_fk",
+    }),
+  ],
+);
+
+/** Durable retry marker for contact-event side effects accepted with a public form. */
+export const contactEventOutbox = sqliteTable(
+  "contact_event_outbox",
+  {
+    eventId: text("event_id")
+      .primaryKey()
+      .notNull()
+      .references(() => contactEvents.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    status: text().default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: text("next_attempt_at"),
+    leaseId: text("lease_id"),
+    leaseExpiresAt: text("lease_expires_at"),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull(),
+    processedAt: text("processed_at"),
+  },
+  (table) => [
+    index("contact_event_outbox_workspace_status_idx").on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+    index("contact_event_outbox_pending_due_idx")
+      .on(table.nextAttemptAt, table.createdAt)
+      .where(sql`${table.status} = 'pending'`),
+    index("contact_event_outbox_processing_lease_idx")
+      .on(table.leaseExpiresAt)
+      .where(sql`${table.status} = 'processing'`),
+    check(
+      "contact_event_outbox_status_check",
+      sql`${table.status} IN ('pending', 'processing', 'processed')`,
+    ),
+  ],
+);
+
+/** Independently resumable business effects for one durable contact event. */
+export const contactEventProjections = sqliteTable(
+  "contact_event_projections",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => contactEvents.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projection: text().notNull(),
+    status: text().default("pending").notNull(),
+    createdAt: text("created_at").notNull(),
+    completedAt: text("completed_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.projection] }),
+    index("contact_event_projections_workspace_status_idx").on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      "contact_event_projections_name_check",
+      sql`${table.projection} IN ('scoring', 'grade', 'campaign', 'decision_wake', 'automation_enrollment', 'segment_reconcile')`,
+    ),
+    check(
+      "contact_event_projections_status_check",
+      sql`${table.status} IN ('pending', 'completed', 'skipped')`,
+    ),
   ],
 );
 
@@ -232,5 +324,58 @@ export const importJobs = sqliteTable(
       "import_jobs_kind_check",
       sql`${table.kind} IN ('contact_import', 'contact_export', 'event_archive')`,
     ),
+  ],
+);
+
+/** Durable ownership and lease state for one contact-import part. */
+export const contactImportParts = sqliteTable(
+  "contact_import_parts",
+  {
+    jobId: text("job_id")
+      .notNull()
+      .references(() => importJobs.id, { onDelete: "cascade" }),
+    part: integer().notNull(),
+    totalParts: integer("total_parts").notNull(),
+    status: text().default("pending").notNull(),
+    attempts: integer().default(0).notNull(),
+    leaseId: text("lease_id"),
+    leaseExpiresAt: text("lease_expires_at"),
+    /** Stable candidate ids and normalized rows reserved before any insert. */
+    candidates: text(),
+    /** Unique authority acquired once before the candidate-insert batch mutates contacts. */
+    insertPhaseToken: text("insert_phase_token"),
+    /** Non-null proves insert phase completion; completed parts expose it as the outbox payload. */
+    reconciliationContactIds: text("reconciliation_contact_ids"),
+    reconciliationPublishedAt: text("reconciliation_published_at"),
+    /** Unique completion winner consumed by parent counters and next-part creation. */
+    completionToken: text("completion_token"),
+    processed: integer().default(0).notNull(),
+    succeeded: integer().default(0).notNull(),
+    failed: integer().default(0).notNull(),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    completedAt: text("completed_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.part] }),
+    index("contact_import_parts_pending_idx")
+      .on(table.updatedAt, table.jobId, table.part)
+      .where(sql`${table.status} = 'pending'`),
+    index("contact_import_parts_processing_lease_idx")
+      .on(table.leaseExpiresAt, table.jobId, table.part)
+      .where(sql`${table.status} = 'processing'`),
+    index("contact_import_parts_reconciliation_pending_idx")
+      .on(table.updatedAt, table.jobId, table.part)
+      .where(
+        sql`${table.status} = 'completed' AND ${table.reconciliationContactIds} IS NOT NULL AND ${table.reconciliationPublishedAt} IS NULL`,
+      ),
+    check(
+      "contact_import_parts_status_check",
+      sql`${table.status} IN ('pending', 'processing', 'completed', 'failed')`,
+    ),
+    check("contact_import_parts_part_check", sql`${table.part} >= 0`),
+    check("contact_import_parts_total_check", sql`${table.totalParts} > ${table.part}`),
+    check("contact_import_parts_attempts_check", sql`${table.attempts} BETWEEN 0 AND 5`),
   ],
 );

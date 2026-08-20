@@ -85,9 +85,9 @@ Channel adapter、安全なHTML/Text renderer、認証メール用React Email te
 Server Workerに限られるため、それぞれ`apps/server/src/channels`、`rendering`、
 `auth/email-templates`で管理します。
 
-`apps/server/src`と`packages/database/src`は同じ12ドメインで一致します:
-auth / automations / consent / contacts / deals / messaging /
-platform / reports / segments / web / workspaces
+`apps/server/src`と`packages/database/src`は同じ15ドメインで一致します:
+agents / assets / auth / automations / consent / contacts / deals / messaging /
+platform / projects / reports / scoring / segments / web / workspaces
 (+ `apps/server/src`だけが持つserver専用の`runtime`, `public`, `orpc`)。
 
 `packages/orpc/src`はほぼ同じですが、`auth`(Better Authが直接APIを提供するためcontract化していない)、
@@ -99,7 +99,8 @@ platform / reports / segments / web / workspaces
 
 `apps/server/src/<domain>/router.ts`は原則`packages/database`の`*Repository`を直接呼びます。
 `service.ts`は本物のオーケストレーション(複数ステップ、監査ログ、外部I/O、DTOに収まらない計算)が
-あるドメインだけに存在します: `web/asset-service.ts`(R2・checksum・content-typeポリシー)、
+あるドメインだけに存在します: `assets/service.ts`(R2・checksum・content-typeポリシー)、
+`projects/project-brief-service.ts`(施策ブリーフの状態遷移)、
 `deals/service.ts`(参照検証・get-after-write)、`auth/service.ts`(Better Auth設定)、
 `mcp/`(ツール実行の集約)。単なる1行委譲(`return new XRepository(...).method(...)`)や
 レコード→DTOのフィールドコピーは、前者はrouterへインライン化し、後者はrepository側で
@@ -114,7 +115,6 @@ platform / reports / segments / web / workspaces
 | ----------------- | ------------------------------------------------------------------------------------- |
 | `layout.tsx`      | `PageHeader`, `PageLayout`(ページ共通の見出し+アクション枠)                           |
 | `metrics.tsx`     | `MetricGrid`, `MetricCard`(サマリーカードのグリッド)                                  |
-| `resources.tsx`   | `ResourceGrid`, `ResourceCard`(カード一覧のグリッド)                                  |
 | `form-fields.tsx` | `FormInput`, `FormTextarea`, `FormNativeSelect`(ラベル+エラー表示付きフォーム部品)    |
 | `dialogs.tsx`     | `AppDialog`, `FormDialog`, `ConfirmDialog`, `ArchiveConfirm`(確認/フォームダイアログ) |
 | `feedback.tsx`    | `EmptyState`, `SimpleEmpty`, `ErrorAlert`, `SuccessAlert`, `LoadingButton`            |
@@ -184,10 +184,12 @@ cp .dev.vars.example apps/server/.dev.vars
 BETTER_AUTH_SECRET=32文字以上のランダム値
 CREDENTIAL_ENCRYPTION_KEY=32バイト相当のランダム値
 TRACKING_SIGNING_SECRET=32文字以上のランダム値
-TURNSTILE_SECRET=任意
+TURNSTILE_SITE_KEY=Turnstileの公開サイトキー（任意）
+TURNSTILE_SECRET=Turnstileのシークレット（任意）
 ```
 
 `CREDENTIAL_ENCRYPTION_KEY`は、Outbound Webhookの署名資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
+Turnstileをフォームで有効にする場合は、`TURNSTILE_SITE_KEY`と`TURNSTILE_SECRET`の両方が必要です。片方だけの設定では公開フォームはfail closedになります。
 Email SendingはAPI keyやSecretを使わず、Server Workerの`EMAIL` bindingを利用します。ローカル設定は`remote: true`を指定していないため、メールを実送信せずWranglerのシミュレーターが受け取ります。
 
 ### 3. D1 migration
@@ -282,6 +284,8 @@ ServerとAgentを再デプロイしてください。通常HTMLを先に取得�
 初期状態のD1 `database_id` はプレースホルダーです。実際のD1 IDへ置き換えてください。
 
 ### Secret登録
+
+Turnstileを使う場合は、`apps/server/wrangler.jsonc`の`vars.TURNSTILE_SITE_KEY`へ公開サイトキーを設定します。`create-openengage`を使う初回セットアップではサイトキーとシークレットが順にpromptされ、サイトキーはWorker設定へ、シークレットはSecretへ登録されます。
 
 ```bash
 cd apps/server

@@ -14,13 +14,12 @@ import {
 import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
-  EmailDesignRepository,
   EmailSequenceDraftConflictError,
   EmailSequenceDraftRepository,
-  MessagingRepository,
-  type OpenEngageDatabase,
-  uuidv7,
-} from "@openengage/database";
+} from "@openengage/database/automations";
+import { type OpenEngageDatabase } from "@openengage/database/client";
+import { EmailDesignRepository, MessagingRepository } from "@openengage/database/messaging";
+import { uuidv7 } from "@openengage/database/shared";
 
 import { loadMarketingAgentContext } from "../agents/marketing-context";
 import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";

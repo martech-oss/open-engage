@@ -5,16 +5,16 @@ import type {
   EmailTemplateWrite,
 } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
+import { AssetRepository } from "@openengage/database/assets";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
-  AssetRepository,
   EmailDesignRepository,
   GeneratedEmailImageRepository,
   MessagingRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+} from "@openengage/database/messaging";
 
+import { loadAssetOrigin, toAssetSummary } from "../assets/service";
 import { previewEmailTemplate } from "../rendering/email-renderer";
-import { loadAssetOrigin, toAssetSummary } from "../web/asset-service";
 
 export type EmailTemplateServiceFailure =
   | "invalid_asset"

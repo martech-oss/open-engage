@@ -1,90 +1,136 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type AiProposalWorkflowResource = "segment" | "automation" | "email-sequence";
+export type AiRequestKeyPart = string | number | boolean | null | undefined;
 
-export function createAiProposalWorkflowKey(input: {
-  resource: AiProposalWorkflowResource;
-  mode: "create" | "refine";
-  entityId?: string | undefined;
-  projectId?: string | undefined;
-  briefRevision?: number | undefined;
-}): string {
-  return [
-    input.resource,
-    input.mode,
-    input.entityId ?? "new",
-    input.projectId ?? "standalone",
-    input.briefRevision?.toString() ?? "none",
-  ].join(":");
+type SerializedValue = ["undefined" | "null"] | ["string" | "boolean" | "number", string];
+
+/** Stable, tuple-boundary-preserving identity for primitive AI request inputs. */
+export function createAiProposalWorkflowKey(parts: readonly AiRequestKeyPart[]): string {
+  return JSON.stringify(["tuple", parts.map(serializeValue)]);
 }
 
-type WorkflowToken = { key: string; requestId: number };
+function serializeValue(value: AiRequestKeyPart): SerializedValue {
+  if (value === undefined) return ["undefined"];
+  if (value === null) return ["null"];
+  if (typeof value === "string") return ["string", value];
+  if (typeof value === "boolean") return ["boolean", String(value)];
+  if (typeof value === "number") return ["number", Object.is(value, -0) ? "-0" : String(value)];
+  throw new TypeError(
+    `AI request key parts must be a primitive string, number, boolean, null, or undefined; received ${describeUnsupportedKeyPart(value)}`,
+  );
+}
+
+function describeUnsupportedKeyPart(value: never): string {
+  if (typeof value !== "object" || value === null) return typeof value;
+  return Object.prototype.toString.call(value);
+}
+
+type WorkflowToken = {
+  requestKey: string;
+  session: number;
+  request: symbol;
+};
+
+type WorkflowIdentity = {
+  open: boolean;
+  requestKey: string;
+  session: number;
+};
 
 /**
- * Owns the identity of an AI proposal. Responses from a closed sheet or a previous
- * entity/revision are ignored, and only the matching proposal can be applied.
+ * Logical request authority for AI proposals. Provider work may still finish,
+ * but stale callbacks lose permission to touch the current UI.
  */
 export function useAiProposalWorkflow({
   open,
-  workflowKey,
+  requestKey,
   onReset,
 }: {
   open: boolean;
-  workflowKey: string;
+  requestKey: string;
   onReset: () => void;
 }) {
-  const live = useRef({ open, workflowKey });
-  live.current = { open, workflowKey };
+  const identity = useRef<WorkflowIdentity>({ open, requestKey, session: 0 });
+  const latestRequest = useRef<WorkflowToken | null>(null);
+  const mounted = useRef(true);
   const resetCallback = useRef(onReset);
   resetCallback.current = onReset;
-  const latestRequestId = useRef(0);
-  const [proposalKey, setProposalKey] = useState<string | null>(null);
+  const [accepted, setAccepted] = useState<{ requestKey: string; session: number } | null>(null);
 
-  const reset = useCallback(() => {
-    latestRequestId.current += 1;
-    setProposalKey(null);
+  if (identity.current.open !== open || identity.current.requestKey !== requestKey) {
+    identity.current = { open, requestKey, session: identity.current.session + 1 };
+    latestRequest.current = null;
+  }
+
+  useEffect(() => {
+    setAccepted(null);
     resetCallback.current();
-  }, []);
+  }, [open, requestKey]);
 
-  useEffect(() => reset(), [open, reset, workflowKey]);
-  useEffect(
-    () => () => {
-      latestRequestId.current += 1;
-      live.current = { ...live.current, open: false };
-    },
-    [],
-  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      latestRequest.current = null;
+    };
+  }, []);
 
   const beginRequest = useCallback((): WorkflowToken => {
-    const requestId = latestRequestId.current + 1;
-    latestRequestId.current = requestId;
-    return { key: live.current.workflowKey, requestId };
+    const current = identity.current;
+    const token = {
+      requestKey: current.requestKey,
+      session: current.session,
+      request: Symbol("ai-request"),
+    };
+    latestRequest.current = token;
+    return token;
   }, []);
 
-  const isCurrentResponse = useCallback((token: WorkflowToken): boolean => {
-    const current = live.current;
-    return !(
-      !current.open ||
-      current.workflowKey !== token.key ||
-      latestRequestId.current !== token.requestId
+  const isCurrent = useCallback((token: WorkflowToken): boolean => {
+    const current = identity.current;
+    return Boolean(
+      mounted.current &&
+      current.open &&
+      token.requestKey === current.requestKey &&
+      token.session === current.session &&
+      latestRequest.current?.request === token.request,
     );
   }, []);
 
-  const acceptResponse = useCallback(
+  const acceptCurrent = useCallback(
     (token: WorkflowToken, commit: () => void): boolean => {
-      if (!isCurrentResponse(token)) return false;
+      if (!isCurrent(token)) return false;
       commit();
-      setProposalKey(token.key);
       return true;
     },
-    [isCurrentResponse],
+    [isCurrent],
   );
 
+  const acceptProposal = useCallback(
+    (token: WorkflowToken, commit: () => void): boolean => {
+      if (!isCurrent(token)) return false;
+      commit();
+      setAccepted({ requestKey: token.requestKey, session: token.session });
+      return true;
+    },
+    [isCurrent],
+  );
+
+  const reset = useCallback(() => {
+    identity.current = { ...identity.current, session: identity.current.session + 1 };
+    latestRequest.current = null;
+    setAccepted(null);
+    resetCallback.current();
+  }, []);
+
+  const current = identity.current;
   return {
     beginRequest,
-    isCurrentResponse,
-    acceptResponse,
+    isCurrent,
+    acceptCurrent,
+    acceptProposal,
     reset,
-    canApply: open && proposalKey === workflowKey,
+    canApply:
+      open && accepted?.requestKey === current.requestKey && accepted.session === current.session,
   };
 }

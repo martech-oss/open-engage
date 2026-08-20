@@ -1,11 +1,6 @@
-import type {
-  ChannelMessage,
-  RenderedEmailMessage,
-  WebhookChannelMessage,
-} from "@openengage/core/messaging";
-import type { DeliveryEvent } from "@openengage/core/shared";
+import type { ChannelMessage } from "@openengage/core/messaging";
 
-export type { ChannelMessage, RenderedEmailMessage, WebhookChannelMessage };
+export type { ChannelMessage };
 
 export interface ChannelSendResult {
   providerMessageId: string;
@@ -26,9 +21,4 @@ export interface ChannelAdapter {
   readonly provider: "cloudflare" | "webhook";
   send(message: ChannelMessage): Promise<ChannelSendResult>;
   healthCheck(): Promise<ChannelHealth>;
-}
-
-export interface WebhookChannelAdapter extends ChannelAdapter {
-  verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification>;
-  normalizeEvents(payload: unknown, eventId?: string): DeliveryEvent[];
 }

@@ -1,7 +1,7 @@
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Pencil, RefreshCw, Sparkles, Users } from "lucide-react";
-import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
+import { lazy, type ReactNode, Suspense, useState } from "react";
 
 import { PageLayout } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
@@ -47,14 +47,11 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
   };
   const {
     cursor,
+    pageIndex,
     hasPreviousPage,
     goToNextPage: goToNextCursor,
     goToPreviousPage: goToPreviousCursor,
-  } = useCursorPagination(segmentId);
-  const [pageIndex, setPageIndex] = useState(0);
-  useEffect(() => {
-    setPageIndex(0);
-  }, [segmentId]);
+  } = useCursorPagination(`segment:${segmentId}`);
   const membersQuery = useQuery(contactsQueryOptions(memberSearch, cursor));
   const members = membersQuery.data?.items ?? [];
   const total = membersQuery.data?.total ?? segment.memberCount;
@@ -202,14 +199,8 @@ export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNo
             pagination={{
               hasNextPage: Boolean(nextCursor),
               hasPreviousPage,
-              onNext: () => {
-                goToNextCursor(nextCursor);
-                setPageIndex((index) => index + 1);
-              },
-              onPrevious: () => {
-                goToPreviousCursor();
-                setPageIndex((index) => Math.max(0, index - 1));
-              },
+              onNext: () => goToNextCursor(nextCursor),
+              onPrevious: goToPreviousCursor,
               rangeLabel: `${firstRow.toLocaleString()}–${lastRow.toLocaleString()} / ${total.toLocaleString()} 件`,
             }}
           />

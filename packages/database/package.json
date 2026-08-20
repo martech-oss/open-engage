@@ -8,7 +8,25 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./agents": "./src/agents/index.ts",
+    "./assets": "./src/assets/index.ts",
+    "./automations": "./src/automations/index.ts",
+    "./consent": "./src/consent/index.ts",
+    "./contacts": "./src/contacts/index.ts",
+    "./deals": "./src/deals/index.ts",
+    "./messaging": "./src/messaging/index.ts",
+    "./platform": "./src/platform/index.ts",
+    "./projects": "./src/projects/index.ts",
+    "./reports": "./src/reports/index.ts",
+    "./scoring": "./src/scoring/index.ts",
+    "./segments": "./src/segments/index.ts",
+    "./shared": "./src/shared/index.ts",
+    "./web": "./src/web/index.ts",
+    "./workspaces": "./src/workspaces/index.ts",
+    "./schema": "./src/schema.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",

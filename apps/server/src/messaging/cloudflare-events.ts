@@ -1,6 +1,7 @@
 import * as z from "zod";
 
-import { createDatabase, MessagingWorkerRepository } from "@openengage/database";
+import { createDatabase } from "@openengage/database/client";
+import { MessagingWorkerRepository } from "@openengage/database/messaging";
 
 import type { RuntimeEnv } from "../env";
 

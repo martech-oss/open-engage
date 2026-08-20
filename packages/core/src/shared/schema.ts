@@ -5,6 +5,16 @@ export type JsonRecord = z.infer<typeof jsonRecordSchema>;
 
 export const stringArraySchema = z.array(z.string());
 
+export function formatIssuePath(path: readonly PropertyKey[]): string {
+  return path.reduce<string>((result, segment) => {
+    if (typeof segment === "number") return `${result}[${segment}]`;
+    const key = String(segment);
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
+      ? `${result}.${key}`
+      : `${result}[${JSON.stringify(key)}]`;
+  }, "$");
+}
+
 /**
  * The raw arrays behind each schema below are exported too, so
  * `@openengage/database`'s schema files can build their matching CHECK

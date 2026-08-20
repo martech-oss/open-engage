@@ -27,9 +27,6 @@ import {
 } from "@/features/dashboard/dashboard-widgets";
 import { formatMoney, formatRelativeTime, rate } from "@/lib/format";
 import { CONTACT_EVENT_LABELS, contactEventTone, type EventTone } from "@/lib/status-labels";
-import type { Dashboard as DashboardData } from "@openengage/core/reports";
-
-export type { DashboardData };
 
 /** Only the busiest handful of automations fit the panel before it starts scrolling. */
 const AUTOMATION_ROW_LIMIT = 6;

@@ -36,6 +36,8 @@
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^5.20260728.1",
     "@orpc/client": "1.14.13",
+    "@orpc/contract": "1.14.13",
+    "@react-email/ui": "^6.9.2",
     "@types/react": "^19.1.9",
     "typescript": "catalog:",
     "vitest": "catalog:",

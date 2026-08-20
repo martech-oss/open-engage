@@ -51,7 +51,7 @@ export const scoringContract = {
     .output(z.array(scoringRuleSchema)),
   createRule: oc
     .route({ method: "POST", path: "/scoring/rules", successStatus: 201 })
-    .errors(authedErrors)
+    .errors(ruleNotFound)
     .input(scoringRuleWriteSchema)
     .output(created),
   updateRule: oc

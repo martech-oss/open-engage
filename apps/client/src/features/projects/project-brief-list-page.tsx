@@ -10,7 +10,10 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Field, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { useAiProposalWorkflow } from "@/hooks/use-ai-proposal-workflow";
+import {
+  createAiProposalWorkflowKey,
+  useAiProposalWorkflow,
+} from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 
@@ -50,7 +53,7 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
   const [createSession, setCreateSession] = useState(0);
   const proposalWorkflow = useAiProposalWorkflow({
     open,
-    workflowKey: `project-brief:create:${createSession}`,
+    requestKey: createAiProposalWorkflowKey(["project-brief", "create", createSession]),
     onReset: resetCreateState,
   });
   const filtered = useMemo(
@@ -78,16 +81,16 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
         ownerUserId: before.ownerUserId || options.members[0]?.id || "",
         approverUserId: before.approverUserId || options.members[1]?.id || "",
       });
-      proposalWorkflow.acceptResponse(token, () => {
+      proposalWorkflow.acceptProposal(token, () => {
         setDraft((current) => mergeAiProposalPreservingEdits(current, before, proposed));
         if (result.capabilityGaps.length) {
           toast.warning(`${result.capabilityGaps.length}件の未提供機能があります`);
         }
       });
     } catch (cause) {
-      if (proposalWorkflow.isCurrentResponse(token)) {
+      proposalWorkflow.acceptCurrent(token, () => {
         setError(getErrorMessage(cause, "AI提案を生成できませんでした"));
-      }
+      });
     }
   }
 

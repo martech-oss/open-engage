@@ -27,6 +27,12 @@ const redirectNotFound = notFound("REDIRECT_NOT_FOUND", "リンクが見つか�
 const redirectSlugTaken = {
   REDIRECT_SLUG_TAKEN: { status: 409, message: "同じスラッグのリンクが既に存在します" },
 } as const;
+const turnstileNotConfigured = {
+  TURNSTILE_NOT_CONFIGURED: {
+    status: 422,
+    message: "Turnstileを有効にするにはサイトキーとシークレットが必要です",
+  },
+} as const;
 
 export const websiteContract = {
   listForms: oc
@@ -35,12 +41,15 @@ export const websiteContract = {
     .output(z.array(signupFormSchema)),
   createForm: oc
     .route({ method: "POST", path: "/website/forms", successStatus: 201 })
-    .errors(authedErrors)
+    .errors({ ...authedErrors, ...turnstileNotConfigured })
     .input(signupFormWriteSchema)
     .output(created),
   updateForm: oc
     .route({ method: "PATCH", path: "/website/forms/{id}" })
-    .errors(notFound("FORM_NOT_FOUND", "フォームが見つかりません"))
+    .errors({
+      ...notFound("FORM_NOT_FOUND", "フォームが見つかりません"),
+      ...turnstileNotConfigured,
+    })
     .input(signupFormWriteSchema.extend({ id: z.string().min(1) }))
     .output(created),
   archiveForm: oc

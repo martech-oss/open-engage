@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, notExists, sql } from "drizzle-orm";
 
 import { stringArraySchema } from "@openengage/core/shared";
 import {
@@ -9,13 +9,22 @@ import {
 } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import { contacts } from "../contacts/schema";
-import { nowIso } from "../shared/database-utils";
+import {
+  contactEventOutbox,
+  contactEventProjections,
+  contactEvents,
+  contacts,
+} from "../contacts/schema";
+import { isConstraintError, nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { dueContactEventWork, isContactEmailConstraintError } from "./public-form-persistence";
 import {
-  assets,
+  persistPublicFormSubmissionBatch,
+  type PersistPublicFormSubmissionInput,
+} from "./public-form-submission-writer";
+import {
   forms,
   formSubmissions,
   landingPages,
@@ -43,6 +52,19 @@ export interface PublicFormRecord {
   turnstileEnabled: boolean;
   successMessage: string;
 }
+
+export interface PublicFormContactEvent {
+  id: string;
+  workspaceId: string;
+  contactId: string | null;
+  type: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  properties: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export type { PersistPublicFormSubmissionInput } from "./public-form-submission-writer";
 
 /**
  * Public, unauthenticated lookups and writes behind the hosted signup form
@@ -96,6 +118,148 @@ export class PublicFormRepository extends DatabaseRepository {
       .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.email, email)))
       .get();
     return row?.id ?? null;
+  }
+
+  /**
+   * Accepts one submission in a single D1 transaction. The form submission's
+   * unique key is part of the same batch as contact mutation and event work,
+   * so a duplicate race rolls every earlier statement back.
+   */
+  public async persistSubmission(
+    input: PersistPublicFormSubmissionInput,
+  ): Promise<"accepted" | "duplicate"> {
+    if (await this.submissionExists(input)) return "duplicate";
+    let retriedEmailRace = false;
+
+    for (;;) {
+      const existingContactId = await this.findContactIdByEmail(input.workspaceId, input.email);
+      try {
+        await persistPublicFormSubmissionBatch(this.database, input, existingContactId);
+        return "accepted";
+      } catch (error) {
+        if (!isConstraintError(error)) throw error;
+        if (await this.submissionExists(input)) return "duplicate";
+        if (
+          !retriedEmailRace &&
+          existingContactId === null &&
+          isContactEmailConstraintError(error) &&
+          (await this.findContactIdByEmail(input.workspaceId, input.email))
+        ) {
+          retriedEmailRace = true;
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  public async listDueContactEventIds(now: string, limit = 50): Promise<string[]> {
+    const rows = await this.database.orm
+      .select({ eventId: contactEventOutbox.eventId })
+      .from(contactEventOutbox)
+      .where(dueContactEventWork(now))
+      .orderBy(asc(contactEventOutbox.createdAt))
+      .limit(limit);
+    return rows.map((row) => row.eventId);
+  }
+
+  public async claimContactEvent(
+    eventId: string,
+    now: string,
+    leaseId: string,
+    leaseExpiresAt: string,
+  ): Promise<PublicFormContactEvent | null> {
+    const claimed = await this.database.orm
+      .update(contactEventOutbox)
+      .set({
+        status: "processing",
+        attemptCount: sql`${contactEventOutbox.attemptCount} + 1`,
+        leaseId,
+        leaseExpiresAt,
+      })
+      .where(and(eq(contactEventOutbox.eventId, eventId), dueContactEventWork(now)))
+      .returning({ eventId: contactEventOutbox.eventId })
+      .get();
+    if (!claimed) return null;
+    const row = await this.database.orm
+      .select({
+        id: contactEvents.id,
+        workspaceId: contactEvents.workspaceId,
+        contactId: contactEvents.contactId,
+        type: contactEvents.type,
+        resourceType: contactEvents.resourceType,
+        resourceId: contactEvents.resourceId,
+        properties: contactEvents.properties,
+        occurredAt: contactEvents.occurredAt,
+      })
+      .from(contactEventOutbox)
+      .innerJoin(contactEvents, eq(contactEvents.id, contactEventOutbox.eventId))
+      .where(and(eq(contactEventOutbox.eventId, eventId), eq(contactEventOutbox.leaseId, leaseId)))
+      .get();
+    if (!row) return null;
+    const properties: unknown = JSON.parse(row.properties);
+    return {
+      ...row,
+      properties:
+        properties && typeof properties === "object" && !Array.isArray(properties)
+          ? (properties as Record<string, unknown>)
+          : {},
+    };
+  }
+
+  public async markContactEventProcessed(eventId: string, leaseId: string): Promise<void> {
+    await this.database.orm
+      .update(contactEventOutbox)
+      .set({
+        status: "processed",
+        leaseId: null,
+        leaseExpiresAt: null,
+        nextAttemptAt: null,
+        lastError: null,
+        processedAt: nowIso(),
+      })
+      .where(
+        and(
+          eq(contactEventOutbox.eventId, eventId),
+          eq(contactEventOutbox.status, "processing"),
+          eq(contactEventOutbox.leaseId, leaseId),
+          notExists(
+            this.database.orm
+              .select({ eventId: contactEventProjections.eventId })
+              .from(contactEventProjections)
+              .where(
+                and(
+                  eq(contactEventProjections.eventId, eventId),
+                  eq(contactEventProjections.status, "pending"),
+                ),
+              ),
+          ),
+        ),
+      );
+  }
+
+  public async markContactEventFailed(
+    eventId: string,
+    leaseId: string,
+    error: unknown,
+    nextAttemptAt: string,
+  ): Promise<void> {
+    await this.database.orm
+      .update(contactEventOutbox)
+      .set({
+        status: "pending",
+        leaseId: null,
+        leaseExpiresAt: null,
+        nextAttemptAt,
+        lastError: (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
+      })
+      .where(
+        and(
+          eq(contactEventOutbox.eventId, eventId),
+          eq(contactEventOutbox.status, "processing"),
+          eq(contactEventOutbox.leaseId, leaseId),
+        ),
+      );
   }
 
   public async updateContactFromFormSubmission(
@@ -214,17 +378,23 @@ export class PublicFormRepository extends DatabaseRepository {
       createdAt: nowIso(),
     });
   }
-}
 
-export interface PublicAssetRecord {
-  id: string;
-  workspaceId: string;
-  name: string;
-  originalFilename: string;
-  kind: string;
-  r2Key: string;
-  contentType: string;
-  checksum: string;
+  public async submissionExists(
+    input: Pick<PersistPublicFormSubmissionInput, "workspaceId" | "formId" | "idempotencyKey">,
+  ): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: formSubmissions.id })
+      .from(formSubmissions)
+      .where(
+        and(
+          eq(formSubmissions.workspaceId, input.workspaceId),
+          eq(formSubmissions.formId, input.formId),
+          eq(formSubmissions.idempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .get();
+    return Boolean(row);
+  }
 }
 
 /** Validated public reads shared by landing-page and tracking routes. */
@@ -275,43 +445,5 @@ export class PublicWebRepository extends DatabaseRepository {
     return row
       ? { id: row.id, allowedDomains: trackingAllowedDomainsCodec.decode(row.allowedDomains) }
       : null;
-  }
-}
-
-/**
- * The single gate in front of publicly readable assets. It lives here rather
- * than in `apps/server` because the `openengage-assets` bucket also holds contact
- * CSV exports, inbound email attachments and event archives - every one of the
- * three predicates below (workspace slug, public visibility, not archived) is
- * load-bearing, so the query is kept where it can be unit-tested directly.
- */
-export class PublicAssetRepository extends DatabaseRepository {
-  public async findPublicAsset(
-    workspaceSlug: string,
-    assetId: string,
-  ): Promise<PublicAssetRecord | null> {
-    const row = await this.database.orm
-      .select({
-        id: assets.id,
-        workspaceId: assets.workspaceId,
-        name: assets.name,
-        originalFilename: assets.originalFilename,
-        kind: assets.kind,
-        r2Key: assets.r2Key,
-        contentType: assets.contentType,
-        checksum: assets.checksum,
-      })
-      .from(assets)
-      .innerJoin(organization, eq(organization.id, assets.workspaceId))
-      .where(
-        and(
-          eq(organization.slug, workspaceSlug),
-          eq(assets.id, assetId),
-          eq(assets.visibility, "public"),
-          isNull(assets.archivedAt),
-        ),
-      )
-      .get();
-    return row ?? null;
   }
 }

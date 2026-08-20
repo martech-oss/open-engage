@@ -1,8 +1,5 @@
-import {
-  AutomationEngineRepository,
-  AutomationRepository,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import { AutomationEngineRepository, AutomationRepository } from "@openengage/database/automations";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 
 export interface ContactEvent {
   id: string;

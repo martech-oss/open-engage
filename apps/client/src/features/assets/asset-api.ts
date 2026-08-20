@@ -80,10 +80,6 @@ export function assetsQueryOptions(search: AssetSearch, cursor?: string) {
   });
 }
 
-export function assetQueryOptions(id: string) {
-  return orpcQuery.assets.get.queryOptions({ input: { id } });
-}
-
 /** Feeds the embed picker: public images only, since a private `publicUrl` is null. */
 export function publicImageAssetsQueryOptions() {
   return orpcQuery.assets.list.queryOptions({

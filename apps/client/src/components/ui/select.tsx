@@ -176,6 +176,7 @@ function SelectScrollDownButton({
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export {
   Select,
   SelectContent,

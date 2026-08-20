@@ -1,525 +1,75 @@
-import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
-import type { BatchItem } from "drizzle-orm/batch";
-
-import {
-  channelMessageSchema,
-  emailDocumentV2Schema,
-  type ChannelMessage,
-  type EmailDocumentV2,
-} from "@openengage/core/messaging";
-
-import { organization } from "../auth/schema";
-import { suppressions } from "../consent/schema";
-import { contactEvents } from "../contacts/schema";
-import { changedExactlyOne, nowIso } from "../shared/database-utils";
-import { decodeJson, defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
-import { uuidv7 } from "../shared/uuid";
-import { webhookEndpoints } from "../workspaces/schema";
-import {
-  deliveries,
-  deliveryEvents,
-  emailTemplates,
-  inboundEmails,
-  messageVariables,
-} from "./schema";
+import { MessagingDeliveryPreparationRepository } from "./delivery-preparation-repository";
+import { MessagingDeliveryWriteRepository } from "./delivery-write-repository";
+import { MessagingInboundReplyRepository } from "./inbound-reply-repository";
+import { MessagingProviderEventRepository } from "./provider-event-repository";
 
-/** The delivery columns the queue worker needs to claim and send one delivery. */
-export interface DeliveryClaimRecord {
-  id: string;
-  workspaceId: string;
-  contactId: string | null;
-  channel: "email" | "webhook";
-  purpose: "transactional" | "marketing";
-  provider: "cloudflare" | "webhook";
-  recipient: string | null;
-  topicId: string | null;
-  idempotencyKey: string;
-  payload: ChannelMessage;
-  status: string;
-  attempts: number;
-}
-
-const publishedContentCodec = defineJsonCodec(
-  emailDocumentV2Schema,
-  "email_templates.published_content",
-);
-
-/** Batch size for one worker sweep of the delivery queue. */
-const DUE_DELIVERY_SCAN_LIMIT = 100;
-
-/**
- * Queue-worker and webhook-handler queries for the delivery pipeline.
- * Deliveries are claimed by id alone — the workspace comes from the delivery
- * row itself — so this repository is intentionally not workspace-scoped.
- */
+/** Compatibility facade for queue workers and webhook handlers. */
 export class MessagingWorkerRepository extends DatabaseRepository {
-  /** Loads a live template for sending; archived templates are invisible. */
-  public async findSendableTemplate(
-    workspaceId: string,
-    templateId: string,
-  ): Promise<{
-    id: string;
-    purpose: "transactional";
-    subject: string;
-    content: EmailDocumentV2;
-  } | null> {
-    const row = await this.database.orm
-      .select({
-        id: emailTemplates.id,
-        purpose: emailTemplates.purpose,
-        subject: emailTemplates.publishedSubject,
-        content: emailTemplates.publishedContent,
-      })
-      .from(emailTemplates)
-      .where(
-        and(
-          eq(emailTemplates.workspaceId, workspaceId),
-          eq(emailTemplates.id, templateId),
-          isNull(emailTemplates.archivedAt),
-          eq(emailTemplates.purpose, "transactional"),
-          isNotNull(emailTemplates.publishedRevision),
-        ),
-      )
-      .get();
-    if (!row?.subject || !row.content) return null;
-    return {
-      id: row.id,
-      purpose: "transactional",
-      subject: row.subject,
-      content: publishedContentCodec.decode(row.content),
-    };
+  private readonly preparation = new MessagingDeliveryPreparationRepository(this.database);
+  private readonly deliveryWrite = new MessagingDeliveryWriteRepository(this.database);
+  private readonly inbound = new MessagingInboundReplyRepository(this.database);
+  private readonly providerEvents = new MessagingProviderEventRepository(this.database);
+
+  public findSendableTemplate(
+    ...args: Parameters<MessagingDeliveryPreparationRepository["findSendableTemplate"]>
+  ) {
+    return this.preparation.findSendableTemplate(...args);
   }
 
-  /** Live message variables as a key → value map, for template resolution. */
-  public async readMessageVariables(workspaceId: string): Promise<Record<string, string>> {
-    const rows = await this.database.orm
-      .select({ key: messageVariables.key, value: messageVariables.value })
-      .from(messageVariables)
-      .where(
-        and(eq(messageVariables.workspaceId, workspaceId), isNull(messageVariables.archivedAt)),
-      )
-      .orderBy(asc(messageVariables.key));
-    return Object.fromEntries(rows.map((variable) => [variable.key, variable.value]));
+  public readMessageVariables(
+    ...args: Parameters<MessagingDeliveryPreparationRepository["readMessageVariables"]>
+  ) {
+    return this.preparation.readMessageVariables(...args);
   }
 
-  public async readWorkspaceTemplateContext(
-    workspaceId: string,
-  ): Promise<{ id: string; name: string }> {
-    const row = await this.database.orm
-      .select({ id: organization.id, name: organization.name })
-      .from(organization)
-      .where(eq(organization.id, workspaceId))
-      .get();
-    return row ?? { id: workspaceId, name: "" };
+  public readWorkspaceTemplateContext(
+    ...args: Parameters<MessagingDeliveryPreparationRepository["readWorkspaceTemplateContext"]>
+  ) {
+    return this.preparation.readWorkspaceTemplateContext(...args);
   }
 
-  public async findEnabledWebhookEndpoint(
-    workspaceId: string,
-    endpointId: string,
-  ): Promise<{ url: string } | null> {
-    const row = await this.database.orm
-      .select({ url: webhookEndpoints.url })
-      .from(webhookEndpoints)
-      .where(
-        and(
-          eq(webhookEndpoints.workspaceId, workspaceId),
-          eq(webhookEndpoints.id, endpointId),
-          eq(webhookEndpoints.enabled, true),
-        ),
-      )
-      .get();
-    return row ?? null;
+  public findEnabledWebhookEndpoint(
+    ...args: Parameters<MessagingDeliveryPreparationRepository["findEnabledWebhookEndpoint"]>
+  ) {
+    return this.preparation.findEnabledWebhookEndpoint(...args);
   }
 
-  public async findEnabledWebhookEndpointWithSecret(
-    workspaceId: string,
-    endpointId: string,
-  ): Promise<{ url: string; encryptedSecret: string } | null> {
-    const row = await this.database.orm
-      .select({ url: webhookEndpoints.url, encryptedSecret: webhookEndpoints.encryptedSecret })
-      .from(webhookEndpoints)
-      .where(
-        and(
-          eq(webhookEndpoints.workspaceId, workspaceId),
-          eq(webhookEndpoints.id, endpointId),
-          eq(webhookEndpoints.enabled, true),
-        ),
-      )
-      .get();
-    return row ?? null;
+  public findEnabledWebhookEndpointWithSecret(
+    ...args: Parameters<
+      MessagingDeliveryPreparationRepository["findEnabledWebhookEndpointWithSecret"]
+    >
+  ) {
+    return this.preparation.findEnabledWebhookEndpointWithSecret(...args);
   }
 
-  /**
-   * Enqueues one delivery, skipping the insert when the idempotency key was
-   * already used. Returns whether a row was actually written.
-   */
-  public async insertQueuedDelivery(input: {
-    id: string;
-    workspaceId: string;
-    contactId: string | null;
-    enrollmentId: string | null;
-    channel: "email" | "webhook";
-    purpose: "marketing" | "transactional";
-    provider: "cloudflare" | "webhook";
-    recipient: string;
-    topicId?: string | null;
-    templateId?: string | null;
-    idempotencyKey: string;
-    payload: string;
-  }): Promise<boolean> {
-    const now = nowIso();
-    const result = await this.database.orm
-      .insert(deliveries)
-      .values({
-        id: input.id,
-        workspaceId: input.workspaceId,
-        contactId: input.contactId,
-        enrollmentId: input.enrollmentId,
-        channel: input.channel,
-        purpose: input.purpose,
-        provider: input.provider,
-        recipient: input.recipient,
-        topicId: input.topicId ?? null,
-        templateId: input.templateId ?? null,
-        idempotencyKey: input.idempotencyKey,
-        payload: input.payload,
-        status: "queued",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoNothing();
-    return changedExactlyOne(result);
+  public insertQueuedDelivery(
+    ...args: Parameters<MessagingDeliveryWriteRepository["insertQueuedDelivery"]>
+  ) {
+    return this.deliveryWrite.insertQueuedDelivery(...args);
   }
 
-  public async findDeliveryForProcessing(deliveryId: string): Promise<DeliveryClaimRecord | null> {
-    const row = await this.database.orm
-      .select({
-        id: deliveries.id,
-        workspaceId: deliveries.workspaceId,
-        contactId: deliveries.contactId,
-        channel: deliveries.channel,
-        purpose: deliveries.purpose,
-        provider: deliveries.provider,
-        recipient: deliveries.recipient,
-        topicId: deliveries.topicId,
-        idempotencyKey: deliveries.idempotencyKey,
-        payload: deliveries.payload,
-        status: deliveries.status,
-        attempts: deliveries.attempts,
-      })
-      .from(deliveries)
-      .where(eq(deliveries.id, deliveryId))
-      .get();
-    if (!row) return null;
-    // Check constraints restrict channel, purpose and provider to these unions.
-    return {
-      ...row,
-      channel: row.channel as "email" | "webhook",
-      purpose: row.purpose as "transactional" | "marketing",
-      provider: row.provider as "cloudflare" | "webhook",
-      payload: decodeJson(row.payload, channelMessageSchema, "deliveries.payload"),
-    };
+  public findReplyDelivery(
+    ...args: Parameters<MessagingInboundReplyRepository["findReplyDelivery"]>
+  ) {
+    return this.inbound.findReplyDelivery(...args);
   }
 
-  /** Claims a queued or previously failed delivery, counting the attempt. */
-  public async claimDelivery(deliveryId: string): Promise<boolean> {
-    const result = await this.database.orm
-      .update(deliveries)
-      .set({
-        status: "sending",
-        attempts: sql`${deliveries.attempts} + 1`,
-        updatedAt: nowIso(),
-      })
-      .where(and(eq(deliveries.id, deliveryId), inArray(deliveries.status, ["queued", "failed"])));
-    return changedExactlyOne(result);
+  public recordInboundReply(
+    ...args: Parameters<MessagingInboundReplyRepository["recordInboundReply"]>
+  ) {
+    return this.inbound.recordInboundReply(...args);
   }
 
-  public async markDeliverySuppressed(deliveryId: string, reason: string): Promise<void> {
-    await this.database.orm
-      .update(deliveries)
-      .set({ status: "suppressed", lastError: reason, updatedAt: nowIso() })
-      .where(eq(deliveries.id, deliveryId));
+  public applyCloudflareDeliveryEvent(
+    ...args: Parameters<MessagingProviderEventRepository["applyCloudflareDeliveryEvent"]>
+  ) {
+    return this.providerEvents.applyCloudflareDeliveryEvent(...args);
   }
 
-  public async markDeliveryProviderSuppressed(deliveryId: string): Promise<void> {
-    const now = nowIso();
-    const orm = this.database.orm;
-    await orm.batch([
-      orm
-        .update(deliveries)
-        .set({ status: "suppressed", lastError: "provider_suppressed", updatedAt: now })
-        .where(eq(deliveries.id, deliveryId)),
-      orm
-        .insert(suppressions)
-        .select(
-          orm
-            .select({
-              id: sql<string>`${uuidv7()}`.as("id"),
-              workspaceId: deliveries.workspaceId,
-              contactId: deliveries.contactId,
-              email: deliveries.recipient,
-              reason: sql<string>`'provider'`.as("reason"),
-              provider: sql<string>`'cloudflare'`.as("provider"),
-              createdAt: sql<string>`${now}`.as("created_at"),
-            })
-            .from(deliveries)
-            .where(eq(deliveries.id, deliveryId)),
-        )
-        .onConflictDoNothing(),
-    ]);
-  }
-
-  /**
-   * Atomically (one D1 batch) marks a sending delivery accepted and records
-   * the synthetic `accepted` event, deduplicated per provider event id.
-   */
-  public async markDeliveryAccepted(input: {
-    deliveryId: string;
-    workspaceId: string;
-    provider: string;
-    providerMessageId: string;
-    acceptedAt: string;
-  }): Promise<void> {
-    const now = nowIso();
-    const orm = this.database.orm;
-    await orm.batch([
-      orm
-        .update(deliveries)
-        .set({
-          status: "accepted",
-          providerMessageId: input.providerMessageId,
-          lastError: null,
-          updatedAt: now,
-        })
-        .where(and(eq(deliveries.id, input.deliveryId), eq(deliveries.status, "sending"))),
-      orm
-        .insert(deliveryEvents)
-        .values({
-          id: uuidv7(),
-          workspaceId: input.workspaceId,
-          deliveryId: input.deliveryId,
-          provider: input.provider,
-          providerEventId: `accepted:${input.deliveryId}`,
-          providerMessageId: input.providerMessageId,
-          type: "accepted",
-          occurredAt: input.acceptedAt,
-          metadata: "{}",
-          createdAt: now,
-        })
-        .onConflictDoNothing(),
-    ]);
-  }
-
-  /** Records a send failure while the delivery is still claimed as sending. */
-  public async recordDeliveryAttemptFailure(
-    deliveryId: string,
-    input: { status: "queued" | "failed"; nextAttemptAt: string | null; lastError: string },
-  ): Promise<void> {
-    await this.database.orm
-      .update(deliveries)
-      .set({
-        status: input.status,
-        nextAttemptAt: input.nextAttemptAt,
-        lastError: input.lastError,
-        updatedAt: nowIso(),
-      })
-      .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, "sending")));
-  }
-
-  /** Queued deliveries whose retry timer (if any) has elapsed, oldest first. */
-  public async scanDueDeliveries(now: string): Promise<Array<{ id: string }>> {
-    return await this.database.orm
-      .select({ id: deliveries.id })
-      .from(deliveries)
-      .where(
-        and(
-          eq(deliveries.status, "queued"),
-          or(isNull(deliveries.nextAttemptAt), lte(deliveries.nextAttemptAt, now)),
-        ),
-      )
-      .orderBy(asc(deliveries.createdAt))
-      .limit(DUE_DELIVERY_SCAN_LIMIT);
-  }
-
-  /** Resolves the delivery a signed reply address points at, if it still exists. */
-  public async findReplyDelivery(
-    workspaceId: string,
-    deliveryId: string,
-    contactId: string,
-  ): Promise<{ id: string } | null> {
-    const row = await this.database.orm
-      .select({ id: deliveries.id })
-      .from(deliveries)
-      .where(
-        and(
-          eq(deliveries.workspaceId, workspaceId),
-          eq(deliveries.id, deliveryId),
-          eq(deliveries.contactId, contactId),
-        ),
-      )
-      .get();
-    return row ?? null;
-  }
-
-  /**
-   * Atomically (one D1 batch) stores an inbound reply: the raw email, the
-   * deduplicated `replied` delivery event, and the contact timeline event.
-   */
-  public async recordInboundReply(input: {
-    workspaceId: string;
-    contactId: string;
-    deliveryId: string;
-    inbound: {
-      id: string;
-      messageId: string | null;
-      sender: string;
-      recipient: string;
-      subject: string | null;
-      textBody: string | null;
-      htmlBody: string | null;
-      attachmentManifest: string;
-    };
-    deliveryEventId: string;
-    providerEventId: string;
-    deliveryEventMetadata: string;
-    contactEventId: string;
-    contactEventProperties: string;
-    receivedAt: string;
-  }): Promise<void> {
-    const orm = this.database.orm;
-    await orm.batch([
-      orm.insert(inboundEmails).values({
-        id: input.inbound.id,
-        workspaceId: input.workspaceId,
-        contactId: input.contactId,
-        deliveryId: input.deliveryId,
-        messageId: input.inbound.messageId,
-        sender: input.inbound.sender,
-        recipient: input.inbound.recipient,
-        subject: input.inbound.subject,
-        textBody: input.inbound.textBody,
-        htmlBody: input.inbound.htmlBody,
-        attachmentManifest: input.inbound.attachmentManifest,
-        receivedAt: input.receivedAt,
-      }),
-      orm
-        .insert(deliveryEvents)
-        .values({
-          id: input.deliveryEventId,
-          workspaceId: input.workspaceId,
-          deliveryId: input.deliveryId,
-          provider: "cloudflare",
-          providerEventId: input.providerEventId,
-          type: "replied",
-          occurredAt: input.receivedAt,
-          metadata: input.deliveryEventMetadata,
-          createdAt: input.receivedAt,
-        })
-        .onConflictDoNothing(),
-      orm.insert(contactEvents).values({
-        id: input.contactEventId,
-        workspaceId: input.workspaceId,
-        contactId: input.contactId,
-        type: "email_replied",
-        resourceType: "delivery",
-        resourceId: input.deliveryId,
-        properties: input.contactEventProperties,
-        occurredAt: input.receivedAt,
-        createdAt: input.receivedAt,
-      }),
-    ]);
-  }
-
-  public async applyCloudflareDeliveryEvent(input: {
-    providerEventId: string;
-    providerMessageId: string;
-    type: string;
-    occurredAt: string;
-    metadata: string;
-    status: "delivered" | "failed" | null;
-    suppressionReason: "bounce" | "complaint" | "provider" | null;
-  }): Promise<boolean> {
-    const delivery = await this.database.orm
-      .select({
-        id: deliveries.id,
-        workspaceId: deliveries.workspaceId,
-        contactId: deliveries.contactId,
-        recipient: deliveries.recipient,
-      })
-      .from(deliveries)
-      .where(
-        and(
-          eq(deliveries.provider, "cloudflare"),
-          eq(deliveries.providerMessageId, input.providerMessageId),
-        ),
-      )
-      .get();
-    if (!delivery) return false;
-    const now = nowIso();
-    const orm = this.database.orm;
-    const statements: [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]] = [
-      orm
-        .insert(deliveryEvents)
-        .values({
-          id: uuidv7(),
-          workspaceId: delivery.workspaceId,
-          deliveryId: delivery.id,
-          provider: "cloudflare",
-          providerEventId: input.providerEventId,
-          providerMessageId: input.providerMessageId,
-          type: input.type,
-          occurredAt: input.occurredAt,
-          metadata: input.metadata,
-          createdAt: now,
-        })
-        .onConflictDoNothing(),
-    ];
-    if (input.status) {
-      statements.push(
-        orm
-          .update(deliveries)
-          .set({ status: input.status, updatedAt: nowIso() })
-          .where(eq(deliveries.id, delivery.id)),
-      );
-    }
-    if (input.suppressionReason && (delivery.contactId || delivery.recipient)) {
-      statements.push(
-        orm
-          .insert(suppressions)
-          .values({
-            id: uuidv7(),
-            workspaceId: delivery.workspaceId,
-            contactId: delivery.contactId,
-            email: delivery.recipient,
-            reason: input.suppressionReason,
-            provider: "cloudflare",
-            createdAt: input.occurredAt,
-          })
-          .onConflictDoNothing(),
-      );
-    }
-    const results = await orm.batch(statements);
-    const eventResult = results[0] as D1Result | undefined;
-    return eventResult?.meta.changes === 1;
-  }
-
-  /** The contact behind a delivery, for timeline events; null when detached. */
-  public async findDeliveryContactId(
-    workspaceId: string,
-    deliveryId: string,
-  ): Promise<string | null> {
-    const row = await this.database.orm
-      .select({ contactId: deliveries.contactId })
-      .from(deliveries)
-      .where(
-        and(
-          eq(deliveries.workspaceId, workspaceId),
-          eq(deliveries.id, deliveryId),
-          isNotNull(deliveries.contactId),
-        ),
-      )
-      .get();
-    return row?.contactId ?? null;
+  public findDeliveryContactId(
+    ...args: Parameters<MessagingProviderEventRepository["findDeliveryContactId"]>
+  ) {
+    return this.providerEvents.findDeliveryContactId(...args);
   }
 }

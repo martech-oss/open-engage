@@ -91,4 +91,5 @@ function TableCaption({ className, ...props }: React.ComponentProps<"caption">) 
   );
 }
 
+/** @knipignore shadcn registry surface retained for composition. */
 export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };

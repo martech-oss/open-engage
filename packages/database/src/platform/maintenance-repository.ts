@@ -1,9 +1,9 @@
 import { and, asc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 
-import { contactEvents, contacts } from "../contacts/schema";
-import { scoreEvents } from "../contacts/score-schema";
+import { contactEventOutbox, contactEvents, contacts } from "../contacts/schema";
 import { deliveryEvents } from "../messaging/schema";
 import { dailyMetrics } from "../reports/schema";
+import { scoreEvents } from "../scoring/schema";
 import { DatabaseRepository } from "../shared/repository-base";
 import { idempotencyKeys } from "./schema";
 
@@ -76,6 +76,14 @@ export class MaintenanceRepository extends DatabaseRepository {
 
   public async purgeExpiredIdempotencyKeys(now: string): Promise<void> {
     await this.database.orm.delete(idempotencyKeys).where(lt(idempotencyKeys.expiresAt, now));
+  }
+
+  public async purgeProcessedContactEventWork(cutoff: string): Promise<void> {
+    await this.database.orm
+      .delete(contactEventOutbox)
+      .where(
+        and(eq(contactEventOutbox.status, "processed"), lt(contactEventOutbox.processedAt, cutoff)),
+      );
   }
 
   /**

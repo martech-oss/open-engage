@@ -6,12 +6,13 @@ import type {
   CompanyUpdate,
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
+import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   CompanyRepository,
-  writeAuditLog,
-  type OpenEngageDatabase,
   type CompanySummary as RepositoryAccountSummary,
-} from "@openengage/database";
+} from "@openengage/database/contacts";
+import { writeAuditLog } from "@openengage/database/platform";
+import { isConstraintError } from "@openengage/database/shared";
 
 /** Raised when a write conflicts with the unique domain constraint. */
 export class CompanyConflictError extends Error {
@@ -64,6 +65,7 @@ export async function createCompany(
   try {
     company = await new CompanyRepository(database, workspace).createCompany(input);
   } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new CompanyConflictError(error);
   }
   background.waitUntil(
@@ -85,6 +87,7 @@ export async function updateCompany(
   try {
     return await new CompanyRepository(database, workspace).updateCompany(id, input);
   } catch (error) {
+    if (!isConstraintError(error)) throw error;
     throw new CompanyConflictError(error);
   }
 }

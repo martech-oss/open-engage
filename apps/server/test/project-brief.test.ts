@@ -4,13 +4,15 @@ import { describe, expect, it } from "vitest";
 import {
   AutomationRepository,
   createDatabase,
+  CustomRedirectRepository,
   ProjectBriefLinkConflictError,
   projectItems,
   SegmentRepository,
-} from "@openengage/database";
+} from "@openengage/database/testing";
 
 import {
   approvedProjectBriefContext,
+  addProjectBriefItem,
   completeProjectBrief,
   createProjectBrief,
   getProjectBrief,
@@ -20,11 +22,82 @@ import {
   submitProjectBrief,
   updateProjectBrief,
   withdrawProjectBrief,
-} from "../src/web/project-brief-service";
+} from "../src/projects/project-brief-service";
 import { seedWorkspaceContext } from "./factory";
 import { addProjectBriefMember, projectBriefInput } from "./project-brief-test-support";
 
 describe("project brief workflow", () => {
+  it("links workspace redirects and retains archived link details", async () => {
+    const owner = await seedWorkspaceContext(env.DB, "brief-redirect-owner", "owner");
+    const approver = await addProjectBriefMember(owner, "brief-redirect-approver", "marketer");
+    const foreign = await seedWorkspaceContext(env.DB, "brief-redirect-foreign", "owner");
+    const { id } = await createProjectBrief(
+      createDatabase(env.DB),
+      owner,
+      projectBriefInput(owner.userId, approver.userId),
+    );
+    await submitProjectBrief(createDatabase(env.DB), owner, id);
+    await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Ready");
+
+    const redirects = new CustomRedirectRepository(createDatabase(env.DB), owner);
+    const active = await redirects.createRedirect({
+      name: "Activation campaign",
+      slug: `activation-${id}`,
+      destinationUrl: "https://example.com/activation",
+    });
+    const archived = await redirects.createRedirect({
+      name: "Archived campaign",
+      slug: `archived-${id}`,
+      destinationUrl: "https://example.com/archived",
+    });
+    await redirects.archiveRedirect(archived.id);
+    const foreignRedirect = await new CustomRedirectRepository(
+      createDatabase(env.DB),
+      foreign,
+    ).createRedirect({
+      name: "Foreign campaign",
+      slug: `foreign-${id}`,
+      destinationUrl: "https://example.com/foreign",
+    });
+
+    await expect(
+      addProjectBriefItem(createDatabase(env.DB), owner, {
+        id,
+        resourceType: "redirect",
+        resourceId: active.id,
+      }),
+    ).resolves.toEqual({ added: true });
+    expect((await getProjectBrief(createDatabase(env.DB), owner, id)).items).toEqual([
+      expect.objectContaining({
+        resourceType: "redirect",
+        resourceId: active.id,
+        name: "Activation campaign",
+        status: "active",
+        availability: "available",
+      }),
+    ]);
+    await redirects.archiveRedirect(active.id);
+    expect((await getProjectBrief(createDatabase(env.DB), owner, id)).items).toEqual([
+      expect.objectContaining({
+        resourceType: "redirect",
+        resourceId: active.id,
+        name: "Activation campaign",
+        status: "archived",
+        availability: "archived",
+      }),
+    ]);
+
+    for (const resourceId of [archived.id, foreignRedirect.id, "missing-redirect"]) {
+      await expect(
+        addProjectBriefItem(createDatabase(env.DB), owner, {
+          id,
+          resourceType: "redirect",
+          resourceId,
+        }),
+      ).rejects.toMatchObject({ kind: "resource_not_found" });
+    }
+  });
+
   it("locks, approves, links, reopens, and marks old revision resources stale", async () => {
     const owner = await seedWorkspaceContext(env.DB, "brief-owner", "owner");
     const approver = await addProjectBriefMember(owner, "brief-approver", "marketer");

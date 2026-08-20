@@ -4,10 +4,7 @@ import { orpcQuery } from "@/lib/orpc";
 import type {
   DealCreate,
   DealDetailData,
-  DealListData,
   DealOptions,
-  DealPipelineCreate,
-  DealPipelineUpdate,
   DealStage,
   DealStatus,
   DealSummary,
@@ -16,16 +13,12 @@ import type {
   DealTaskListItem,
   DealTaskStatus,
   DealTaskType,
-  DealTaskUpdate,
 } from "@openengage/core/deals";
 
 export type {
   DealCreate,
   DealDetailData,
-  DealListData,
   DealOptions,
-  DealPipelineCreate,
-  DealPipelineUpdate,
   DealStage,
   DealStatus,
   DealSummary,
@@ -34,7 +27,6 @@ export type {
   DealTaskListItem,
   DealTaskStatus,
   DealTaskType,
-  DealTaskUpdate,
 };
 
 export type DealPipeline = DealOptions["pipelines"][number];

@@ -52,7 +52,6 @@ export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
   segmentContactReconcileQueueMessageSchema,
   segmentFullRefreshQueueMessageSchema,
 ]);
-export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
 
 export type QueueMessage =
   | AutomationJobQueueMessage
