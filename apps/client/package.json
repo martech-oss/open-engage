@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && tsc --noEmit",
+    "build": "vite build && node ../../scripts/check-client-bundles.mjs && tsc --noEmit",
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy --config dist/server/wrangler.json",
     "cf:types": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --config wrangler.jsonc --config ../server/wrangler.jsonc",

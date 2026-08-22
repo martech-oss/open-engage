@@ -54,6 +54,27 @@ describe("automation route bundle boundary", () => {
     );
   });
 
+  it("prevents every route shell from statically importing a canvas-owned module", async () => {
+    const graph = await sourceGraph();
+    const routeRoot = resolve(clientSourceRoot, "routes");
+    const canvasOwned = [
+      resolve(clientSourceRoot, "features/automations/automation-flow-canvas.tsx"),
+      resolve(clientSourceRoot, "features/automations/automation-flow-node.tsx"),
+      resolve(clientSourceRoot, "features/automations/use-automation-builder.ts"),
+      ...[...graph.keys()].filter((file) =>
+        file.includes("/features/automations/automation-node-settings/"),
+      ),
+    ];
+    const routes = [...graph.keys()].filter(
+      (file) => file.startsWith(`${routeRoot}/`) && /\.tsx?$/.test(file),
+    );
+
+    for (const route of routes) {
+      const routeClosure = staticClosure(graph, route);
+      for (const ownedModule of canvasOwned) expect(routeClosure).not.toContain(ownedModule);
+    }
+  });
+
   it("does not expose heavy optional UI through the shared app-ui barrel", async () => {
     const graph = await sourceGraph();
     const barrel = resolve(clientSourceRoot, "components/app-ui/index.tsx");
@@ -72,9 +93,14 @@ describe("automation route bundle boundary", () => {
       (file) => file.startsWith(`${routeRoot}/`) && /\.tsx?$/.test(file),
     );
 
+    const allowedChartRoutes = new Set([
+      "_app.dashboard.tsx",
+      "_app.deal-reports.tsx",
+      "_app.reports.tsx",
+    ]);
     for (const route of routes) {
       const routePath = relative(routeRoot, route);
-      if (routePath.includes("dashboard") || routePath.includes("reports")) continue;
+      if (allowedChartRoutes.has(routePath)) continue;
       expect(dependencySpecifiers(graph, staticClosure(graph, route))).not.toContain("recharts");
     }
   });

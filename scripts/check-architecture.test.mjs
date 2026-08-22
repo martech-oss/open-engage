@@ -1198,6 +1198,27 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "route ssr:false",
     },
     {
+      name: "rejects a shorthand aliased route SSR opt-out",
+      files: {
+        "apps/client/src/routes/_app.contacts.tsx":
+          "declare function createFileRoute(path: string): (options: unknown) => unknown;\n" +
+          "const ssr = false;\n" +
+          'export const Route = createFileRoute("/_app/contacts")({ ssr });\n',
+      },
+      want: "route ssr:false",
+    },
+    {
+      name: "rejects a spread aliased route SSR opt-out",
+      files: {
+        "apps/client/src/routes/_app.contacts.tsx":
+          "declare function createFileRoute(path: string): (options: unknown) => unknown;\n" +
+          "const disabled = false;\n" +
+          "const routeOptions = { ssr: disabled };\n" +
+          'export const Route = createFileRoute("/_app/contacts")({ ...routeOptions });\n',
+      },
+      want: "route ssr:false",
+    },
+    {
       name: "allows the word ssr false outside a route option",
       files: {
         "apps/client/src/features/contacts/labels.ts":
@@ -1229,6 +1250,30 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "server-provided capabilities",
     },
     {
+      name: "rejects role equality through a local alias",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const canManage = (workspace: { role: string }) => { const access = workspace.role; return access === "admin"; };\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
+      name: "rejects role equality through a destructuring alias",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const canManage = (workspace: { role: string }) => { const { role: access } = workspace; return access !== "viewer"; };\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
+      name: "rejects aliased role collections used for permission lookup",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const canManage = (workspace: { role: string }) => { const access = workspace.role; const privileged = ["owner", "admin"]; return privileged.includes(access); };\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
       name: "rejects a client role Set even before its permission lookup",
       files: {
         "apps/client/src/features/settings/permissions.ts":
@@ -1246,6 +1291,14 @@ await test("architecture policy accepts and rejects controlled repositories", as
       },
     },
     {
+      name: "allows role aliases used only for labels",
+      files: {
+        "apps/client/src/features/settings/role-labels.tsx":
+          'const labels: Record<string, string> = { owner: "所有者", admin: "管理者" };\n' +
+          "export const RoleLabel = ({ workspace }: { workspace: { role: string } }) => { const access = workspace.role; return <span>{labels[access]}</span>; };\n",
+      },
+    },
+    {
       name: "allows direct role logic in test fixtures",
       files: {
         "apps/client/src/features/settings/permissions.test.ts":
@@ -1259,6 +1312,37 @@ await test("architecture policy accepts and rejects controlled repositories", as
           'import { RPCLink } from "@orpc/client/fetch";\nexport const link = new RPCLink({});\n',
       },
       want: "shared client oRPC module",
+    },
+    {
+      name: "rejects aliased RPCLink transport setup outside the shared client module",
+      files: {
+        "apps/client/src/features/contacts/transport.ts":
+          'import { RPCLink as Link } from "@orpc/client/fetch";\nexport const link = new Link({});\n',
+      },
+      want: "shared client oRPC module",
+    },
+    {
+      name: "rejects namespace oRPC client setup outside the shared client module",
+      files: {
+        "apps/client/src/features/contacts/transport.ts":
+          'import * as client from "@orpc/client";\nexport const rpc = client.createORPCClient({});\n',
+      },
+      want: "shared client oRPC module",
+    },
+    {
+      name: "rejects aliased oRPC client setup outside the shared client module",
+      files: {
+        "apps/client/src/features/contacts/transport.ts":
+          'import { createORPCClient as createClient } from "@orpc/client";\nexport const rpc = createClient({});\n',
+      },
+      want: "shared client oRPC module",
+    },
+    {
+      name: "allows type-only RPCLink imports outside the shared client module",
+      files: {
+        "apps/client/src/features/contacts/transport.ts":
+          'import type { RPCLink } from "@orpc/client/fetch";\nexport type ContactLink = RPCLink;\n',
+      },
     },
     {
       name: "allows RPCLink transport setup in the shared client module",

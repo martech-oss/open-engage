@@ -26,42 +26,18 @@ import { emailNode } from "./automation-graph";
 import { branchLabel } from "./automation-labels";
 import type { AutomationOptions } from "./automation-types";
 
-interface AutomationBuilderState {
-  definition: AutomationDefinition;
-  selectedNodeId: string | null;
-}
-
-type AutomationBuilderAction =
-  | { type: "replace_definition"; definition: AutomationDefinition }
-  | { type: "select_node"; nodeId: string | null }
-  | { type: "reset_for_entity"; definition: AutomationDefinition }
-  | { type: "replace_and_select"; definition: AutomationDefinition; nodeId: string | null };
-
-export function automationBuilderReducer(
-  state: AutomationBuilderState,
-  action: AutomationBuilderAction,
-): AutomationBuilderState {
-  switch (action.type) {
-    case "replace_definition":
-      return { ...state, definition: action.definition };
-    case "select_node":
-      return { ...state, selectedNodeId: action.nodeId };
-    case "reset_for_entity":
-      return {
-        definition: action.definition,
-        selectedNodeId: action.definition.nodes[0]?.id ?? null,
-      };
-    case "replace_and_select":
-      return { definition: action.definition, selectedNodeId: action.nodeId };
-  }
-}
-
 export function useAutomationBuilder(
   definition: AutomationDefinition,
   onDefinitionChange: (definition: AutomationDefinition) => void,
 ) {
   const [selectedNodeId, setSelectedNodeId] = useState(definition.nodes[0]?.id ?? null);
-  const selectedNode = definition.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedNode =
+    selectedNodeId === null
+      ? null
+      : (definition.nodes.find((node) => node.id === selectedNodeId) ??
+        definition.nodes[0] ??
+        null);
+  const effectiveSelectedNodeId = selectedNode?.id ?? null;
 
   const flowNodes: Node[] = useMemo(
     () =>
@@ -72,10 +48,10 @@ export function useAutomationBuilder(
         initialWidth: 180,
         initialHeight: node.type === "decision" || node.type === "condition" ? 82 : 70,
         handles: nodeHandles(node),
-        selected: node.id === selectedNodeId,
+        selected: node.id === effectiveSelectedNodeId,
         data: { node },
       })),
-    [definition.nodes, selectedNodeId],
+    [definition.nodes, effectiveSelectedNodeId],
   );
   const flowEdges: Edge[] = useMemo(
     () =>
@@ -212,7 +188,7 @@ export function useAutomationBuilder(
   return {
     definition,
     selectedNode,
-    selectedNodeId,
+    selectedNodeId: effectiveSelectedNodeId,
     flowNodes,
     flowEdges,
     onNodesChange,
