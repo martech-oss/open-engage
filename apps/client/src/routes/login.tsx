@@ -5,7 +5,6 @@ import { AuthPage } from "@/features/auth/auth-pages";
 import { getCurrentSession, safeRedirectTarget } from "@/lib/auth-session";
 
 export const Route = createFileRoute("/login")({
-  ssr: false,
   validateSearch: (search) => ({
     redirect: safeRedirectTarget(search.redirect),
   }),

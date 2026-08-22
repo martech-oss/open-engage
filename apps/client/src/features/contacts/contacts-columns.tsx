@@ -23,12 +23,14 @@ import { ContactAvatar, ContactScoreBadge, ContactStatusDot, contactName } from 
  */
 export function contactColumns({
   contacts,
+  renderedAt,
   selected,
   onSelectedChange,
   onOpen,
   onArchive,
 }: {
   contacts: ContactSummary[];
+  renderedAt: string;
   selected: Set<string>;
   onSelectedChange: (next: Set<string>) => void;
   onOpen: (contact: ContactSummary) => void;
@@ -132,7 +134,7 @@ export function contactColumns({
       key: "updatedAt",
       header: "更新",
       sortValue: (contact) => contact.updatedAt,
-      cell: (contact) => formatRelativeTime(contact.updatedAt),
+      cell: (contact) => formatRelativeTime(contact.updatedAt, { now: renderedAt }),
       headClassName: "w-24 text-right",
       cellClassName: "text-right text-[11px] text-muted-foreground",
     },

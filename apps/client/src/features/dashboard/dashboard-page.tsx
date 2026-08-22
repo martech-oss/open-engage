@@ -8,6 +8,7 @@ import {
   dashboardQueryOptions,
   dealSummaryQueryOptions,
   deliveryTrendQueryOptions,
+  type DashboardClock,
   rateDelta,
   toDeliveryHealth,
   TREND_WINDOW,
@@ -39,11 +40,11 @@ const TONE_COLORS: Record<EventTone, string> = {
   neutral: "var(--color-muted-foreground)",
 };
 
-export function DashboardPage(): ReactNode {
+export function DashboardPage({ clock }: { clock: DashboardClock }): ReactNode {
   const { data } = useSuspenseQuery(dashboardQueryOptions());
-  const { data: emails } = useSuspenseQuery(deliveryTrendQueryOptions());
-  const { data: contacts } = useSuspenseQuery(contactTrendQueryOptions());
-  const { data: deals } = useSuspenseQuery(dealSummaryQueryOptions());
+  const { data: emails } = useSuspenseQuery(deliveryTrendQueryOptions(clock));
+  const { data: contacts } = useSuspenseQuery(contactTrendQueryOptions(clock));
+  const { data: deals } = useSuspenseQuery(dealSummaryQueryOptions(clock));
   const { data: automations } = useSuspenseQuery(automationsQueryOptions());
 
   const deliveryHealth = toDeliveryHealth(emails.trend);
@@ -64,14 +65,14 @@ export function DashboardPage(): ReactNode {
       name: item.name,
       active: item.activeCount,
       done: item.completedCount,
-      lastRun: formatRelativeTime(item.updatedAt),
+      lastRun: formatRelativeTime(item.updatedAt, { now: clock.now }),
     }));
 
   const activity = data.recentEvents.slice(0, ACTIVITY_ROW_LIMIT).map((event, index) => ({
     id: `${event.occurredAt}-${index}`,
     label: CONTACT_EVENT_LABELS[event.type] ?? event.type,
     type: event.type,
-    at: formatRelativeTime(event.occurredAt),
+    at: formatRelativeTime(event.occurredAt, { now: clock.now }),
     color: TONE_COLORS[contactEventTone(event.type)],
   }));
 

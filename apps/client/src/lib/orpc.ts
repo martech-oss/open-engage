@@ -15,9 +15,19 @@ const getRpcHeaders = createIsomorphicFn()
   .client(() => new Headers())
   .server(() => getRequestHeaders());
 
+const rpcFetch = createIsomorphicFn()
+  .client((request: Request) => fetch(request))
+  .server(async (request: Request) => {
+    const { env } = await import("cloudflare:workers");
+    const headers = new Headers(getRequestHeaders());
+    for (const [name, value] of request.headers) headers.set(name, value);
+    return env.SERVER.fetch(new Request(request, { headers }));
+  });
+
 const link = new RPCLink({
   url: () => getRpcUrl(),
   headers: () => getRpcHeaders(),
+  fetch: (request) => rpcFetch(request),
 });
 
 export const orpc: ContractRouterClient<typeof contract> = createORPCClient(link);

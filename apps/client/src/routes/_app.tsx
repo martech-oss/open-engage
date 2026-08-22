@@ -7,7 +7,6 @@ import { getCurrentSession } from "@/lib/auth-session";
 import { workspaceQueryOptions } from "@/lib/workspace";
 
 export const Route = createFileRoute("/_app")({
-  ssr: false,
   beforeLoad: async ({ context, location }) => {
     const session = await getCurrentSession();
     if (!session) {

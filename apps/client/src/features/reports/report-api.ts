@@ -40,16 +40,22 @@ export interface ReportWorkspace {
   campaigns?: CampaignsReport;
 }
 
-const today = new Date();
-const thirtyDaysAgo = new Date(today);
-thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 29);
+export interface ReportClock {
+  now: string;
+  timeZone: string;
+}
 
-export const reportSearchDefaults: ReportSearch = {
-  view: "overview",
-  from: formatIsoDate(thirtyDaysAgo),
-  to: formatIsoDate(today),
-  currency: "",
-};
+export function createReportSearchDefaults(clock: ReportClock): ReportSearch {
+  const to = formatIsoDate(new Date(clock.now), clock.timeZone);
+  const fromDate = new Date(`${to}T00:00:00.000Z`);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 29);
+  return {
+    view: "overview",
+    from: formatIsoDate(fromDate),
+    to,
+    currency: "",
+  };
+}
 
 function isReportView(value: unknown): value is ReportView {
   return (
@@ -67,11 +73,14 @@ function isIsoDate(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-export function parseReportSearch(search: Record<string, unknown>): ReportSearch {
+export function parseReportSearch(
+  search: Record<string, unknown>,
+  defaults: ReportSearch,
+): ReportSearch {
   return {
     view: isReportView(search.view) ? search.view : "overview",
-    from: isIsoDate(search.from) ? search.from : reportSearchDefaults.from,
-    to: isIsoDate(search.to) ? search.to : reportSearchDefaults.to,
+    from: isIsoDate(search.from) ? search.from : defaults.from,
+    to: isIsoDate(search.to) ? search.to : defaults.to,
     currency: typeof search.currency === "string" ? search.currency : "",
   };
 }
@@ -113,14 +122,11 @@ export async function loadReportWorkspace(
 
 export type DealReportSearch = Pick<ReportSearch, "from" | "to" | "currency">;
 
-export const dealReportSearchDefaults: DealReportSearch = {
-  from: reportSearchDefaults.from,
-  to: reportSearchDefaults.to,
-  currency: "",
-};
-
-export function parseDealReportSearch(search: Record<string, unknown>): DealReportSearch {
-  const parsed = parseReportSearch(search);
+export function parseDealReportSearch(
+  search: Record<string, unknown>,
+  defaults: DealReportSearch,
+): DealReportSearch {
+  const parsed = parseReportSearch(search, { view: "deals", ...defaults });
   return { from: parsed.from, to: parsed.to, currency: parsed.currency };
 }
 

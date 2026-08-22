@@ -13,6 +13,7 @@ export interface RouterContext {
 }
 
 export const Route = createRootRouteWithContext<RouterContext>()({
+  beforeLoad: () => ({ renderedAt: new Date().toISOString() }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },

@@ -12,28 +12,33 @@ export const TREND_WINDOW = 7;
 /** Deal value and task counts are headline figures, quoted over the usual 30-day window. */
 const DEAL_SUMMARY_DAYS = 30;
 
+export interface DashboardClock {
+  now: string;
+  timeZone: string;
+}
+
 /** ISO date range covering today and the `days - 1` days before it, oldest first. */
-function lastDaysRange(days: number): { from: string; to: string } {
-  const today = new Date();
-  const from = new Date(today);
-  from.setDate(from.getDate() - (days - 1));
-  return { from: formatIsoDate(from), to: formatIsoDate(today) };
+function lastDaysRange(days: number, clock: DashboardClock): { from: string; to: string } {
+  const to = formatIsoDate(new Date(clock.now), clock.timeZone);
+  const from = new Date(`${to}T00:00:00.000Z`);
+  from.setUTCDate(from.getUTCDate() - (days - 1));
+  return { from: formatIsoDate(from), to };
 }
 
 export function dashboardQueryOptions() {
   return orpcQuery.dashboard.get.queryOptions();
 }
 
-export function deliveryTrendQueryOptions() {
-  return orpcQuery.reports.emails.queryOptions({ input: lastDaysRange(TREND_DAYS) });
+export function deliveryTrendQueryOptions(clock: DashboardClock) {
+  return orpcQuery.reports.emails.queryOptions({ input: lastDaysRange(TREND_DAYS, clock) });
 }
 
-export function contactTrendQueryOptions() {
-  return orpcQuery.reports.contacts.queryOptions({ input: lastDaysRange(TREND_DAYS) });
+export function contactTrendQueryOptions(clock: DashboardClock) {
+  return orpcQuery.reports.contacts.queryOptions({ input: lastDaysRange(TREND_DAYS, clock) });
 }
 
-export function dealSummaryQueryOptions() {
-  return orpcQuery.reports.deals.queryOptions({ input: lastDaysRange(DEAL_SUMMARY_DAYS) });
+export function dealSummaryQueryOptions(clock: DashboardClock) {
+  return orpcQuery.reports.deals.queryOptions({ input: lastDaysRange(DEAL_SUMMARY_DAYS, clock) });
 }
 
 export interface DeliveryHealthPoint {

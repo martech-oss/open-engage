@@ -27,7 +27,7 @@ import {
 } from "./model";
 import { useKeyedContactSelection } from "./selection";
 
-export function useContactsPageController(initialSearch: ContactSearch) {
+export function useContactsPageController(initialSearch: ContactSearch, renderedAt: string) {
   const queryClient = useQueryClient();
   const paginationKey = contactPaginationKey(initialSearch);
   const {
@@ -121,6 +121,7 @@ export function useContactsPageController(initialSearch: ContactSearch) {
   const segmentFilter = selectedSegmentFilter(filters, options);
   const columns = contactColumns({
     contacts,
+    renderedAt,
     selected,
     onSelectedChange: setSelected,
     onOpen: (contact: ContactSummary) => setActiveContactId(contact.id),

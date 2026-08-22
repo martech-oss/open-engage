@@ -7,65 +7,84 @@
  * that, not by name similarity.
  */
 
-const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-});
+export interface DateFormatOptions {
+  timeZone?: string;
+}
 
-const longDateTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+export interface RelativeTimeOptions {
+  now: Date | number | string;
+}
 
-const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-const monthDayTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+function formatter(options: Intl.DateTimeFormatOptions, timeZone = "UTC") {
+  return new Intl.DateTimeFormat("ja-JP", { ...options, timeZone });
+}
 
-const shortDateFormatter = new Intl.DateTimeFormat("ja-JP", {
-  month: "numeric",
-  day: "numeric",
-});
+function dateOnlyParts(value: string): { year: number; month: number; day: number } | null {
+  const match = DATE_ONLY.exec(value);
+  if (!match) return null;
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
 
 /** `2026年7月30日` */
-export function formatDate(value: string): string {
-  return dateFormatter.format(new Date(value));
+export function formatDate(value: string, options: DateFormatOptions = {}): string {
+  const authored = dateOnlyParts(value);
+  if (authored) return `${authored.year}年${authored.month}月${authored.day}日`;
+  return formatter(
+    { year: "numeric", month: "short", day: "numeric" },
+    options.timeZone,
+  ).format(new Date(value));
 }
 
 /** `2026年7月30日 23:05` */
-export function formatLongDateTime(value: string): string {
-  return longDateTimeFormatter.format(new Date(value));
+export function formatLongDateTime(value: string, options: DateFormatOptions = {}): string {
+  return formatter(
+    {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+    options.timeZone,
+  ).format(new Date(value));
 }
 
 /** `2026/07/30 23:05` */
-export function formatDateTime(value: string): string {
-  return dateTimeFormatter.format(new Date(value));
+export function formatDateTime(value: string, options: DateFormatOptions = {}): string {
+  return formatter(
+    { dateStyle: "medium", timeStyle: "short" },
+    options.timeZone,
+  ).format(new Date(value));
 }
 
 /** `7月30日 23:05` — omits the year, for dates close to now such as task due dates. */
-export function formatMonthDayTime(value: string): string {
-  return monthDayTimeFormatter.format(new Date(value));
+export function formatMonthDayTime(value: string, options: DateFormatOptions = {}): string {
+  return formatter(
+    { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" },
+    options.timeZone,
+  ).format(new Date(value));
 }
 
-/** `7/30` — takes a date-only `YYYY-MM-DD` string and reads it as local midnight. */
-export function formatShortDate(value: string): string {
-  return shortDateFormatter.format(new Date(`${value}T00:00:00`));
+/** `7/30` — preserves a date-only `YYYY-MM-DD` value without timezone conversion. */
+export function formatShortDate(value: string, _options: DateFormatOptions = {}): string {
+  const authored = dateOnlyParts(value);
+  if (!authored) return "";
+  return `${authored.month}/${authored.day}`;
 }
 
-/** `2026-07-30` — UTC calendar date for API report/query range inputs. */
-export function formatIsoDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
+/** `2026-07-30` — calendar date in `timeZone` for API report/query range inputs. */
+export function formatIsoDate(value: Date, timeZone = "UTC"): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("ja", { numeric: "auto" });
@@ -84,15 +103,16 @@ const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
  * time matters less than the recency. Use {@link formatDateTime} when the
  * reader needs the actual timestamp.
  */
-export function formatRelativeTime(value: string): string {
-  const elapsed = new Date(value).getTime() - Date.now();
+export function formatRelativeTime(value: string, options?: RelativeTimeOptions): string {
+  const now = options ? new Date(options.now).getTime() : Date.now();
+  const elapsed = new Date(value).getTime() - now;
   if (Number.isNaN(elapsed)) return "";
   let [unit, size] = RELATIVE_UNITS[0]!;
   for (const [candidateUnit, candidateSize] of RELATIVE_UNITS) {
     if (Math.abs(elapsed) < candidateSize) break;
     [unit, size] = [candidateUnit, candidateSize];
   }
-  return relativeTimeFormatter.format(Math.round(elapsed / size), unit);
+  return relativeTimeFormatter.format(Math.round(elapsed / size), unit).replaceAll(" ", "");
 }
 
 /** `¥1,234` for JPY, `$1,234.00` otherwise. Falls back to plain text on an unknown currency code. */

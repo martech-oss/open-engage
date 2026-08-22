@@ -4,6 +4,7 @@ import { routeStatusComponents } from "@/components/route-status";
 import { CompaniesPage } from "@/features/companies/companies-page";
 import {
   companiesQueryOptions,
+  companyEnrichmentCapabilityQueryOptions,
   companySearchDefaults,
   type CompanySearch,
   parseCompanySearch,
@@ -16,7 +17,11 @@ export const Route = createFileRoute("/_app/companies/")({
     middlewares: [stripSearchParams(companySearchDefaults)],
   },
   loaderDeps: ({ search }) => ({ q: search.q }),
-  loader: ({ deps, context }) => context.queryClient.ensureQueryData(companiesQueryOptions(deps.q)),
+  loader: ({ deps, context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(companiesQueryOptions(deps.q)),
+      context.queryClient.ensureQueryData(companyEnrichmentCapabilityQueryOptions()),
+    ]),
   ...routeStatusComponents,
   component: CompaniesRoute,
 });

@@ -2,13 +2,12 @@ import {
   createFileRoute,
   redirect,
   type SearchSchemaInput,
-  stripSearchParams,
 } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
 import {
+  createReportSearchDefaults,
   parseReportSearch,
-  reportSearchDefaults,
   reportWorkspaceQueryOptions,
   type ReportSearch,
 } from "@/features/reports/report-api";
@@ -16,24 +15,33 @@ import { ReportsPage } from "@/features/reports/report-pages";
 
 export const Route = createFileRoute("/_app/reports")({
   validateSearch: (search: Partial<ReportSearch> & SearchSchemaInput): ReportSearch =>
-    parseReportSearch(search as Record<string, unknown>),
-  search: {
-    middlewares: [stripSearchParams(reportSearchDefaults)],
+    parseReportSearch(search as Record<string, unknown>, {
+      view: "overview",
+      from: "",
+      to: "",
+      currency: "",
+    }),
+  beforeLoad: ({ context, search }) => {
+    const defaults = createReportSearchDefaults({
+      now: context.renderedAt,
+      timeZone: context.workspace.timezone,
+    });
+    return { reportSearch: parseReportSearch(search, defaults) };
   },
-  loaderDeps: ({ search }) => search,
-  loader: async ({ context, deps }) => {
-    if (deps.view === "deals") {
+  loader: async ({ context }) => {
+    const search = context.reportSearch;
+    if (search.view === "deals") {
       throw redirect({
         to: "/deal-reports",
-        search: { from: deps.from, to: deps.to, currency: deps.currency },
+        search: { from: search.from, to: search.to, currency: search.currency },
       });
     }
-    await context.queryClient.ensureQueryData(reportWorkspaceQueryOptions(deps));
+    await context.queryClient.ensureQueryData(reportWorkspaceQueryOptions(search));
   },
   ...routeStatusComponents,
   component: ReportsRoute,
 });
 
 function ReportsRoute() {
-  return <ReportsPage search={Route.useSearch()} />;
+  return <ReportsPage search={Route.useRouteContext().reportSearch} />;
 }

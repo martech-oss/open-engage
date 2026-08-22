@@ -13,8 +13,14 @@ import { AdvancedContactFilters } from "./filters";
 import { ContactOverlays } from "./overlays";
 import { ContactsTable } from "./table";
 
-export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
-  const controller = useContactsPageController(initialSearch);
+export function ContactsPage({
+  initialSearch,
+  renderedAt = "1970-01-01T00:00:00.000Z",
+}: {
+  initialSearch: ContactSearch;
+  renderedAt?: string;
+}): ReactNode {
+  const controller = useContactsPageController(initialSearch, renderedAt);
   return (
     <Page
       title="連絡先"
