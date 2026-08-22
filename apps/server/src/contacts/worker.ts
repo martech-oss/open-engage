@@ -181,73 +181,127 @@ function normalizeImportRows(lines: readonly string[]): ContactImportRow[] {
 
 export async function processContactExport(jobId: string, env: RuntimeEnv): Promise<void> {
   const repository = new DataJobWorkerRepository(createDatabase(env.DB));
-  const job = await repository.claimExportJob(jobId);
-  if (!job) return;
-  const lastId = typeof job.cursor["lastId"] === "string" ? job.cursor["lastId"] : "";
-  const partNumber = typeof job.cursor["partNumber"] === "number" ? job.cursor["partNumber"] : 0;
-  const filter = contactExportFilterSchema.parse(job.cursor["filter"] ?? {});
-  const batchSize = 1_000;
-  const contacts = await repository.listContactsForExport(
-    job.workspaceId,
-    filter,
-    lastId,
-    batchSize,
-  );
-  if (contacts.length > 0) {
-    const header =
-      partNumber === 0
-        ? "id,email,first_name,last_name,phone,external_id,stage,score,status,custom_fields,created_at,updated_at\n"
-        : "";
-    const body =
-      header +
-      contacts
-        .map((contact) =>
-          [
-            contact.id,
-            contact.email,
-            contact.firstName,
-            contact.lastName,
-            contact.phone,
-            contact.externalId,
-            contact.stage,
-            contact.score,
-            contact.status,
-            contact.customFields,
-            contact.createdAt,
-            contact.updatedAt,
-          ]
-            .map(csvCell)
-            .join(","),
-        )
-        .join("\n") +
-      "\n";
-    await env.ASSETS_BUCKET.put(`${job.r2Key}.parts/${partNumber}.csv`, body, {
-      httpMetadata: { contentType: "text/csv; charset=utf-8" },
-    });
-    const last = contacts.at(-1);
-    await repository.recordExportProgress(jobId, {
-      cursor: { partNumber: partNumber + 1, lastId: last?.id ?? lastId, filter },
-      count: contacts.length,
-    });
-  }
-  if (contacts.length === batchSize) {
-    await env.JOBS_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
-    return;
-  }
-  const chunks: ArrayBuffer[] = [];
-  for (let index = 0; index < partNumber + (contacts.length > 0 ? 1 : 0); index += 1) {
-    const part = await env.ASSETS_BUCKET.get(`${job.r2Key}.parts/${index}.csv`);
-    if (!part) throw new PermanentChannelError(`Export part ${index} is missing`);
-    chunks.push(await part.arrayBuffer());
-  }
-  await env.ASSETS_BUCKET.put(job.r2Key, new Blob(chunks), {
-    httpMetadata: {
-      contentType: "text/csv; charset=utf-8",
-      contentDisposition: `attachment; filename="openengage-contacts-${jobId}.csv"`,
-    },
+  const claimTime = new Date().toISOString();
+  const job = await repository.claimExportJob({
+    jobId,
+    now: claimTime,
+    leaseExpiresAt: new Date(new Date(claimTime).getTime() + 5 * 60_000).toISOString(),
   });
-  await repository.markCompleted(jobId);
+  if (!job) return;
+  try {
+    if (job.attempts > 5) {
+      throw new PermanentChannelError("Contact export attempts exhausted");
+    }
+    const lastId = typeof job.cursor["lastId"] === "string" ? job.cursor["lastId"] : "";
+    const partNumber = typeof job.cursor["partNumber"] === "number" ? job.cursor["partNumber"] : 0;
+    const filter = contactExportFilterSchema.parse(job.cursor["filter"] ?? {});
+    const batchSize = 1_000;
+    const contacts = await repository.listContactsForExport(
+      job.workspaceId,
+      filter,
+      lastId,
+      batchSize,
+    );
+    if (contacts.length > 0) {
+      const body =
+        (partNumber === 0 ? CONTACT_EXPORT_HEADER : "") +
+        contacts
+          .map((contact) =>
+            [
+              contact.id,
+              contact.email,
+              contact.firstName,
+              contact.lastName,
+              contact.phone,
+              contact.externalId,
+              contact.stage,
+              contact.score,
+              contact.status,
+              contact.customFields,
+              contact.createdAt,
+              contact.updatedAt,
+            ]
+              .map(csvCell)
+              .join(","),
+          )
+          .join("\n") +
+        "\n";
+      await env.ASSETS_BUCKET.put(`${job.r2Key}.parts/${partNumber}.csv`, body, {
+        httpMetadata: { contentType: "text/csv; charset=utf-8" },
+      });
+    }
+    const last = contacts.at(-1);
+    const nextCursor = {
+      partNumber: partNumber + (contacts.length > 0 ? 1 : 0),
+      lastId: last?.id ?? lastId,
+      filter,
+    };
+    if (contacts.length === batchSize) {
+      const advanced = await repository.recordExportProgress({
+        jobId,
+        leaseId: job.leaseId,
+        cursor: nextCursor,
+        count: contacts.length,
+        attempts: job.attempts,
+        now: new Date().toISOString(),
+      });
+      if (advanced) {
+        await env.JOBS_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
+      }
+      return;
+    }
+    const chunks: BlobPart[] = [];
+    if (partNumber === 0 && contacts.length === 0) chunks.push(CONTACT_EXPORT_HEADER);
+    for (let index = 0; index < nextCursor.partNumber; index += 1) {
+      const part = await env.ASSETS_BUCKET.get(`${job.r2Key}.parts/${index}.csv`);
+      if (!part) throw new PermanentChannelError(`Export part ${index} is missing`);
+      chunks.push(await part.arrayBuffer());
+    }
+    await env.ASSETS_BUCKET.put(job.r2Key, new Blob(chunks), {
+      httpMetadata: {
+        contentType: "text/csv; charset=utf-8",
+        contentDisposition: `attachment; filename="openengage-contacts-${jobId}.csv"`,
+      },
+    });
+    await repository.completeExportForLease({
+      jobId,
+      leaseId: job.leaseId,
+      cursor: nextCursor,
+      count: contacts.length,
+      attempts: job.attempts,
+      now: new Date().toISOString(),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 2_000) : String(error);
+    const terminal = error instanceof PermanentChannelError || job.attempts >= 5;
+    const now = new Date().toISOString();
+    if (terminal) {
+      await repository.failExportForLease({
+        jobId,
+        leaseId: job.leaseId,
+        error:
+          job.attempts >= 5 && !(error instanceof PermanentChannelError)
+            ? `Contact export attempts exhausted: ${message}`
+            : message,
+        now,
+      });
+      if (!(error instanceof PermanentChannelError)) {
+        throw new PermanentChannelError("Contact export attempts exhausted");
+      }
+    } else {
+      await repository.returnExportToPending({
+        jobId,
+        leaseId: job.leaseId,
+        error: message,
+        now,
+      });
+    }
+    throw error;
+  }
 }
+
+const CONTACT_EXPORT_HEADER =
+  "id,email,first_name,last_name,phone,external_id,stage,score,status,custom_fields,created_at,updated_at\n";
 
 export function csvCell(value: unknown): string {
   let rendered =

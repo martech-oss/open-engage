@@ -1,3 +1,6 @@
+import type { OpenEngageDatabase } from "@openengage/database/client";
+import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
+
 import { authed, requireRole } from "../orpc/base";
 import { automationReport } from "./automations-report";
 import { campaignReport } from "./campaigns-report";
@@ -10,69 +13,82 @@ import { toReportRange } from "./shared";
 import { siteReport } from "./site-report";
 
 export const reportsOverviewProcedure = authed.reports.overview.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-    return reportsOverview(context.database, context.workspace.workspaceId, input);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
+    return reportsOverview(context.database, context.workspace.workspaceId, input, timeZone);
   },
 );
 
 export const contactsReportProcedure = authed.reports.contacts.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
     return contactReport(
       context.database,
       context.workspace.workspaceId,
-      toReportRange(input.from, input.to),
+      toReportRange(input.from, input.to, timeZone),
     );
   },
 );
 
 export const automationsReportProcedure = authed.reports.automations.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
     return automationReport(
       context.database,
       context.workspace.workspaceId,
-      toReportRange(input.from, input.to),
+      toReportRange(input.from, input.to, timeZone),
     );
   },
 );
 
-export const emailsReportProcedure = authed.reports.emails.handler(({ context, input, errors }) => {
-  requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-  return emailReport(
-    context.database,
-    context.workspace.workspaceId,
-    toReportRange(input.from, input.to),
-  );
-});
+export const emailsReportProcedure = authed.reports.emails.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
+    return emailReport(
+      context.database,
+      context.workspace.workspaceId,
+      toReportRange(input.from, input.to, timeZone),
+    );
+  },
+);
 
-export const dealsReportProcedure = authed.reports.deals.handler(({ context, input, errors }) => {
-  requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-  return dealReport(
-    context.database,
-    context.workspace.workspaceId,
-    toReportRange(input.from, input.to),
-    input.currency,
-  );
-});
+export const dealsReportProcedure = authed.reports.deals.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
+    return dealReport(
+      context.database,
+      context.workspace.workspaceId,
+      toReportRange(input.from, input.to, timeZone),
+      input.currency,
+    );
+  },
+);
 
-export const siteReportProcedure = authed.reports.site.handler(({ context, input, errors }) => {
-  requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-  return siteReport(
-    context.database,
-    context.workspace.workspaceId,
-    toReportRange(input.from, input.to),
-  );
-});
+export const siteReportProcedure = authed.reports.site.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
+    return siteReport(
+      context.database,
+      context.workspace.workspaceId,
+      toReportRange(input.from, input.to, timeZone),
+    );
+  },
+);
 
 export const campaignsReportProcedure = authed.reports.campaigns.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
     return campaignReport(
       context.database,
       context.workspace.workspaceId,
-      toReportRange(input.from, input.to),
+      toReportRange(input.from, input.to, timeZone),
       input.currency ?? "JPY",
     );
   },
@@ -93,3 +109,9 @@ export const reportProcedures = {
 };
 
 export const dashboardProcedures = { get: dashboardProcedure };
+
+async function reportTimeZone(database: OpenEngageDatabase, workspaceId: string): Promise<string> {
+  const workspace = await new WorkspaceSettingsRepository(database, { workspaceId }).getWorkspace();
+  if (!workspace) throw new Error("Workspace organization could not be loaded");
+  return workspace.timezone;
+}

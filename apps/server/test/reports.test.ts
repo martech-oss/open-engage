@@ -11,6 +11,56 @@ import {
 import { seedMember, seedWorkspaceClient } from "./factory";
 
 describe("Reporting", () => {
+  it.each([
+    {
+      name: "Tokyo early hour through overview",
+      timezone: "Asia/Tokyo",
+      day: "2026-08-23",
+      at: "2026-08-22T15:30:00.000Z",
+      overview: true,
+    },
+    {
+      name: "Los Angeles evening",
+      timezone: "America/Los_Angeles",
+      day: "2026-08-22",
+      at: "2026-08-23T06:30:00.000Z",
+      overview: false,
+    },
+    {
+      name: "Los Angeles spring-forward day",
+      timezone: "America/Los_Angeles",
+      day: "2026-03-08",
+      at: "2026-03-09T06:30:00.000Z",
+      overview: false,
+    },
+  ])("uses workspace boundaries and daily buckets for $name", async (fixture) => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB, {
+      role: "analyst",
+      timezone: fixture.timezone,
+    });
+    const at = fixture.at;
+    await createDatabase(env.DB)
+      .orm.insert(contactsTable)
+      .values({
+        id: uuidv7(),
+        workspaceId,
+        email: `${uuidv7()}@example.com`,
+        stage: "lead",
+        score: 0,
+        status: "active",
+        customFields: "{}",
+        createdAt: at,
+        updatedAt: at,
+      });
+
+    const report = fixture.overview
+      ? (await client.reports.overview({ from: fixture.day, to: fixture.day })).contacts
+      : await client.reports.contacts({ from: fixture.day, to: fixture.day });
+
+    expect(report.summary.newContacts).toBe(1);
+    expect(report.trend).toEqual([{ day: fixture.day, added: 1, archived: 0 }]);
+  });
+
   it("aggregates contacts, automations, emails, deals, and site activity", async () => {
     const contactId = uuidv7();
     const archivedContactId = uuidv7();

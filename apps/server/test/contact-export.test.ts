@@ -17,7 +17,11 @@ import {
 } from "@openengage/database/testing";
 import type { WorkspaceContext } from "@openengage/orpc";
 
-import { getContactExportFile, startContactExport } from "../src/contacts/import-export-service";
+import {
+  getContactExportFile,
+  getDataJob,
+  startContactExport,
+} from "../src/contacts/import-export-service";
 import { processContactExport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";
 import { seedWorkspaceContext } from "./factory";
@@ -152,6 +156,7 @@ describe("contact export jobs", () => {
         partNumber: 1,
         lastId: "bulk-0999",
         filter: { query: "bulk-", status: "active" },
+        attempts: 1,
       }),
     });
 
@@ -169,6 +174,129 @@ describe("contact export jobs", () => {
         .where(eq(importJobs.id, jobId))
         .get(),
     ).resolves.toEqual({ status: "completed", processed: 1_001 });
+  });
+
+  it("writes a header-only CSV when the filter matches no contacts", async () => {
+    const workspace = await seedWorkspaceContext(env.DB, "export-empty");
+    const { jobId } = await startContactExport(createDatabase(env.DB), env.JOBS_QUEUE, workspace, {
+      filter: { query: "no contact can match this" },
+    });
+
+    await processContactExport(jobId, runtimeEnv);
+
+    await expect(completedCsv(workspace, jobId)).resolves.toBe(
+      "id,email,first_name,last_name,phone,external_id,stage,score,status,custom_fields,created_at,updated_at\n",
+    );
+  });
+
+  it("leases duplicate deliveries exclusively and enqueues a cursor only once", async () => {
+    const workspace = await seedWorkspaceContext(env.DB, "export-duplicate");
+    const database = createDatabase(env.DB);
+    const rows = Array.from({ length: 1_000 }, (_, index) =>
+      contactRow(workspace.workspaceId, `duplicate-${String(index).padStart(4, "0")}`),
+    );
+    for (let offset = 0; offset < rows.length; offset += 5) {
+      await database.orm.insert(contacts).values(rows.slice(offset, offset + 5));
+    }
+    const published: unknown[] = [];
+    const queue = queueStub(published);
+    const { jobId } = await startContactExport(database, queue, workspace);
+    published.length = 0;
+
+    await Promise.all([
+      processContactExport(jobId, runtimeWithJobsQueue(queue)),
+      processContactExport(jobId, runtimeWithJobsQueue(queue)),
+    ]);
+
+    expect(published).toEqual([{ kind: "contact_export", exportJobId: jobId }]);
+    await expect(getDataJob(database, workspace.workspaceId, jobId)).resolves.toMatchObject({
+      status: "processing",
+      processed: 1_000,
+      attempts: 1,
+    });
+  });
+
+  it("recovers an expired export lease", async () => {
+    const workspace = await seedWorkspaceContext(env.DB, "export-expired");
+    const database = createDatabase(env.DB);
+    await database.orm.insert(contacts).values(contactRow(workspace.workspaceId, "expired-row"));
+    const { jobId } = await startContactExport(database, env.JOBS_QUEUE, workspace);
+    await database.orm
+      .update(importJobs)
+      .set({
+        status: "processing",
+        cursor: JSON.stringify({
+          partNumber: 0,
+          lastId: "",
+          filter: {},
+          leaseId: "expired-lease",
+          leaseExpiresAt: "2020-01-01T00:00:00.000Z",
+          attempts: 1,
+        }),
+      })
+      .where(eq(importJobs.id, jobId));
+
+    await processContactExport(jobId, runtimeEnv);
+
+    await expect(getDataJob(database, workspace.workspaceId, jobId)).resolves.toMatchObject({
+      status: "completed",
+      processed: 1,
+      attempts: 2,
+      error: null,
+    });
+  });
+
+  it("persists a terminal error when a required R2 part is missing", async () => {
+    const workspace = await seedWorkspaceContext(env.DB, "export-missing-part");
+    const database = createDatabase(env.DB);
+    const { jobId } = await startContactExport(database, env.JOBS_QUEUE, workspace);
+    await database.orm
+      .update(importJobs)
+      .set({ cursor: JSON.stringify({ partNumber: 1, lastId: "already-exported", filter: {} }) })
+      .where(eq(importJobs.id, jobId));
+
+    await expect(processContactExport(jobId, runtimeEnv)).rejects.toThrow(
+      "Export part 0 is missing",
+    );
+    await expect(getDataJob(database, workspace.workspaceId, jobId)).resolves.toMatchObject({
+      status: "failed",
+      attempts: 1,
+      error: "Export part 0 is missing",
+    });
+  });
+
+  it("persists an exhausted transient failure as terminal", async () => {
+    const workspace = await seedWorkspaceContext(env.DB, "export-exhausted");
+    const database = createDatabase(env.DB);
+    await database.orm.insert(contacts).values(contactRow(workspace.workspaceId, "retry-row"));
+    const { jobId } = await startContactExport(database, env.JOBS_QUEUE, workspace);
+    await database.orm
+      .update(importJobs)
+      .set({
+        cursor: JSON.stringify({ partNumber: 0, lastId: "", filter: {}, attempts: 4 }),
+      })
+      .where(eq(importJobs.id, jobId));
+    const unavailableBucket = new Proxy(env.ASSETS_BUCKET, {
+      get(target, property, receiver) {
+        if (property === "put") return async () => Promise.reject(new Error("R2 unavailable"));
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const failingRuntime = new Proxy(env, {
+      get(target, property, receiver) {
+        if (property === "ASSETS_BUCKET") return unavailableBucket;
+        return Reflect.get(target, property, receiver);
+      },
+    }) as RuntimeEnv;
+
+    await expect(processContactExport(jobId, failingRuntime)).rejects.toThrow(
+      "Contact export attempts exhausted",
+    );
+    await expect(getDataJob(database, workspace.workspaceId, jobId)).resolves.toMatchObject({
+      status: "failed",
+      attempts: 5,
+      error: "Contact export attempts exhausted: R2 unavailable",
+    });
   });
 });
 
@@ -305,4 +433,21 @@ function csvIds(csv: string): string[] {
     .split("\n")
     .slice(1)
     .map((line) => /^"([^"]+)"/.exec(line)?.[1] ?? "");
+}
+
+function runtimeWithJobsQueue(queue: Queue): RuntimeEnv {
+  return new Proxy(env, {
+    get(target, property, receiver) {
+      if (property === "JOBS_QUEUE") return queue;
+      return Reflect.get(target, property, receiver);
+    },
+  }) as RuntimeEnv;
+}
+
+function queueStub(published: unknown[]): Queue {
+  return {
+    send: async (body: unknown) => {
+      published.push(body);
+    },
+  } as unknown as Queue;
 }

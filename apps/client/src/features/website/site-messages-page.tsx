@@ -43,7 +43,7 @@ export function SiteMessagesPage(): ReactNode {
       emptyDescription="ページ条件と表示期間を指定して、最初のメッセージを作成してください。"
       editor={
         <SiteMessageEditorDialog
-          key={editor.editing?.id ?? "new"}
+          key={editor.sessionKey}
           item={editor.editing}
           open={editor.dialogOpen}
           onOpenChange={editor.onOpenChange}

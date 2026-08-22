@@ -1,12 +1,13 @@
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, or, sql } from "drizzle-orm";
 
 import type { ContactExportFilter } from "@openengage/core/contacts";
 import { jsonRecordSchema } from "@openengage/core/shared";
 
 import type { OpenEngageDatabase } from "../client";
-import { nowIso } from "../shared/database-utils";
+import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
+import { uuidv7 } from "../shared/uuid";
 import { buildContactFilterPredicate } from "./filter-predicate";
 import { contactImportParts, contacts, importJobs } from "./schema";
 
@@ -76,6 +77,7 @@ export class DataJobRepository extends WorkspaceRepository {
         processed: importJobs.processed,
         succeeded: importJobs.succeeded,
         failed: importJobs.failed,
+        cursor: importJobs.cursor,
         errorManifestKey: importJobs.errorManifestKey,
         createdAt: importJobs.createdAt,
         updatedAt: importJobs.updatedAt,
@@ -83,7 +85,15 @@ export class DataJobRepository extends WorkspaceRepository {
       .from(importJobs)
       .where(and(this.inWorkspace(importJobs), eq(importJobs.id, jobId)))
       .get();
-    return row ?? null;
+    if (!row) return null;
+    const { cursor: encodedCursor, ...job } = row;
+    const cursor = safeJsonRecord(encodedCursor);
+    return {
+      ...job,
+      attempts: nonnegativeInteger(cursor["attempts"]),
+      error:
+        row.status === "failed" && typeof cursor["error"] === "string" ? cursor["error"] : null,
+    };
   }
 
   public async getExportJob(jobId: string): Promise<{ r2Key: string; status: string } | null> {
@@ -108,30 +118,59 @@ export class DataJobRepository extends WorkspaceRepository {
  * intentionally not workspace-scoped.
  */
 export class DataJobWorkerRepository extends DatabaseRepository {
-  public async claimExportJob(jobId: string): Promise<{
+  public async claimExportJob(input: {
+    jobId: string;
+    now: string;
+    leaseExpiresAt: string;
+  }): Promise<{
     workspaceId: string;
     r2Key: string;
-    status: string;
     cursor: Record<string, unknown>;
+    leaseId: string;
+    attempts: number;
   } | null> {
-    const row = await this.database.orm
-      .select({
-        workspaceId: importJobs.workspaceId,
-        r2Key: importJobs.r2Key,
-        status: importJobs.status,
-        cursor: importJobs.cursor,
+    const leaseId = uuidv7();
+    const [row] = await this.database.orm
+      .update(importJobs)
+      .set({
+        status: "processing",
+        cursor: sql`json_set(
+          COALESCE(${importJobs.cursor}, '{}'),
+          '$.leaseId', ${leaseId},
+          '$.leaseExpiresAt', ${input.leaseExpiresAt},
+          '$.attempts', COALESCE(CAST(json_extract(${importJobs.cursor}, '$.attempts') AS INTEGER), 0) + 1
+        )`,
+        updatedAt: input.now,
       })
-      .from(importJobs)
       .where(
         and(
-          eq(importJobs.id, jobId),
+          eq(importJobs.id, input.jobId),
           eq(importJobs.kind, "contact_export"),
-          inArray(importJobs.status, ["pending", "processing"]),
+          or(
+            eq(importJobs.status, "pending"),
+            and(
+              eq(importJobs.status, "processing"),
+              or(
+                sql`json_extract(${importJobs.cursor}, '$.leaseId') IS NULL`,
+                sql`json_extract(${importJobs.cursor}, '$.leaseExpiresAt') <= ${input.now}`,
+              ),
+            ),
+          ),
         ),
       )
-      .get();
+      .returning({
+        workspaceId: importJobs.workspaceId,
+        r2Key: importJobs.r2Key,
+        cursor: importJobs.cursor,
+      });
     if (!row) return null;
-    return { ...row, cursor: safeJsonRecord(row.cursor) };
+    const cursor = safeJsonRecord(row.cursor);
+    return {
+      ...row,
+      cursor,
+      leaseId,
+      attempts: nonnegativeInteger(cursor["attempts"]),
+    };
   }
 
   /**
@@ -171,25 +210,97 @@ export class DataJobWorkerRepository extends DatabaseRepository {
   }
 
   /** Advances the export cursor; every paged row counts as succeeded. */
-  public async recordExportProgress(
-    jobId: string,
-    input: { cursor: Record<string, unknown>; count: number },
-  ): Promise<void> {
-    await this.database.orm
+  public async recordExportProgress(input: {
+    jobId: string;
+    leaseId: string;
+    cursor: Record<string, unknown>;
+    count: number;
+    attempts: number;
+    now: string;
+  }): Promise<boolean> {
+    const result = await this.database.orm
       .update(importJobs)
       .set({
         status: "processing",
-        cursor: JSON.stringify(input.cursor),
+        cursor: JSON.stringify({ ...input.cursor, attempts: input.attempts }),
         processed: sql`${importJobs.processed} + ${input.count}`,
         succeeded: sql`${importJobs.succeeded} + ${input.count}`,
-        updatedAt: nowIso(),
+        updatedAt: input.now,
       })
-      .where(eq(importJobs.id, jobId));
+      .where(liveExportLease(input.jobId, input.leaseId, input.now));
+    return changedExactlyOne(result);
   }
 
-  public markCompleted(jobId: string): Promise<void> {
-    return completeJob(this.database, jobId);
+  public async completeExportForLease(input: {
+    jobId: string;
+    leaseId: string;
+    cursor: Record<string, unknown>;
+    count: number;
+    attempts: number;
+    now: string;
+  }): Promise<boolean> {
+    const result = await this.database.orm
+      .update(importJobs)
+      .set({
+        status: "completed",
+        cursor: JSON.stringify({ ...input.cursor, attempts: input.attempts }),
+        processed: sql`${importJobs.processed} + ${input.count}`,
+        succeeded: sql`${importJobs.succeeded} + ${input.count}`,
+        updatedAt: input.now,
+      })
+      .where(liveExportLease(input.jobId, input.leaseId, input.now));
+    return changedExactlyOne(result);
   }
+
+  public async returnExportToPending(input: {
+    jobId: string;
+    leaseId: string;
+    error: string;
+    now: string;
+  }): Promise<boolean> {
+    const result = await this.database.orm
+      .update(importJobs)
+      .set({
+        status: "pending",
+        cursor: sql`json_set(
+          json_remove(COALESCE(${importJobs.cursor}, '{}'), '$.leaseId', '$.leaseExpiresAt'),
+          '$.error', ${input.error}
+        )`,
+        updatedAt: input.now,
+      })
+      .where(liveExportLease(input.jobId, input.leaseId, input.now));
+    return changedExactlyOne(result);
+  }
+
+  public async failExportForLease(input: {
+    jobId: string;
+    leaseId: string;
+    error: string;
+    now: string;
+  }): Promise<boolean> {
+    const result = await this.database.orm
+      .update(importJobs)
+      .set({
+        status: "failed",
+        cursor: sql`json_set(
+          json_remove(COALESCE(${importJobs.cursor}, '{}'), '$.leaseId', '$.leaseExpiresAt'),
+          '$.error', ${input.error}
+        )`,
+        updatedAt: input.now,
+      })
+      .where(liveExportLease(input.jobId, input.leaseId, input.now));
+    return changedExactlyOne(result);
+  }
+}
+
+function liveExportLease(jobId: string, leaseId: string, now: string) {
+  return and(
+    eq(importJobs.id, jobId),
+    eq(importJobs.kind, "contact_export"),
+    eq(importJobs.status, "processing"),
+    sql`json_extract(${importJobs.cursor}, '$.leaseId') = ${leaseId}`,
+    sql`json_extract(${importJobs.cursor}, '$.leaseExpiresAt') > ${now}`,
+  );
 }
 
 async function completeJob(database: OpenEngageDatabase, jobId: string): Promise<void> {
@@ -201,5 +312,9 @@ async function completeJob(database: OpenEngageDatabase, jobId: string): Promise
 
 /** Parses an object-shaped JSON column, treating malformed values as empty. */
 function safeJsonRecord(value: string | null): Record<string, unknown> {
-  return value === null ? {} : decodeJson(value, jsonRecordSchema, "contacts.custom_fields");
+  return value === null ? {} : decodeJson(value, jsonRecordSchema, "import_jobs.cursor");
+}
+
+function nonnegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
 }

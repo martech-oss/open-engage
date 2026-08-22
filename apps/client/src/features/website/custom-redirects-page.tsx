@@ -46,7 +46,7 @@ export function CustomRedirectsPage(): ReactNode {
       emptyDescription="遷移先URLとスラッグを指定して、最初のリンクを作成してください。"
       editor={
         <CustomRedirectEditorDialog
-          key={editor.editing?.id ?? "new"}
+          key={editor.sessionKey}
           item={editor.editing}
           open={editor.dialogOpen}
           onOpenChange={editor.onOpenChange}

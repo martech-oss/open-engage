@@ -1,3 +1,4 @@
+import { workspaceReportDateRange } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import type { ReportDateRange } from "@openengage/database/reports";
 
@@ -5,15 +6,8 @@ export type ReportDatabase = OpenEngageDatabase;
 
 export type ReportRange = ReportDateRange;
 
-export function toReportRange(from: string, to: string): ReportRange {
-  const toExclusive = new Date(`${to}T00:00:00.000Z`);
-  toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
-  return {
-    from,
-    to,
-    fromTimestamp: `${from}T00:00:00.000Z`,
-    toExclusiveTimestamp: toExclusive.toISOString(),
-  };
+export function toReportRange(from: string, to: string, timeZone = "UTC"): ReportRange {
+  return workspaceReportDateRange(from, to, timeZone);
 }
 
 export function publicRange(range: ReportRange) {

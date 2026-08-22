@@ -4,6 +4,27 @@ import { describe, expect, it } from "vitest";
 import { seedWorkspaceClient } from "./factory";
 
 describe("Website center", () => {
+  it("rejects an invalid site-message schedule with a typed 422", async () => {
+    const { client } = await seedWorkspaceClient(env.DB, { role: "marketer" });
+
+    await expect(
+      client.website.createMessage({
+        name: "Invalid schedule",
+        status: "draft",
+        headline: "Invalid",
+        body: "",
+        ctaLabel: "",
+        ctaUrl: null,
+        pagePattern: "*",
+        startsAt: "2026-08-23T01:45:00.000Z",
+        endsAt: "2026-08-23T00:15:00.000Z",
+      }),
+    ).rejects.toMatchObject({
+      code: "SITE_MESSAGE_SCHEDULE_INVALID",
+      status: 422,
+    });
+  });
+
   it("manages and publishes forms, pages, site messages, and site tracking", async () => {
     const { client, slug: workspaceSlug, workspaceId } = await seedWorkspaceClient(env.DB);
     // The hosted-form, embed, track and script endpoints are public and are not

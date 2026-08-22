@@ -29,7 +29,6 @@ export default defineConfig({
   environments: {
     client: {
       build: {
-        manifest: true,
         rollupOptions: {
           output: {
             manualChunks: splitClientVendorChunk,

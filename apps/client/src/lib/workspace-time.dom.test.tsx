@@ -8,11 +8,12 @@ import { WorkspaceTimeProvider, useWorkspaceFormatters } from "./workspace-time"
 afterEach(cleanup);
 
 function TimestampProbe() {
-  const { formatDateTime, formatRelativeTime } = useWorkspaceFormatters();
+  const { formatDateTime, formatRelativeTime, fromDateTimeLocal } = useWorkspaceFormatters();
   return (
     <div>
       <span>{formatDateTime("2026-01-02T01:30:00.000Z")}</span>
       <span>{formatRelativeTime("2026-01-02T01:27:00.000Z")}</span>
+      <span>{fromDateTimeLocal("2026-08-22T17:15")}</span>
     </div>
   );
 }
@@ -32,5 +33,6 @@ describe("workspace time delivery", () => {
 
     expect(screen.getByText("2026/01/01 17:30")).toBeTruthy();
     expect(screen.getByText("3分前")).toBeTruthy();
+    expect(screen.getByText("2026-08-23T00:15:00.000Z")).toBeTruthy();
   });
 });

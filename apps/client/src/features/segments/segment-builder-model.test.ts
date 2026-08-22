@@ -9,6 +9,7 @@ import {
   createDefaultSegmentFilter,
   defaultSegmentRawValue,
   normalizeCustomFieldOperator,
+  mapSegmentDateValues,
   removeSegmentNode,
   replaceSegmentNode,
 } from "./segment-builder-model";
@@ -296,5 +297,70 @@ describe("custom field operator normalization", () => {
     ["boolean", "not_exists", "not_exists"],
   ] as const)("normalizes %s operator %s to %s", (dataType, operator, expected) => {
     expect(normalizeCustomFieldOperator(dataType, operator)).toBe(expected);
+  });
+});
+
+describe("segment date value mapping", () => {
+  it("maps built-in and workspace date custom-field values through nested groups", () => {
+    const filter: SegmentFilter = {
+      kind: "group",
+      combinator: "and",
+      children: [
+        {
+          kind: "condition",
+          field: "created_at",
+          operator: "gte",
+          value: "2026-08-22T17:15",
+        },
+        {
+          kind: "condition",
+          field: "custom_field",
+          key: "renewal_at",
+          operator: "in",
+          value: ["2026-11-01T01:30", "2026-11-02T01:30"],
+        },
+        {
+          kind: "condition",
+          field: "custom_field",
+          key: "seat_count",
+          operator: "gte",
+          value: 3,
+        },
+      ],
+    };
+    const dateCatalog: SegmentGenerationCatalog = {
+      ...catalog,
+      customFields: [
+        ...catalog.customFields,
+        { id: "field-date", name: "更新日", value: "renewal_at", dataType: "date" },
+      ],
+    };
+
+    expect(mapSegmentDateValues(filter, dateCatalog, (value) => `utc:${value}`)).toEqual({
+      kind: "group",
+      combinator: "and",
+      children: [
+        {
+          kind: "condition",
+          field: "created_at",
+          operator: "gte",
+          value: "utc:2026-08-22T17:15",
+        },
+        {
+          kind: "condition",
+          field: "custom_field",
+          key: "renewal_at",
+          operator: "in",
+          value: ["utc:2026-11-01T01:30", "utc:2026-11-02T01:30"],
+        },
+        {
+          kind: "condition",
+          field: "custom_field",
+          key: "seat_count",
+          operator: "gte",
+          value: 3,
+        },
+      ],
+    });
   });
 });

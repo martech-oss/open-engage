@@ -43,11 +43,13 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
+import { websitePublicUrls } from "./public-urls";
+
 export function SiteTrackingPage(): ReactNode {
   const { data } = useSuspenseQuery(siteTrackingQueryOptions());
   const [enabled, setEnabled] = useState(data.enabled);
   const { busy, error, run } = useFormSubmission("設定を保存できませんでした");
-  const trackingCode = buildTrackingCode(data.workspaceSlug);
+  const trackingCode = buildTrackingCode(websitePublicUrls(data.workspaceSlug).siteTrackingScript);
 
   const updateTracking = useUpdateSiteTracking();
 
@@ -274,8 +276,7 @@ function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): R
   );
 }
 
-function buildTrackingCode(workspaceSlug: string): string {
-  const scriptUrl = `${window.location.origin}/api/public/site-tracking/${workspaceSlug}/script.js`;
+function buildTrackingCode(scriptUrl: string): string {
   return `<script>
   window.openengageSettings = {
     consent: true

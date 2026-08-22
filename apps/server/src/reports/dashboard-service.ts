@@ -30,16 +30,8 @@ export async function getDashboard(
 
   const trendRange = lastDaysRange(asOf, workspace.timezone, TREND_DAYS);
   const totalsRange = lastDaysRange(asOf, workspace.timezone, TOTAL_DAYS);
-  const trendReportRange = toWorkspaceReportRange(
-    trendRange.from,
-    trendRange.to,
-    workspace.timezone,
-  );
-  const totalsReportRange = toWorkspaceReportRange(
-    totalsRange.from,
-    totalsRange.to,
-    workspace.timezone,
-  );
+  const trendReportRange = toReportRange(trendRange.from, trendRange.to, workspace.timezone);
+  const totalsReportRange = toReportRange(totalsRange.from, totalsRange.to, workspace.timezone);
   const [summary, contacts, emails, deals, automations] = await Promise.all([
     new ReportsRepository(database).dashboardSummary(workspaceId, {
       fromTimestamp: totalsReportRange.fromTimestamp,
@@ -160,46 +152,6 @@ function shiftIsoDate(day: string, amount: number): string {
   const date = new Date(`${day}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + amount);
   return date.toISOString().slice(0, 10);
-}
-
-function toWorkspaceReportRange(from: string, to: string, timeZone: string) {
-  return {
-    ...toReportRange(from, to),
-    fromTimestamp: workspaceMidnight(from, timeZone),
-    toExclusiveTimestamp: workspaceMidnight(shiftIsoDate(to, 1), timeZone),
-  };
-}
-
-function workspaceMidnight(day: string, timeZone: string): string {
-  const [year, month, date] = day.split("-").map(Number);
-  const desiredLocalTime = Date.UTC(year ?? 0, (month ?? 1) - 1, date ?? 1);
-  let instant = desiredLocalTime;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = new Intl.DateTimeFormat("en-US-u-ca-iso8601-nu-latn", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date(instant));
-    const part = (type: Intl.DateTimeFormatPartTypes) =>
-      Number(parts.find((item) => item.type === type)?.value ?? 0);
-    const representedLocalTime = Date.UTC(
-      part("year"),
-      part("month") - 1,
-      part("day"),
-      part("hour"),
-      part("minute"),
-      part("second"),
-    );
-    const adjustment = desiredLocalTime - representedLocalTime;
-    instant += adjustment;
-    if (adjustment === 0) break;
-  }
-  return new Date(instant).toISOString();
 }
 
 function fillDailySeries<Source extends { day: string }, Value, Result>(

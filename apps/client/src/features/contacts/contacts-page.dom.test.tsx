@@ -364,6 +364,18 @@ describe("ContactsPage export controller", () => {
     await waitFor(() => expect(doubles.startContactExport).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(doubles.saveFile).toHaveBeenCalledWith(file));
   });
+
+  it("stops polling and surfaces the persisted terminal export error", async () => {
+    doubles.startContactExport.mockResolvedValue({ jobId: "failed-job" });
+    doubles.getContactDataJob.mockResolvedValue(dataJob("failed", 0, "Export part 0 is missing"));
+    render(<ContactsPage initialSearch={contactSearchDefaults} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "エクスポート" }));
+
+    expect(await screen.findByText("Export part 0 is missing")).toBeTruthy();
+    expect(doubles.getContactDataJob).toHaveBeenCalledTimes(1);
+    expect(doubles.downloadContactExport).not.toHaveBeenCalled();
+  });
 });
 
 function chooseTagBulkAction(): void {
@@ -377,7 +389,7 @@ function search(q: string): ContactSearch {
   return { ...contactSearchDefaults, q };
 }
 
-function dataJob(status: string, processed: number) {
+function dataJob(status: string, processed: number, error: string | null = null) {
   return {
     id: "export-job",
     kind: "contact_export",
@@ -385,6 +397,8 @@ function dataJob(status: string, processed: number) {
     processed,
     succeeded: processed,
     failed: 0,
+    attempts: 1,
+    error,
     errorManifestKey: null,
     createdAt: "2026-08-23T00:00:00.000Z",
     updatedAt: "2026-08-23T00:00:00.000Z",

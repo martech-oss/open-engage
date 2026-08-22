@@ -162,6 +162,25 @@ export const landingPageCreateSchema = landingPageWriteSchema.extend({
 });
 export type LandingPageCreate = z.infer<typeof landingPageCreateSchema>;
 
+export const siteMessageScheduleSchema = z
+  .object({
+    startsAt: z.iso.datetime().nullable(),
+    endsAt: z.iso.datetime().nullable(),
+  })
+  .superRefine((schedule, context) => {
+    if (
+      schedule.startsAt &&
+      schedule.endsAt &&
+      Date.parse(schedule.endsAt) <= Date.parse(schedule.startsAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["endsAt"],
+        message: "endsAt must be after startsAt",
+      });
+    }
+  });
+
 export const siteMessageWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
   status: publishStatusSchema.default("draft"),

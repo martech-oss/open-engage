@@ -12,5 +12,6 @@ export function websitePublicUrls(workspaceSlug: string, origin = getPublicOrigi
       `${origin}/api/public/forms/${workspaceSlug}/${slug}/embed.js`,
     landingPage: (slug: string) => `${origin}/p/${workspaceSlug}/${slug}`,
     customRedirect: (slug: string) => `${origin}/r/${workspaceSlug}/${slug}`,
+    siteTrackingScript: `${origin}/api/public/site-tracking/${workspaceSlug}/script.js`,
   };
 }

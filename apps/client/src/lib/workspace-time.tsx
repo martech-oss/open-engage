@@ -9,6 +9,7 @@ import {
   formatShortDate,
   toDateTimeLocal,
 } from "@/lib/format";
+import { workspaceDateTimeToUtc } from "@openengage/core/shared";
 
 export interface WorkspaceTime {
   timeZone: string;
@@ -27,7 +28,7 @@ export function WorkspaceTimeProvider({
   children,
 }: {
   value: WorkspaceTime;
-  children: ReactNode;
+  children?: ReactNode;
 }): ReactNode {
   return <WorkspaceTimeContext.Provider value={value}>{children}</WorkspaceTimeContext.Provider>;
 }
@@ -47,6 +48,7 @@ export function useWorkspaceFormatters() {
       formatRelativeTime: (value: string) => formatRelativeTime(value, { now: renderedAt }),
       formatShortDate: (value: string) => formatShortDate(value, { timeZone }),
       toDateTimeLocal: (value: string | null | undefined) => toDateTimeLocal(value, timeZone),
+      fromDateTimeLocal: (value: string) => workspaceDateTimeToUtc(value, timeZone),
     }),
     [renderedAt, timeZone],
   );

@@ -1,9 +1,17 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { attachRouterServerSsrUtils } from "@tanstack/react-router/ssr/server";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { SiteTrackingPage } from "@/features/website/site-tracking-page";
+import { siteTrackingQueryOptions } from "@/features/website/website-api";
 import { createQueryClient } from "@/lib/query-client";
+import { workspaceQueryOptions } from "@/lib/workspace";
+import { WorkspaceTimeProvider } from "@/lib/workspace-time";
 
 import { routeTree } from "../routeTree.gen";
 
@@ -20,8 +28,12 @@ vi.mock("@tanstack/react-start/server", () => ({
   getRequestUrl: () => new URL("https://client.example.test/"),
 }));
 
-async function loadSsrRoute(pathname: string) {
+async function loadSsrRoute(
+  pathname: string,
+  seed?: (queryClient: ReturnType<typeof createQueryClient>) => void,
+) {
   const queryClient = createQueryClient();
+  seed?.(queryClient);
   const router = createRouter({
     routeTree,
     context: { queryClient },
@@ -31,7 +43,7 @@ async function loadSsrRoute(pathname: string) {
   attachRouterServerSsrUtils({ router, manifest: undefined });
   await router.load();
   await router.serverSsr?.dehydrate();
-  return router;
+  return { queryClient, router };
 }
 
 describe("SSR router auth redirects", () => {
@@ -44,7 +56,7 @@ describe("SSR router auth redirects", () => {
     ["onboarding", "/onboarding"],
   ])("redirects an anonymous %s request to login", async (_name, pathname) => {
     authState.bindingFetch.mockResolvedValue(new Response(null, { status: 401 }));
-    const router = await loadSsrRoute(pathname);
+    const { router } = await loadSsrRoute(pathname);
 
     expect(authState.bindingFetch).toHaveBeenCalledTimes(1);
     expect(router.state.redirect).toMatchObject({
@@ -56,6 +68,70 @@ describe("SSR router auth redirects", () => {
       },
     });
     expect(router.state.statusCode).toBe(307);
+    router.serverSsr?.cleanup();
+  });
+
+  it("authenticates and renders /website/tracking without a browser global", async () => {
+    authState.bindingFetch.mockResolvedValue(
+      Response.json({
+        session: { id: "session-1" },
+        user: { id: "user-1", email: "owner@example.com", name: "Owner" },
+      }),
+    );
+    const workspace = {
+      id: "workspace-1",
+      name: "Workspace",
+      slug: "workspace",
+      logo: null,
+      timezone: "Asia/Tokyo",
+      created_at: 0,
+      role: "owner" as const,
+      capabilities: {
+        viewReports: true,
+        manageMarketing: true,
+        manageWorkspace: true,
+        manageApiKeys: true,
+      },
+    };
+    const tracking = {
+      enabled: true,
+      allowedDomains: ["example.com"],
+      consentMode: "required" as const,
+      workspaceSlug: workspace.slug,
+      summary: { pageViews: 0, uniqueVisitors: 0, identifiedContacts: 0 },
+      topPages: [],
+      recentEvents: [],
+      updatedAt: null,
+    };
+    const { queryClient, router } = await loadSsrRoute("/website/tracking", (client) => {
+      client.setQueryData(workspaceQueryOptions().queryKey, workspace);
+      client.setQueryData(siteTrackingQueryOptions().queryKey, tracking);
+    });
+
+    expect(router.state.redirect).toBeUndefined();
+    expect(router.state.matches.at(-1)?.routeId).toBe("/_app/website/tracking");
+    let markup = "";
+    expect(() => {
+      markup = renderToStaticMarkup(
+        createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(
+            WorkspaceTimeProvider,
+            {
+              value: {
+                timeZone: workspace.timezone,
+                renderedAt: "2026-08-23T00:00:00.000Z",
+              },
+            },
+            createElement(SidebarProvider, null, createElement(SiteTrackingPage)),
+          ),
+        ),
+      );
+    }).not.toThrow();
+    expect(markup).toContain(
+      "https://client.example.test/api/public/site-tracking/workspace/script.js",
+    );
     router.serverSsr?.cleanup();
   });
 });

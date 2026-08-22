@@ -15,6 +15,8 @@ describe("canonical domain schemas", () => {
       processed: 4,
       succeeded: 4,
       failed: 0,
+      attempts: 1,
+      error: null,
       errorManifestKey: null,
       createdAt: "2026-08-05T00:00:00.000Z",
       updatedAt: "2026-08-05T00:01:00.000Z",

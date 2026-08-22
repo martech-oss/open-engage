@@ -32,7 +32,7 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
       emptyDescription="見出し、本文、CTAを入力して最初のページを作成してください。"
       editor={
         <LandingPageEditorDialog
-          key={editor.editing?.id ?? "new"}
+          key={editor.sessionKey}
           item={editor.editing}
           open={editor.dialogOpen}
           onOpenChange={editor.onOpenChange}

@@ -35,6 +35,12 @@ const turnstileNotConfigured = {
     message: "Turnstileを有効にするにはサイトキーとシークレットが必要です",
   },
 } as const;
+const invalidSiteMessageSchedule = {
+  SITE_MESSAGE_SCHEDULE_INVALID: {
+    status: 422,
+    message: "終了日時は開始日時より後にしてください",
+  },
+} as const;
 
 export const websiteContract = {
   listForms: oc
@@ -98,12 +104,15 @@ export const websiteContract = {
     .output(z.array(siteMessageSchema)),
   createMessage: oc
     .route({ method: "POST", path: "/website/messages", successStatus: 201 })
-    .errors(authedErrors)
+    .errors({ ...authedErrors, ...invalidSiteMessageSchedule })
     .input(siteMessageWriteSchema)
     .output(created),
   updateMessage: oc
     .route({ method: "PATCH", path: "/website/messages/{id}" })
-    .errors(notFound("SITE_MESSAGE_NOT_FOUND", "サイトメッセージが見つかりません"))
+    .errors({
+      ...notFound("SITE_MESSAGE_NOT_FOUND", "サイトメッセージが見つかりません"),
+      ...invalidSiteMessageSchedule,
+    })
     .input(siteMessageWriteSchema.extend({ id: z.string().min(1) }))
     .output(created),
   archiveMessage: oc

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { contactTags, contacts, tags } from "../contacts/schema";
 import { segmentMemberships, segments } from "../segments/schema";
-import { ReportsBatchRepository } from "./batch-repository";
+import { reportDaysCte, ReportsBatchRepository } from "./batch-repository";
 import type { ContactsSummaryData, ReportDateRange } from "./types";
 
 export class ContactsReportsRepository extends ReportsBatchRepository {
@@ -11,6 +11,7 @@ export class ContactsReportsRepository extends ReportsBatchRepository {
     workspaceId: string,
     range: ReportDateRange,
   ): Promise<ContactsSummaryData> {
+    const reportDays = reportDaysCte(range);
     const [summaryRows, trendRows, topTagRows, topSegmentRows] = await this.runBatch(
       sql`
         SELECT
@@ -24,14 +25,20 @@ export class ContactsReportsRepository extends ReportsBatchRepository {
         WHERE ${contacts.workspaceId} = ${workspaceId}
       `,
       sql`
-        WITH contact_changes AS (
-          SELECT date(${contacts.createdAt}) AS day, 1 AS added, 0 AS archived
-          FROM ${contacts}
-          WHERE ${contacts.workspaceId} = ${workspaceId} AND ${contacts.createdAt} >= ${range.fromTimestamp} AND ${contacts.createdAt} < ${range.toExclusiveTimestamp}
+        WITH ${reportDays}, contact_changes AS (
+          SELECT report_days.day AS day, 1 AS added, 0 AS archived
+          FROM report_days
+          JOIN ${contacts}
+            ON ${contacts.createdAt} >= report_days.from_timestamp
+              AND ${contacts.createdAt} < report_days.to_exclusive_timestamp
+          WHERE ${contacts.workspaceId} = ${workspaceId}
           UNION ALL
-          SELECT date(${contacts.archivedAt}) AS day, 0 AS added, 1 AS archived
-          FROM ${contacts}
-          WHERE ${contacts.workspaceId} = ${workspaceId} AND ${contacts.archivedAt} >= ${range.fromTimestamp} AND ${contacts.archivedAt} < ${range.toExclusiveTimestamp}
+          SELECT report_days.day AS day, 0 AS added, 1 AS archived
+          FROM report_days
+          JOIN ${contacts}
+            ON ${contacts.archivedAt} >= report_days.from_timestamp
+              AND ${contacts.archivedAt} < report_days.to_exclusive_timestamp
+          WHERE ${contacts.workspaceId} = ${workspaceId}
         )
         SELECT day, SUM(added) AS added, SUM(archived) AS archived
         FROM contact_changes

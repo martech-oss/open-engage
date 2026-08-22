@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { automationEnrollments, automations } from "../automations/schema";
 import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema";
-import { ReportsBatchRepository } from "./batch-repository";
+import { reportDaysCte, ReportsBatchRepository } from "./batch-repository";
 import type { EmailsSummaryData, ReportDateRange } from "./types";
 
 export class EmailsReportsRepository extends ReportsBatchRepository {
@@ -11,6 +11,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
     workspaceId: string,
     range: ReportDateRange,
   ): Promise<EmailsSummaryData> {
+    const reportDays = reportDaysCte(range);
     const [summaryRows, trendRows, sourceRows] = await this.runBatch(
       sql`
         SELECT
@@ -31,21 +32,24 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
           AND ${deliveries.createdAt} >= ${range.fromTimestamp} AND ${deliveries.createdAt} < ${range.toExclusiveTimestamp}
       `,
       sql`
+        WITH ${reportDays}
         SELECT
-          date(${deliveries.createdAt}) AS day,
+          report_days.day AS day,
           COUNT(DISTINCT ${deliveries.id}) AS sends,
           COUNT(DISTINCT CASE
             WHEN ${deliveries.status} = 'delivered' OR ${deliveryEvents.type} = 'delivered' THEN ${deliveries.id}
           END) AS delivered,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'opened' THEN ${deliveries.id} END) AS opens,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'clicked' THEN ${deliveries.id} END) AS clicks
-        FROM ${deliveries}
+        FROM report_days
+        JOIN ${deliveries}
+          ON ${deliveries.createdAt} >= report_days.from_timestamp
+            AND ${deliveries.createdAt} < report_days.to_exclusive_timestamp
         LEFT JOIN ${deliveryEvents}
           ON ${deliveryEvents.workspaceId} = ${deliveries.workspaceId} AND ${deliveryEvents.deliveryId} = ${deliveries.id}
         WHERE ${deliveries.workspaceId} = ${workspaceId} AND ${deliveries.channel} = 'email'
           AND ${deliveries.status} IN ('accepted', 'delivered', 'failed')
-          AND ${deliveries.createdAt} >= ${range.fromTimestamp} AND ${deliveries.createdAt} < ${range.toExclusiveTimestamp}
-        GROUP BY date(${deliveries.createdAt})
+        GROUP BY report_days.day
         ORDER BY day
       `,
       sql`

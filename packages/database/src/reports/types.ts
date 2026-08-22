@@ -1,10 +1,12 @@
 import type { ReportDateRange as CoreReportDateRange } from "@openengage/core/reports";
+import type { WorkspaceReportDay } from "@openengage/core/shared";
 
 export type ReportRow = Record<string, unknown>;
 
 export interface ReportDateRange extends CoreReportDateRange {
   fromTimestamp: string;
   toExclusiveTimestamp: string;
+  days: WorkspaceReportDay[];
 }
 
 export interface DealsSummaryData {

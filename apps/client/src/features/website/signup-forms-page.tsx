@@ -31,7 +31,7 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
       emptyDescription="最初のフォームを作成すると、公開URLから連絡先を獲得できます。"
       editor={
         <SignupFormEditorDialog
-          key={editor.editing?.id ?? "new"}
+          key={editor.sessionKey}
           item={editor.editing}
           open={editor.dialogOpen}
           onOpenChange={editor.onOpenChange}

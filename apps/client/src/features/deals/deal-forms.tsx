@@ -203,7 +203,7 @@ export function DealTaskForm({
   submitLabel: string;
   onSubmit: (values: DealTaskCreate) => Promise<void>;
 }): ReactNode {
-  const { toDateTimeLocal } = useWorkspaceFormatters();
+  const { fromDateTimeLocal, toDateTimeLocal } = useWorkspaceFormatters();
   const { busy, error, run } = useFormSubmission("タスクを保存できませんでした");
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -215,7 +215,7 @@ export function DealTaskForm({
         title: getFormString(form, "title").trim(),
         type: getFormString(form, "type") as DealTaskType,
         notes: getFormString(form, "notes").trim(),
-        dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+        dueAt: dueAt ? fromDateTimeLocal(dueAt) : null,
         assignedUserId: getFormString(form, "assignedUserId") || null,
       }),
     );

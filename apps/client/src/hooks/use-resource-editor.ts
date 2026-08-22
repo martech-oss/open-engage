@@ -9,13 +9,16 @@ import { toast } from "sonner";
 export function useResourceEditor<Row>() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
+  const [sessionKey, setSessionKey] = useState(0);
 
   function openCreate(): void {
+    setSessionKey((current) => current + 1);
     setEditing(null);
     setDialogOpen(true);
   }
 
   function openEdit(row: Row): void {
+    setSessionKey((current) => current + 1);
     setEditing(row);
     setDialogOpen(true);
   }
@@ -25,7 +28,15 @@ export function useResourceEditor<Row>() {
     setEditing(null);
   }
 
-  return { dialogOpen, editing, openCreate, openEdit, close, onOpenChange: setDialogOpen };
+  return {
+    dialogOpen,
+    editing,
+    sessionKey,
+    openCreate,
+    openEdit,
+    close,
+    onOpenChange: setDialogOpen,
+  };
 }
 
 /**

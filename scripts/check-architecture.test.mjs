@@ -1234,6 +1234,14 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "server-provided capabilities",
     },
     {
+      name: "rejects direct analyst role equality used as permission logic",
+      files: {
+        "apps/client/src/features/reports/permissions.ts":
+          'export const canView = (workspace: { role: string }) => workspace.role === "analyst";\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
       name: "rejects direct client role permission sets",
       files: {
         "apps/client/src/features/settings/permissions.ts":
@@ -1288,6 +1296,14 @@ await test("architecture policy accepts and rejects controlled repositories", as
           'const labels = { owner: "所有者", admin: "管理者" };\n' +
           "export const RoleLabel = ({ member }: { member: { role: string } }) => <span>{member.role}</span>;\n" +
           "void labels;\n",
+      },
+    },
+    {
+      name: "allows canonical role literals used only as display labels",
+      files: {
+        "apps/client/src/features/settings/role-labels.tsx":
+          'const labels = { owner: "所有者", admin: "管理者", marketer: "マーケター", analyst: "分析者", viewer: "閲覧者" };\n' +
+          "export const RoleLabel = ({ member }: { member: { role: string } }) => <span>{labels[member.role as keyof typeof labels]}</span>;\n",
       },
     },
     {

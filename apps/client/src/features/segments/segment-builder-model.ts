@@ -197,3 +197,30 @@ export function normalizeCustomFieldOperator(
 ): SegmentOperator {
   return customFieldOperatorAllowed(dataType, operator) ? operator : "eq";
 }
+
+export function mapSegmentDateValues(
+  filter: SegmentFilter,
+  catalog: SegmentGenerationCatalog,
+  map: (value: string) => string,
+): SegmentFilter {
+  if (filter.kind === "group") {
+    const children = filter.children.map((child) => mapSegmentDateValues(child, catalog, map));
+    return children.every((child, index) => child === filter.children[index])
+      ? filter
+      : { ...filter, children };
+  }
+  const isDate =
+    filter.field === "created_at" ||
+    filter.field === "updated_at" ||
+    (filter.field === "custom_field" &&
+      catalog.customFields.some(
+        (field) => field.value === filter.key && field.dataType === "date",
+      ));
+  if (!isDate) return filter;
+  const value = Array.isArray(filter.value)
+    ? filter.value.map((item) => (typeof item === "string" ? map(item) : item))
+    : typeof filter.value === "string"
+      ? map(filter.value)
+      : filter.value;
+  return { ...filter, value };
+}

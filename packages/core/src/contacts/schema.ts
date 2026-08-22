@@ -9,6 +9,8 @@ export const contactDataJobSchema = z.object({
   processed: z.number().int().nonnegative(),
   succeeded: z.number().int().nonnegative(),
   failed: z.number().int().nonnegative(),
+  attempts: z.number().int().nonnegative(),
+  error: z.string().nullable(),
   errorManifestKey: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

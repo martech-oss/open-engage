@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { user } from "../auth/schema";
 import { dealStages, dealTasks, deals } from "../deals/schema";
 import { nowIso } from "../shared/database-utils";
-import { ReportsBatchRepository } from "./batch-repository";
+import { reportDaysCte, ReportsBatchRepository } from "./batch-repository";
 import type { DealsSummaryData, ReportDateRange } from "./types";
 
 export class DealsReportsRepository extends ReportsBatchRepository {
@@ -28,6 +28,7 @@ export class DealsReportsRepository extends ReportsBatchRepository {
     currency: string,
   ): Promise<DealsSummaryData> {
     const now = nowIso();
+    const reportDays = reportDaysCte(range);
     const [summaryRows, trendRows, ownerRows, forecastRows, taskRows] = await this.runBatch(
       sql`
         SELECT
@@ -42,21 +43,27 @@ export class DealsReportsRepository extends ReportsBatchRepository {
         WHERE ${deals.workspaceId} = ${workspaceId} AND ${deals.archivedAt} IS NULL AND ${deals.currency} = ${currency}
       `,
       sql`
-        WITH activity AS (
-          SELECT date(${deals.createdAt}) AS day, 1 AS created, 0 AS won, 0 AS lost
-          FROM ${deals}
+        WITH ${reportDays}, activity AS (
+          SELECT report_days.day AS day, 1 AS created, 0 AS won, 0 AS lost
+          FROM report_days
+          JOIN ${deals}
+            ON ${deals.createdAt} >= report_days.from_timestamp
+              AND ${deals.createdAt} < report_days.to_exclusive_timestamp
           WHERE ${deals.workspaceId} = ${workspaceId} AND ${deals.archivedAt} IS NULL AND ${deals.currency} = ${currency}
-            AND ${deals.createdAt} >= ${range.fromTimestamp} AND ${deals.createdAt} < ${range.toExclusiveTimestamp}
           UNION ALL
-          SELECT date(${deals.wonAt}) AS day, 0 AS created, 1 AS won, 0 AS lost
-          FROM ${deals}
+          SELECT report_days.day AS day, 0 AS created, 1 AS won, 0 AS lost
+          FROM report_days
+          JOIN ${deals}
+            ON ${deals.wonAt} >= report_days.from_timestamp
+              AND ${deals.wonAt} < report_days.to_exclusive_timestamp
           WHERE ${deals.workspaceId} = ${workspaceId} AND ${deals.archivedAt} IS NULL AND ${deals.currency} = ${currency}
-            AND ${deals.wonAt} >= ${range.fromTimestamp} AND ${deals.wonAt} < ${range.toExclusiveTimestamp}
           UNION ALL
-          SELECT date(${deals.lostAt}) AS day, 0 AS created, 0 AS won, 1 AS lost
-          FROM ${deals}
+          SELECT report_days.day AS day, 0 AS created, 0 AS won, 1 AS lost
+          FROM report_days
+          JOIN ${deals}
+            ON ${deals.lostAt} >= report_days.from_timestamp
+              AND ${deals.lostAt} < report_days.to_exclusive_timestamp
           WHERE ${deals.workspaceId} = ${workspaceId} AND ${deals.archivedAt} IS NULL AND ${deals.currency} = ${currency}
-            AND ${deals.lostAt} >= ${range.fromTimestamp} AND ${deals.lostAt} < ${range.toExclusiveTimestamp}
         )
         SELECT day, SUM(created) AS created, SUM(won) AS won, SUM(lost) AS lost
         FROM activity

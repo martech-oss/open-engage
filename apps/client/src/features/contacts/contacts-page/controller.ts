@@ -175,7 +175,7 @@ export function useContactsPageController(initialSearch: ContactSearch) {
         return;
       }
       if (job.status !== "pending" && job.status !== "processing") {
-        failContactExport(new Error("連絡先のエクスポートに失敗しました"), runId);
+        failContactExport(new Error(job.error || "連絡先のエクスポートに失敗しました"), runId);
         return;
       }
       setContactExport({ phase: "polling", processed: job.processed, error: "" });

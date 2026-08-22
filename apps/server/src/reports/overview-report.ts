@@ -11,8 +11,9 @@ export async function reportsOverview(
   database: ReportDatabase,
   workspaceId: string,
   input: ReportQuery,
+  timeZone = "UTC",
 ) {
-  const range = toReportRange(input.from, input.to);
+  const range = toReportRange(input.from, input.to, timeZone);
   const [contacts, automations, emails, deals, site] = await Promise.all([
     contactReport(database, workspaceId, range),
     automationReport(database, workspaceId, range),

@@ -6,8 +6,11 @@ import { FieldGroup } from "@/components/ui/field";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import { useWorkspaceFormatters } from "@/lib/workspace-time";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
+import { WorkspaceDateTimeError } from "@openengage/core/shared";
+import type { SiteMessageWrite } from "@openengage/core/web";
 
+import { normalizeSiteMessageSchedule } from "./site-message-schedule";
 import { SiteMessageScheduleFields } from "./site-message-schedule-fields";
 import { type SiteMessageRow, useCreateSiteMessage, useUpdateSiteMessage } from "./website-api";
 
@@ -27,32 +30,28 @@ export function SiteMessageEditorDialog({
   updateMutation: Pick<ReturnType<typeof useUpdateSiteMessage>, "mutateAsync">;
 }): ReactNode {
   const { toDateTimeLocal } = useWorkspaceFormatters();
+  const { timeZone } = useWorkspaceTime();
   const { busy, error, run, setError } = useFormSubmission("保存できませんでした");
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const ctaUrl = getFormString(formData, "ctaUrl").trim();
-    const startsAt = dateTimeValue(formData.get("startsAt"));
-    const endsAt = dateTimeValue(formData.get("endsAt"));
-    if (startsAt && endsAt && startsAt >= endsAt) {
-      setError("終了日時は開始日時より後にしてください");
+    let schedule;
+    try {
+      schedule = siteMessagePayload(formData, timeZone);
+    } catch (cause) {
+      setError(
+        cause instanceof WorkspaceDateTimeError
+          ? "ワークスペースのタイムゾーンに存在する日時を入力してください"
+          : cause instanceof Error
+            ? cause.message
+            : "日時を確認してください",
+      );
       return;
     }
-    const payload = {
-      name: getFormString(formData, "name"),
-      status: getFormString(formData, "status") === "published" ? "published" : "draft",
-      headline: getFormString(formData, "headline"),
-      body: getFormString(formData, "body"),
-      ctaLabel: getFormString(formData, "ctaLabel"),
-      ctaUrl: ctaUrl || null,
-      pagePattern: getFormString(formData, "pagePattern"),
-      startsAt,
-      endsAt,
-    } as const;
     await run(() =>
       saveResource({
         editing: item,
-        payload,
+        payload: schedule,
         create: (data) => createMutation.mutateAsync(data),
         update: (id, data) => updateMutation.mutateAsync({ id, ...data }),
         createdMessage: "サイトメッセージを作成しました",
@@ -125,7 +124,27 @@ export function SiteMessageEditorDialog({
   );
 }
 
+function siteMessagePayload(formData: FormData, timeZone: string): SiteMessageWrite {
+  const ctaUrl = getFormString(formData, "ctaUrl").trim();
+  return {
+    name: getFormString(formData, "name"),
+    status: getFormString(formData, "status") === "published" ? "published" : "draft",
+    headline: getFormString(formData, "headline"),
+    body: getFormString(formData, "body"),
+    ctaLabel: getFormString(formData, "ctaLabel"),
+    ctaUrl: ctaUrl || null,
+    pagePattern: getFormString(formData, "pagePattern"),
+    ...normalizeSiteMessageSchedule(
+      {
+        startsAt: dateTimeValue(formData.get("startsAt")),
+        endsAt: dateTimeValue(formData.get("endsAt")),
+      },
+      timeZone,
+    ),
+  };
+}
+
 function dateTimeValue(value: FormDataEntryValue | null): string | null {
   const raw = typeof value === "string" ? value.trim() : "";
-  return raw ? new Date(raw).toISOString() : null;
+  return raw || null;
 }

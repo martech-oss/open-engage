@@ -110,6 +110,41 @@ describe("dashboard read model", () => {
     });
   });
 
+  it("labels Tokyo early-hour activity with the workspace calendar day", async () => {
+    const { workspaceId } = await seedWorkspace(env.DB, { timezone: "Asia/Tokyo" });
+    const contactId = uuidv7();
+    const at = "2026-08-22T15:30:00.000Z";
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO contacts
+         (id, workspace_id, email, stage, score, status, custom_fields, created_at, updated_at)
+         VALUES (?, ?, 'tokyo-early@example.com', 'lead', 0, 'active', '{}', ?, ?)`,
+      ).bind(contactId, workspaceId, at, at),
+      env.DB.prepare(
+        `INSERT INTO deliveries
+         (id, workspace_id, contact_id, channel, purpose, provider, recipient,
+          idempotency_key, payload, status, attempts, created_at, updated_at)
+         VALUES (?, ?, ?, 'email', 'marketing', 'cloudflare', 'tokyo@example.com',
+                 ?, '{}', 'delivered', 1, ?, ?)`,
+      ).bind(uuidv7(), workspaceId, contactId, `tokyo-${contactId}`, at, at),
+    ]);
+
+    const dashboard = await getDashboard(env.DB, workspaceId, {
+      now: "2026-08-23T03:00:00.000Z",
+    });
+
+    expect(dashboard.contacts.trend.points.find((point) => point.day === "2026-08-23")).toEqual({
+      day: "2026-08-23",
+      added: 1,
+    });
+    expect(dashboard.deliveries.health.points.find((point) => point.day === "2026-08-23")).toEqual({
+      day: "2026-08-23",
+      sends: 1,
+      delivered: 1,
+      undelivered: 0,
+    });
+  });
+
   it("calculates populated dashboard totals, changes, rankings, and limits", async () => {
     const { workspaceId, userId } = await seedWorkspace(env.DB, { timezone: "UTC" });
     await seedDashboardData(workspaceId, userId);

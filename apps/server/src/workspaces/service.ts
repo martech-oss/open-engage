@@ -1,3 +1,5 @@
+import { isAPIError } from "better-auth/api";
+
 import type { EmailBrandProfileWrite } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { Workspace } from "@openengage/core/workspaces";
@@ -21,18 +23,34 @@ export async function createWorkspace(
 ): Promise<{ id: string; name: string; slug: string }> {
   const repository = new OrganizationRepository(database);
   const auth = createAuth(env);
+  const created = await createWorkspaceOrganizationWithRetry({
+    nextSlug: () =>
+      availableSlug(name, "workspace", (candidate) => repository.isSlugAvailable(candidate)),
+    createOrganization: (slug) => auth.api.createOrganization({ body: { name, slug }, headers }),
+  });
+  return { id: created.id, name: created.name, slug: created.slug };
+}
+
+export async function createWorkspaceOrganizationWithRetry<T>(input: {
+  nextSlug: () => Promise<string>;
+  createOrganization: (slug: string) => Promise<T>;
+}): Promise<T> {
   for (;;) {
-    const slug = await availableSlug(name, "workspace", (candidate) =>
-      repository.isSlugAvailable(candidate),
-    );
+    const slug = await input.nextSlug();
     try {
-      const created = await auth.api.createOrganization({ body: { name, slug }, headers });
-      return { id: created.id, name: created.name, slug: created.slug };
+      return await input.createOrganization(slug);
     } catch (error) {
-      if (!(await repository.isSlugAvailable(slug))) continue;
-      throw error;
+      if (!isOrganizationExistsCollision(error)) throw error;
     }
   }
+}
+
+function isOrganizationExistsCollision(error: unknown): boolean {
+  return (
+    isAPIError(error) &&
+    error.statusCode === 400 &&
+    error.body?.code === "ORGANIZATION_ALREADY_EXISTS"
+  );
 }
 
 export async function getWorkspace(

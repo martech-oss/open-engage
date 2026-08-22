@@ -782,7 +782,9 @@ function isRoleReference(node, lexicalModel, seenBindings = new Set()) {
 }
 
 function isWorkspaceRoleLiteral(node) {
-  return ["owner", "admin", "marketer", "viewer"].includes(staticString(node));
+  // Keep this permission ratchet synchronized with WORKSPACE_ROLES in
+  // packages/core/src/shared/schema.ts.
+  return ["owner", "admin", "marketer", "analyst", "viewer"].includes(staticString(node));
 }
 
 function isRolePermissionCollection(node, lexicalModel, seenBindings = new Set()) {

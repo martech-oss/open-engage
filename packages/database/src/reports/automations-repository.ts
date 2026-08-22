@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { automationEnrollments, automations } from "../automations/schema";
 import { deliveries, deliveryEvents } from "../messaging/schema";
-import { ReportsBatchRepository } from "./batch-repository";
+import { reportDaysCte, ReportsBatchRepository } from "./batch-repository";
 import type { AutomationsSummaryData, ReportDateRange } from "./types";
 
 export class AutomationsReportsRepository extends ReportsBatchRepository {
@@ -11,6 +11,7 @@ export class AutomationsReportsRepository extends ReportsBatchRepository {
     workspaceId: string,
     range: ReportDateRange,
   ): Promise<AutomationsSummaryData> {
+    const reportDays = reportDaysCte(range);
     const [automationRows, trendRows] = await this.runBatch(
       sql`
         SELECT
@@ -52,14 +53,20 @@ export class AutomationsReportsRepository extends ReportsBatchRepository {
         ORDER BY entries DESC, ${automations.updatedAt} DESC
       `,
       sql`
-        WITH activity AS (
-          SELECT date(${automationEnrollments.enteredAt}) AS day, 1 AS entries, 0 AS completions
-          FROM ${automationEnrollments}
-          WHERE ${automationEnrollments.workspaceId} = ${workspaceId} AND ${automationEnrollments.enteredAt} >= ${range.fromTimestamp} AND ${automationEnrollments.enteredAt} < ${range.toExclusiveTimestamp}
+        WITH ${reportDays}, activity AS (
+          SELECT report_days.day AS day, 1 AS entries, 0 AS completions
+          FROM report_days
+          JOIN ${automationEnrollments}
+            ON ${automationEnrollments.enteredAt} >= report_days.from_timestamp
+              AND ${automationEnrollments.enteredAt} < report_days.to_exclusive_timestamp
+          WHERE ${automationEnrollments.workspaceId} = ${workspaceId}
           UNION ALL
-          SELECT date(${automationEnrollments.completedAt}) AS day, 0 AS entries, 1 AS completions
-          FROM ${automationEnrollments}
-          WHERE ${automationEnrollments.workspaceId} = ${workspaceId} AND ${automationEnrollments.completedAt} >= ${range.fromTimestamp} AND ${automationEnrollments.completedAt} < ${range.toExclusiveTimestamp}
+          SELECT report_days.day AS day, 0 AS entries, 1 AS completions
+          FROM report_days
+          JOIN ${automationEnrollments}
+            ON ${automationEnrollments.completedAt} >= report_days.from_timestamp
+              AND ${automationEnrollments.completedAt} < report_days.to_exclusive_timestamp
+          WHERE ${automationEnrollments.workspaceId} = ${workspaceId}
         )
         SELECT day, SUM(entries) AS entries, SUM(completions) AS completions
         FROM activity

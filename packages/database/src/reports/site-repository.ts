@@ -2,12 +2,13 @@ import { sql } from "drizzle-orm";
 
 import { contactEvents } from "../contacts/schema";
 import { formSubmissions, forms, siteMessages } from "../web/schema";
-import { ReportsBatchRepository } from "./batch-repository";
+import { reportDaysCte, ReportsBatchRepository } from "./batch-repository";
 import type { ReportDateRange, SiteSummaryData } from "./types";
 
 export class SiteReportsRepository extends ReportsBatchRepository {
   /** Page/form summaries, trend, top pages, forms, and site messages - 6 independent queries run concurrently. */
   public async siteSummary(workspaceId: string, range: ReportDateRange): Promise<SiteSummaryData> {
+    const reportDays = reportDaysCte(range);
     const [pageSummaryRows, formSummaryRows, trendRows, topPageRows, formRows, messageRows] =
       await this.runBatch(
         sql`
@@ -26,15 +27,20 @@ export class SiteReportsRepository extends ReportsBatchRepository {
           WHERE ${formSubmissions.workspaceId} = ${workspaceId} AND ${formSubmissions.createdAt} >= ${range.fromTimestamp} AND ${formSubmissions.createdAt} < ${range.toExclusiveTimestamp}
         `,
         sql`
-          WITH activity AS (
-            SELECT date(${contactEvents.occurredAt}) AS day, 1 AS page_views, 0 AS submissions
-            FROM ${contactEvents}
+          WITH ${reportDays}, activity AS (
+            SELECT report_days.day AS day, 1 AS page_views, 0 AS submissions
+            FROM report_days
+            JOIN ${contactEvents}
+              ON ${contactEvents.occurredAt} >= report_days.from_timestamp
+                AND ${contactEvents.occurredAt} < report_days.to_exclusive_timestamp
             WHERE ${contactEvents.workspaceId} = ${workspaceId} AND ${contactEvents.type} = 'page_viewed'
-              AND ${contactEvents.occurredAt} >= ${range.fromTimestamp} AND ${contactEvents.occurredAt} < ${range.toExclusiveTimestamp}
             UNION ALL
-            SELECT date(${formSubmissions.createdAt}) AS day, 0 AS page_views, 1 AS submissions
-            FROM ${formSubmissions}
-            WHERE ${formSubmissions.workspaceId} = ${workspaceId} AND ${formSubmissions.createdAt} >= ${range.fromTimestamp} AND ${formSubmissions.createdAt} < ${range.toExclusiveTimestamp}
+            SELECT report_days.day AS day, 0 AS page_views, 1 AS submissions
+            FROM report_days
+            JOIN ${formSubmissions}
+              ON ${formSubmissions.createdAt} >= report_days.from_timestamp
+                AND ${formSubmissions.createdAt} < report_days.to_exclusive_timestamp
+            WHERE ${formSubmissions.workspaceId} = ${workspaceId}
           )
           SELECT day, SUM(page_views) AS page_views, SUM(submissions) AS submissions
           FROM activity

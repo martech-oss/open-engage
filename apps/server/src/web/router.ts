@@ -1,3 +1,4 @@
+import { siteMessageScheduleSchema } from "@openengage/core/web";
 import { isConstraintError, isUniqueConstraintError } from "@openengage/database/shared";
 import { CustomRedirectRepository, WebRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
@@ -148,6 +149,9 @@ export const listMessagesProcedure = authed.website.listMessages.handler(({ cont
 export const createMessageProcedure = authed.website.createMessage.handler(
   ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    if (!siteMessageScheduleSchema.safeParse(input).success) {
+      throw errors.SITE_MESSAGE_SCHEDULE_INVALID();
+    }
     return new WebRepository(context.database, context.workspace).createSiteMessage(input);
   },
 );
@@ -155,6 +159,9 @@ export const createMessageProcedure = authed.website.createMessage.handler(
 export const updateMessageProcedure = authed.website.updateMessage.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    if (!siteMessageScheduleSchema.safeParse(input).success) {
+      throw errors.SITE_MESSAGE_SCHEDULE_INVALID();
+    }
     const { id, ...changes } = input;
     const repository = new WebRepository(context.database, context.workspace);
     if (!(await repository.updateSiteMessage(id, changes))) {

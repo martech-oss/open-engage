@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+export * from "./time.js";
+
 export const jsonRecordSchema = z.record(z.string(), z.unknown());
 export type JsonRecord = z.infer<typeof jsonRecordSchema>;
 
