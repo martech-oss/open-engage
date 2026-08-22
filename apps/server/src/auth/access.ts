@@ -120,10 +120,12 @@ export async function resolveSessionAccess({
   env,
   headers,
   method,
+  requireMutationOrigin = false,
 }: {
   env: AppEnvironment["Bindings"];
   headers: Headers;
   method: string;
+  requireMutationOrigin?: boolean;
 }): Promise<SessionAccess> {
   const auth = createAuth(env);
   const session = (await auth.api.getSession({ headers })) as SessionValue | null;
@@ -132,7 +134,11 @@ export async function resolveSessionAccess({
   }
   if (isMutation(method)) {
     const origin = headers.get("origin");
-    if (origin && origin !== new URL(env.APP_URL).origin) {
+    const expectedOrigin = new URL(env.APP_URL).origin;
+    if (
+      (requireMutationOrigin && origin !== expectedOrigin) ||
+      (!requireMutationOrigin && origin !== null && origin !== expectedOrigin)
+    ) {
       throw new WorkspaceAccessError(
         403,
         "origin_mismatch",

@@ -89,6 +89,7 @@ const requireSession = os.middleware(async ({ context, next, errors }) => {
       env: context.env,
       headers: context.headers,
       method: context.method,
+      requireMutationOrigin: true,
     });
     return next({ context: access });
   } catch (error) {

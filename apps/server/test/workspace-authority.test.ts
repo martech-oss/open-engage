@@ -39,8 +39,8 @@ describe("workspace authority", () => {
     });
   });
 
-  it("creates and activates a workspace from a session without an active workspace", async () => {
-    const fixture = await sessionOnlyClient();
+  it("accepts the configured Origin and creates from a session without an active workspace", async () => {
+    const fixture = await sessionOnlyClient("http://localhost:8787");
     const created = await fixture.client.workspace.create({ name: "日本語の会社" });
 
     expect(created.slug).toBe("workspace");
@@ -57,17 +57,21 @@ describe("workspace authority", () => {
     expect(collision.slug).toBe("workspace-2");
   });
 
-  it("does not allow API keys or cross-origin mutations through session-only creation", async () => {
+  it("does not allow API keys through session-only creation", async () => {
     const apiKey = await seedWorkspaceClient(env.DB);
     await expect(
       apiKey.client.workspace.create({ name: "API key workspace" }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED", status: 401 });
+  });
 
-    const fixture = await sessionOnlyClient("https://evil.example.com");
-    await expect(fixture.client.workspace.create({ name: "Cross origin" })).rejects.toMatchObject({
-      code: "ORIGIN_MISMATCH",
-      status: 403,
-    });
+  it.each([
+    ["missing", null],
+    ["mismatched", "https://evil.example.com"],
+  ] as const)("rejects a %s Origin on session-only mutations", async (_case, origin) => {
+    const fixture = await sessionOnlyClient(origin);
+    await expect(
+      fixture.client.workspace.create({ name: "Rejected origin" }),
+    ).rejects.toMatchObject({ code: "ORIGIN_MISMATCH", status: 403 });
   });
 });
 
@@ -156,7 +160,7 @@ describe("resource slug authority", () => {
   });
 });
 
-async function sessionOnlyClient(origin?: string): Promise<{
+async function sessionOnlyClient(origin: string | null): Promise<{
   sessionId: string;
   client: ContractRouterClient<typeof contract>;
 }> {
