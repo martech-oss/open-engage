@@ -1,17 +1,21 @@
-import { isConstraintError } from "@openengage/database/shared";
+import { isConstraintError, isUniqueConstraintError } from "@openengage/database/shared";
 import { CustomRedirectRepository, WebRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import { availableSlug } from "../workspaces/slug-service";
 import { hasTurnstileConfiguration } from "./config";
 import { isValidDomain, normalizeDomain } from "./domain";
+
+const FORM_SLUG_UNIQUE_COLUMNS = ["forms.workspace_id", "forms.slug"] as const;
+const PAGE_SLUG_UNIQUE_COLUMNS = ["landing_pages.workspace_id", "landing_pages.slug"] as const;
 
 export const listFormsProcedure = authed.website.listForms.handler(({ context }) =>
   new WebRepository(context.database, context.workspace).listSignupForms(),
 );
 
 export const createFormProcedure = authed.website.createForm.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (
       input.status === "published" &&
@@ -20,7 +24,23 @@ export const createFormProcedure = authed.website.createForm.handler(
     ) {
       throw errors.TURNSTILE_NOT_CONFIGURED();
     }
-    return new WebRepository(context.database, context.workspace).createSignupForm(input);
+    const repository = new WebRepository(context.database, context.workspace);
+    let slug =
+      input.slug ??
+      (await availableSlug(input.name, "signup-form", (candidate) =>
+        repository.isSignupFormSlugAvailable(candidate),
+      ));
+    for (;;) {
+      try {
+        return await repository.createSignupForm({ ...input, slug });
+      } catch (error) {
+        if (!isUniqueConstraintError(error, FORM_SLUG_UNIQUE_COLUMNS)) throw error;
+        if (input.slug) throw errors.FORM_SLUG_TAKEN({ cause: error });
+        slug = await availableSlug(input.name, "signup-form", (candidate) =>
+          repository.isSignupFormSlugAvailable(candidate),
+        );
+      }
+    }
   },
 );
 
@@ -36,8 +56,15 @@ export const updateFormProcedure = authed.website.updateForm.handler(
     }
     const { id, ...changes } = input;
     const repository = new WebRepository(context.database, context.workspace);
-    if (!(await repository.updateSignupForm(id, changes))) {
-      throw errors.FORM_NOT_FOUND();
+    try {
+      if (!(await repository.updateSignupForm(id, changes))) {
+        throw errors.FORM_NOT_FOUND();
+      }
+    } catch (error) {
+      if (isUniqueConstraintError(error, FORM_SLUG_UNIQUE_COLUMNS)) {
+        throw errors.FORM_SLUG_TAKEN({ cause: error });
+      }
+      throw error;
     }
     return { id };
   },
@@ -59,9 +86,25 @@ export const listPagesProcedure = authed.website.listPages.handler(({ context })
 );
 
 export const createPageProcedure = authed.website.createPage.handler(
-  ({ context, input, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    return new WebRepository(context.database, context.workspace).createLandingPage(input);
+    const repository = new WebRepository(context.database, context.workspace);
+    let slug =
+      input.slug ??
+      (await availableSlug(input.name, "landing-page", (candidate) =>
+        repository.isLandingPageSlugAvailable(candidate),
+      ));
+    for (;;) {
+      try {
+        return await repository.createLandingPage({ ...input, slug });
+      } catch (error) {
+        if (!isUniqueConstraintError(error, PAGE_SLUG_UNIQUE_COLUMNS)) throw error;
+        if (input.slug) throw errors.PAGE_SLUG_TAKEN({ cause: error });
+        slug = await availableSlug(input.name, "landing-page", (candidate) =>
+          repository.isLandingPageSlugAvailable(candidate),
+        );
+      }
+    }
   },
 );
 
@@ -69,10 +112,18 @@ export const updatePageProcedure = authed.website.updatePage.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
-    const outcome = await new WebRepository(context.database, context.workspace).updateLandingPage(
-      id,
-      changes,
-    );
+    let outcome;
+    try {
+      outcome = await new WebRepository(context.database, context.workspace).updateLandingPage(
+        id,
+        changes,
+      );
+    } catch (error) {
+      if (isUniqueConstraintError(error, PAGE_SLUG_UNIQUE_COLUMNS)) {
+        throw errors.PAGE_SLUG_TAKEN({ cause: error });
+      }
+      throw error;
+    }
     if (outcome.kind === "not_found") throw errors.PAGE_NOT_FOUND();
     if (outcome.kind === "archived") throw errors.PAGE_ARCHIVED();
     return { id: outcome.id, versionId: outcome.versionId };

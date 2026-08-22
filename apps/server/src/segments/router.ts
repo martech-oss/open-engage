@@ -6,6 +6,7 @@ import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
+import { availableSlug } from "../workspaces/slug-service";
 import { SegmentGenerationError, generateSegment } from "./generation-service";
 import { listSegments, previewSegment, toSegmentRow } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
@@ -52,29 +53,42 @@ export const createSegmentProcedure = authed.segments.create.handler(
     const { projectId: _projectId, briefRevision: _briefRevision, ...segmentInput } = input;
     const repository = new SegmentRepository(context.database, context.workspace);
     let created: Awaited<ReturnType<typeof repository.createSegment>>;
-    try {
-      created = await repository.createSegment({
-        ...segmentInput,
-        membershipSource:
-          input.kind === "static" ? (input.membershipSource ?? "Manual selection") : null,
-        ...(trustedBrief
-          ? {
-              projectLink: {
-                projectId: trustedBrief.projectId,
-                briefRevision: trustedBrief.revision,
-                addedByUserId: context.workspace.userId,
-              },
-            }
-          : {}),
-      });
-    } catch (error) {
-      if (error instanceof ProjectBriefLinkConflictError) {
-        throw errors.BRIEF_REVISION_CONFLICT();
+    let slug =
+      input.slug ??
+      (await availableSlug(input.name, "segment", (candidate) =>
+        repository.isSlugAvailable(candidate),
+      ));
+    for (;;) {
+      try {
+        created = await repository.createSegment({
+          ...segmentInput,
+          slug,
+          membershipSource:
+            input.kind === "static" ? (input.membershipSource ?? "Manual selection") : null,
+          ...(trustedBrief
+            ? {
+                projectLink: {
+                  projectId: trustedBrief.projectId,
+                  briefRevision: trustedBrief.revision,
+                  addedByUserId: context.workspace.userId,
+                },
+              }
+            : {}),
+        });
+        break;
+      } catch (error) {
+        if (error instanceof ProjectBriefLinkConflictError) {
+          throw errors.BRIEF_REVISION_CONFLICT();
+        }
+        if (isUniqueConstraintError(error, SEGMENT_SLUG_UNIQUE_COLUMNS)) {
+          if (input.slug) throw errors.SEGMENT_CONFLICT({ cause: error });
+          slug = await availableSlug(input.name, "segment", (candidate) =>
+            repository.isSlugAvailable(candidate),
+          );
+          continue;
+        }
+        throw error;
       }
-      if (isUniqueConstraintError(error, SEGMENT_SLUG_UNIQUE_COLUMNS)) {
-        throw errors.SEGMENT_CONFLICT({ cause: error });
-      }
-      throw error;
     }
     if (input.kind === "dynamic") {
       await refreshSegmentMemberships(
@@ -96,7 +110,7 @@ export const createSegmentProcedure = authed.segments.create.handler(
     return {
       id: created.id,
       name: input.name,
-      slug: input.slug,
+      slug,
       kind: input.kind,
       createdAt: created.createdAt,
       updatedAt: created.updatedAt,

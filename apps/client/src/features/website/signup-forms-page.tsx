@@ -40,9 +40,8 @@ import {
 } from "@/features/website/website-api";
 import { PublishStatusBadge } from "@/features/website/website-shared";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
-import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
+import { useResourceEditor } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import { slugify } from "@/lib/utils";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { FormField } from "@openengage/core/web";
 
@@ -255,6 +254,7 @@ function SignupFormEditor({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const name = getFormString(formData, "name").trim();
+    const slug = getFormString(formData, "slug").trim();
     const standard = (key: FormField["key"], type: FormField["type"]): FormField => ({
       key,
       kind: "standard",
@@ -274,7 +274,6 @@ function SignupFormEditor({
       .filter(Boolean);
     const payload = {
       name,
-      slug: getFormString(formData, "slug").trim() || slugify(name),
       status: getFormString(formData, "status") === "published" ? "published" : "draft",
       definition: {
         style: readFormStyle(formData),
@@ -285,17 +284,16 @@ function SignupFormEditor({
       turnstileEnabled,
       successMessage: getFormString(formData, "successMessage"),
     } as const;
-    await run(() =>
-      saveResource({
-        editing: item,
-        payload,
-        create: (data) => createForm.mutateAsync(data),
-        update: (id, data) => updateForm.mutateAsync({ id, ...data }),
-        createdMessage: "フォームを作成しました",
-        updatedMessage: "フォームを更新しました",
-        onSaved,
-      }),
-    );
+    await run(async () => {
+      if (item) {
+        await updateForm.mutateAsync({ id: item.id, ...payload, slug: slug || item.slug });
+        toast.success("フォームを更新しました");
+      } else {
+        await createForm.mutateAsync({ ...payload, ...(slug ? { slug } : {}) });
+        toast.success("フォームを作成しました");
+      }
+      onSaved();
+    });
   }
 
   return (

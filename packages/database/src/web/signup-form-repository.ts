@@ -19,6 +19,15 @@ const formDefinitionCodec = defineJsonCodec(signupFormDefinitionSchema, "forms.d
 const formAllowedDomainsCodec = defineJsonCodec(stringArraySchema, "forms.allowed_domains");
 
 export class SignupFormRepository extends WorkspaceRepository {
+  public async isSlugAvailable(slug: string): Promise<boolean> {
+    const rows = await this.database.orm
+      .select({ id: forms.id })
+      .from(forms)
+      .where(and(this.inWorkspace(forms), eq(forms.slug, slug)))
+      .limit(1);
+    return rows.length === 0;
+  }
+
   public async listSignupForms(): Promise<SignupForm[]> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;

@@ -26,10 +26,22 @@ import { createWorkspaceApiKey } from "@/features/settings/settings-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 import type { Workspace } from "@/lib/workspace";
+import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
+
+export function settingsPermissions(capabilities: WorkspaceCapabilities): {
+  canEditWorkspace: boolean;
+  canManageApiKeys: boolean;
+} {
+  return {
+    canEditWorkspace: capabilities.manageWorkspace,
+    canManageApiKeys: capabilities.manageApiKeys,
+  };
+}
 
 export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {
   const [apiKey, setApiKey] = useState("");
   const brandQuery = useQuery(emailBrandProfileQueryOptions());
+  const permissions = settingsPermissions(workspace.capabilities);
 
   async function createKey(): Promise<void> {
     const created = await createWorkspaceApiKey();
@@ -43,7 +55,7 @@ export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode
           <EmailBrandSettings
             key={brandQuery.data.updatedAt ?? "default-brand"}
             profile={brandQuery.data}
-            editable={workspace.role === "admin"}
+            editable={permissions.canEditWorkspace}
           />
         ) : (
           <Card className="xl:col-span-2">
@@ -71,9 +83,13 @@ export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode
             </div>
           </CardHeader>
           <CardContent className="flex flex-col items-start gap-4">
-            <Button variant="outline" onClick={() => void createKey()}>
-              APIキーを作成
-            </Button>
+            {permissions.canManageApiKeys ? (
+              <Button variant="outline" onClick={() => void createKey()}>
+                APIキーを作成
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">管理者のみ作成できます。</p>
+            )}
             {apiKey ? (
               <pre className="w-full overflow-x-auto rounded-lg bg-muted p-4 text-xs">{apiKey}</pre>
             ) : null}

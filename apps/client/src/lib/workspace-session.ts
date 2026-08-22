@@ -1,5 +1,5 @@
 import { authClient } from "@/auth-client";
-import { slugify } from "@/lib/utils";
+import { orpc } from "@/lib/orpc";
 
 export type WorkspaceOption = {
   id: string;
@@ -42,17 +42,12 @@ export async function activateWorkspace(
 export async function createAndActivateWorkspace(
   name: string,
 ): Promise<{ error: string } | { ok: true }> {
-  const created = await authClient.organization.create({
-    name,
-    slug: slugify(name),
-  });
-  if (created.error) {
-    return { error: created.error.message ?? "作成できませんでした" };
+  try {
+    await orpc.workspace.create({ name });
+    return { ok: true };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "作成できませんでした" };
   }
-  if (created.data?.id) {
-    return activateWorkspace(created.data.id);
-  }
-  return { ok: true };
 }
 
 export async function reloadAfterWorkspaceChange(options: {

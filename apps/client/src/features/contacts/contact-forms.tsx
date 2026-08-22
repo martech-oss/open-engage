@@ -8,7 +8,6 @@ import { useCreateContact, type ContactOptions } from "@/features/contacts/conta
 import { createDynamicSegment, invalidateSegmentsList } from "@/features/segments/segment-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString, optionalString } from "@/lib/form-data";
-import { slugify } from "@/lib/utils";
 import { type SegmentFilter } from "@openengage/core/segments";
 
 export function ContactCreateForm({
@@ -124,7 +123,6 @@ export function SegmentSaveForm({
     await run(async () => {
       await createDynamicSegment({
         name,
-        slug: slugify(name, { maxLength: 100, fallback: "segment" }),
         filter,
       });
       await invalidateSegmentsList(queryClient);

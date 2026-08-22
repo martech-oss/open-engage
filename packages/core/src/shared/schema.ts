@@ -27,6 +27,33 @@ export const WORKSPACE_ROLES = ["owner", "admin", "marketer", "analyst", "viewer
 export const workspaceRoleSchema = z.enum(WORKSPACE_ROLES);
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 
+/** The first role is the most privileged; this is the one canonical role ordering. */
+export function hasWorkspaceRole(role: WorkspaceRole, minimum: WorkspaceRole): boolean {
+  return WORKSPACE_ROLES.indexOf(role) <= WORKSPACE_ROLES.indexOf(minimum);
+}
+
+export function normalizeSlug(
+  value: string,
+  options: { fallback: string; maxLength?: number },
+): string {
+  const maxLength = Math.max(1, Math.floor(options.maxLength ?? 80));
+  const normalized = value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLength)
+    .replace(/-+$/g, "");
+  if (normalized) return normalized;
+  const fallback = options.fallback
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, maxLength)
+    .replace(/-+$/g, "");
+  return fallback || "resource".slice(0, maxLength);
+}
+
 export const MESSAGE_PURPOSES = ["transactional", "marketing"] as const;
 const messagePurposeSchema = z.enum(MESSAGE_PURPOSES);
 export type MessagePurpose = z.infer<typeof messagePurposeSchema>;

@@ -15,6 +15,13 @@ export class WebRepository extends WorkspaceRepository {
   private readonly messages = new SiteMessageRepository(this.database, this.context);
   private readonly visitors = new VisitorMessageRepository(this.database, this.context);
 
+  public isSignupFormSlugAvailable(...args: Parameters<SignupFormRepository["isSlugAvailable"]>) {
+    return this.forms.isSlugAvailable(...args);
+  }
+  public isLandingPageSlugAvailable(...args: Parameters<LandingPageRepository["isSlugAvailable"]>) {
+    return this.pages.isSlugAvailable(...args);
+  }
+
   public listSignupForms(...args: Parameters<SignupFormRepository["listSignupForms"]>) {
     return this.forms.listSignupForms(...args);
   }

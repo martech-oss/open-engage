@@ -31,9 +31,8 @@ import {
 } from "@/features/website/website-api";
 import { PublishStatusBadge } from "@/features/website/website-shared";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
-import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
+import { useResourceEditor } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import { slugify } from "@/lib/utils";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContentDocument } from "@openengage/core/web";
 
@@ -217,23 +216,22 @@ function LandingPageEditor({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const name = getFormString(formData, "name").trim();
+    const slug = getFormString(formData, "slug").trim();
     const payload = {
       name,
-      slug: getFormString(formData, "slug").trim() || slugify(name),
       status: getFormString(formData, "status") === "published" ? "published" : "draft",
       content,
     } as const;
-    await run(() =>
-      saveResource({
-        editing: item,
-        payload,
-        create: (data) => createPage.mutateAsync(data),
-        update: (id, data) => updatePage.mutateAsync({ id, ...data }),
-        createdMessage: "ページを作成しました",
-        updatedMessage: "ページを更新しました",
-        onSaved,
-      }),
-    );
+    await run(async () => {
+      if (item) {
+        await updatePage.mutateAsync({ id: item.id, ...payload, slug: slug || item.slug });
+        toast.success("ページを更新しました");
+      } else {
+        await createPage.mutateAsync({ ...payload, ...(slug ? { slug } : {}) });
+        toast.success("ページを作成しました");
+      }
+      onSaved();
+    });
   }
 
   return (

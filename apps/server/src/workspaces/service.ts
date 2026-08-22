@@ -1,9 +1,39 @@
 import type { EmailBrandProfileWrite } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { Workspace } from "@openengage/core/workspaces";
+import { capabilitiesForRole } from "@openengage/core/workspaces";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { EmailDesignRepository } from "@openengage/database/messaging";
-import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
+import {
+  OrganizationRepository,
+  WorkspaceSettingsRepository,
+} from "@openengage/database/workspaces";
+
+import { createAuth } from "../auth/service";
+import type { RuntimeEnv } from "../env";
+import { availableSlug } from "./slug-service";
+
+export async function createWorkspace(
+  database: OpenEngageDatabase,
+  env: RuntimeEnv,
+  headers: Headers,
+  name: string,
+): Promise<{ id: string; name: string; slug: string }> {
+  const repository = new OrganizationRepository(database);
+  const auth = createAuth(env);
+  for (;;) {
+    const slug = await availableSlug(name, "workspace", (candidate) =>
+      repository.isSlugAvailable(candidate),
+    );
+    try {
+      const created = await auth.api.createOrganization({ body: { name, slug }, headers });
+      return { id: created.id, name: created.name, slug: created.slug };
+    } catch (error) {
+      if (!(await repository.isSlugAvailable(slug))) continue;
+      throw error;
+    }
+  }
+}
 
 export async function getWorkspace(
   database: OpenEngageDatabase,
@@ -23,6 +53,7 @@ export async function getWorkspace(
     timezone: row.timezone,
     created_at: row.createdAt.getTime(),
     role: workspace.role,
+    capabilities: capabilitiesForRole(workspace.role),
   };
 }
 

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
-import type { WorkspaceRole } from "@openengage/core/shared";
+import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
 import type { AssetSearch, AssetSummary } from "../asset-api";
 import { AssetActions } from "./actions";
@@ -16,13 +16,13 @@ import { AssetCollectionView } from "./view";
 
 export function AssetsPage({
   initialSearch,
-  role,
+  capabilities,
 }: {
   initialSearch: AssetSearch;
-  role: WorkspaceRole;
+  capabilities: WorkspaceCapabilities;
 }): ReactNode {
   const { formatDateTime } = useWorkspaceFormatters();
-  const controller = useAssetsPageController(initialSearch, role);
+  const controller = useAssetsPageController(initialSearch, capabilities);
   const renderActions = (asset: AssetSummary): ReactNode => (
     <AssetActions
       asset={asset}

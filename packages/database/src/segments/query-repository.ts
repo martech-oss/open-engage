@@ -9,6 +9,15 @@ import { filterAstCodec } from "./support";
 import type { SegmentRecord } from "./types";
 
 export class SegmentQueryRepository extends WorkspaceRepository {
+  public async isSlugAvailable(slug: string): Promise<boolean> {
+    const rows = await this.database.orm
+      .select({ id: segments.id })
+      .from(segments)
+      .where(and(this.inWorkspace(segments), eq(segments.slug, slug)))
+      .limit(1);
+    return rows.length === 0;
+  }
+
   public async listSegments(kind?: "static" | "dynamic"): Promise<SegmentRecord[]> {
     const conditions: SQL[] = [this.inWorkspace(segments)];
     if (kind) conditions.push(eq(segments.kind, kind));

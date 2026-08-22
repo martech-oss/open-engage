@@ -14,6 +14,10 @@ export class SegmentRepository extends WorkspaceRepository {
   private readonly evaluation = new SegmentEvaluationRepository(this.database, this.context);
   private readonly catalog = new SegmentCatalogRepository(this.database, this.context);
 
+  public isSlugAvailable(...args: Parameters<SegmentQueryRepository["isSlugAvailable"]>) {
+    return this.queries.isSlugAvailable(...args);
+  }
+
   public listSegments(...args: Parameters<SegmentQueryRepository["listSegments"]>) {
     return this.queries.listSegments(...args);
   }

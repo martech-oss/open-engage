@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkspaceRole } from "@openengage/core/shared";
+import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
 import type { AssetSummary, AssetSearch } from "./asset-api";
 import { AssetsPage } from "./assets-page";
@@ -164,6 +164,7 @@ describe("AssetsPage role actions", () => {
   it.each([
     {
       role: "viewer" as const,
+      capabilities: capabilities(false, false),
       upload: false,
       visible: ["Brand guideをダウンロード"],
       hidden: [
@@ -175,6 +176,7 @@ describe("AssetsPage role actions", () => {
     },
     {
       role: "marketer" as const,
+      capabilities: capabilities(true, false),
       upload: true,
       visible: [
         "Brand guideをダウンロード",
@@ -186,6 +188,7 @@ describe("AssetsPage role actions", () => {
     },
     {
       role: "admin" as const,
+      capabilities: capabilities(true, true),
       upload: true,
       visible: [
         "Brand guideをダウンロード",
@@ -196,8 +199,21 @@ describe("AssetsPage role actions", () => {
       ],
       hidden: [],
     },
-  ])("shows the permitted actions for $role", ({ role, upload, visible, hidden }) => {
-    render(<AssetsPage initialSearch={search()} role={role} />);
+    {
+      role: "owner" as const,
+      capabilities: capabilities(true, true),
+      upload: true,
+      visible: [
+        "Brand guideをダウンロード",
+        "Brand guideを編集",
+        "Brand guideを差し替え",
+        "Brand guideをアーカイブ",
+        "Brand guideを削除",
+      ],
+      hidden: [],
+    },
+  ])("shows the permitted actions for $role", ({ capabilities, upload, visible, hidden }) => {
+    render(<AssetsPage initialSearch={search()} capabilities={capabilities} />);
 
     expect(screen.queryByRole("button", { name: "アップロード" }) !== null).toBe(upload);
     for (const name of visible) expect(screen.getByLabelText(name)).toBeTruthy();
@@ -205,8 +221,7 @@ describe("AssetsPage role actions", () => {
   });
 
   it("wires pagination, upload refresh, restore, and delete callbacks for an admin", async () => {
-    const role: WorkspaceRole = "admin";
-    render(<AssetsPage initialSearch={search()} role={role} />);
+    render(<AssetsPage initialSearch={search()} capabilities={capabilities(true, true)} />);
 
     fireEvent.click(screen.getByRole("button", { name: "次へ" }));
     fireEvent.click(screen.getByRole("button", { name: "前へ" }));
@@ -226,4 +241,13 @@ describe("AssetsPage role actions", () => {
 
 function search(): AssetSearch {
   return { q: "", kind: "", status: "active", view: "table" };
+}
+
+function capabilities(manageMarketing: boolean, manageWorkspace: boolean): WorkspaceCapabilities {
+  return {
+    viewReports: manageMarketing,
+    manageMarketing,
+    manageWorkspace,
+    manageApiKeys: manageWorkspace,
+  };
 }

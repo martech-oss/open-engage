@@ -5,6 +5,7 @@ import { contract } from "@openengage/orpc";
 
 import {
   resolveSessionWorkspaceAccess,
+  resolveSessionAccess,
   resolveWorkspaceAccess,
   WorkspaceAccessError,
   type WorkspaceAccess,
@@ -47,7 +48,8 @@ function createAccessMiddleware(
       return next({ context: access });
     } catch (error) {
       if (!(error instanceof WorkspaceAccessError)) throw error;
-      throw errors[mapCode(error.code)]();
+      const accessErrors = errors as unknown as Record<AccessErrorKey, () => Error>;
+      throw accessErrors[mapCode(error.code)]();
     }
   });
 }
@@ -80,6 +82,23 @@ const requireSessionWorkspace = createAccessMiddleware(resolveSessionWorkspaceAc
 });
 
 export const sessionAuthed = os.use(requireSessionWorkspace);
+
+const requireSession = os.middleware(async ({ context, next, errors }) => {
+  try {
+    const access = await resolveSessionAccess({
+      env: context.env,
+      headers: context.headers,
+      method: context.method,
+    });
+    return next({ context: access });
+  } catch (error) {
+    if (!(error instanceof WorkspaceAccessError)) throw error;
+    if (error.code === "origin_mismatch") throw errors.ORIGIN_MISMATCH();
+    throw errors.UNAUTHORIZED();
+  }
+});
+
+export const sessionOnly = os.use(requireSession);
 
 /**
  * Shared role guard for oRPC handlers. Every role-gated contract declares a

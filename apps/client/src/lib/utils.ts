@@ -16,5 +16,5 @@ export function slugify(
     .replaceAll(/^-+|-+$/g, "");
   const trimmed = options?.maxLength ? normalized.slice(0, options.maxLength) : normalized;
 
-  return trimmed || `${options?.fallback ?? "resource"}-${Date.now()}`;
+  return trimmed || (options?.fallback ?? "resource");
 }

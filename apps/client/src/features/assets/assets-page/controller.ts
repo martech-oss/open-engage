@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import type { WorkspaceRole } from "@openengage/core/shared";
+import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
 import {
   type Asset,
@@ -24,10 +24,13 @@ import {
 import { assetPermissions } from "./permissions";
 import type { AssetActionHandlers } from "./types";
 
-export function useAssetsPageController(initialSearch: AssetSearch, role: WorkspaceRole) {
+export function useAssetsPageController(
+  initialSearch: AssetSearch,
+  capabilities: WorkspaceCapabilities,
+) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canWrite, canDelete } = assetPermissions(role);
+  const { canWrite, canDelete } = assetPermissions(capabilities);
   const paginationKey = JSON.stringify([
     initialSearch.q,
     initialSearch.kind,

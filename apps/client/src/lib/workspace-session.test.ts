@@ -5,18 +5,21 @@ type AuthResult = {
   error: { message?: string } | null;
 };
 
-const { setActive, create } = vi.hoisted(() => ({
+const { setActive, createWorkspace } = vi.hoisted(() => ({
   setActive: vi.fn<(input: { organizationId: string }) => Promise<AuthResult>>(),
-  create: vi.fn<(input: { name: string; slug: string }) => Promise<AuthResult>>(),
+  createWorkspace: vi.fn<(input: { name: string }) => Promise<{ id: string }>>(),
 }));
 
 vi.mock("@/auth-client", () => ({
   authClient: {
     organization: {
       setActive,
-      create,
     },
   },
+}));
+
+vi.mock("@/lib/orpc", () => ({
+  orpc: { workspace: { create: createWorkspace } },
 }));
 
 import {
@@ -52,7 +55,7 @@ describe("listedWorkspaces", () => {
 describe("activateWorkspace", () => {
   beforeEach(() => {
     setActive.mockReset();
-    create.mockReset();
+    createWorkspace.mockReset();
   });
 
   it("returns ok after Better Auth sets the active organization", async () => {
@@ -70,19 +73,18 @@ describe("activateWorkspace", () => {
 describe("createAndActivateWorkspace", () => {
   beforeEach(() => {
     setActive.mockReset();
-    create.mockReset();
+    createWorkspace.mockReset();
   });
 
-  it("creates an organization then makes it active", async () => {
-    create.mockResolvedValue({ data: { id: "ws-new" }, error: null });
-    setActive.mockResolvedValue({ data: { id: "ws-new" }, error: null });
+  it("uses the server workspace command without a separate activation", async () => {
+    createWorkspace.mockResolvedValue({ id: "ws-new" });
     await expect(createAndActivateWorkspace("Acme")).resolves.toEqual({ ok: true });
-    expect(create).toHaveBeenCalledWith({ name: "Acme", slug: "acme" });
-    expect(setActive).toHaveBeenCalledWith({ organizationId: "ws-new" });
+    expect(createWorkspace).toHaveBeenCalledWith({ name: "Acme" });
+    expect(setActive).not.toHaveBeenCalled();
   });
 
-  it("does not activate when create fails", async () => {
-    create.mockResolvedValue({ data: null, error: { message: "上限です" } });
+  it("surfaces server workspace creation errors", async () => {
+    createWorkspace.mockRejectedValue(new Error("上限です"));
     await expect(createAndActivateWorkspace("Acme")).resolves.toEqual({ error: "上限です" });
     expect(setActive).not.toHaveBeenCalled();
   });

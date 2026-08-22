@@ -24,6 +24,15 @@ export type LandingPageUpdateOutcome =
   | { kind: "ok"; id: string; versionId: string };
 
 export class LandingPageRepository extends WorkspaceRepository {
+  public async isSlugAvailable(slug: string): Promise<boolean> {
+    const rows = await this.database.orm
+      .select({ id: landingPages.id })
+      .from(landingPages)
+      .where(and(this.inWorkspace(landingPages), eq(landingPages.slug, slug)))
+      .limit(1);
+    return rows.length === 0;
+  }
+
   public async listLandingPages(): Promise<LandingPage[]> {
     const rows = await this.database.orm
       .select({

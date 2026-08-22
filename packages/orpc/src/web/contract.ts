@@ -4,8 +4,10 @@ import * as z from "zod";
 import {
   customRedirectSchema,
   customRedirectWriteSchema,
+  landingPageCreateSchema,
   landingPageSchema,
   landingPageWriteSchema,
+  signupFormCreateSchema,
   signupFormSchema,
   signupFormWriteSchema,
   siteMessageSchema,
@@ -41,14 +43,19 @@ export const websiteContract = {
     .output(z.array(signupFormSchema)),
   createForm: oc
     .route({ method: "POST", path: "/website/forms", successStatus: 201 })
-    .errors({ ...authedErrors, ...turnstileNotConfigured })
-    .input(signupFormWriteSchema)
+    .errors({
+      ...authedErrors,
+      ...turnstileNotConfigured,
+      FORM_SLUG_TAKEN: { status: 409, message: "同じスラッグのフォームが既に存在します" },
+    })
+    .input(signupFormCreateSchema)
     .output(created),
   updateForm: oc
     .route({ method: "PATCH", path: "/website/forms/{id}" })
     .errors({
       ...notFound("FORM_NOT_FOUND", "フォームが見つかりません"),
       ...turnstileNotConfigured,
+      FORM_SLUG_TAKEN: { status: 409, message: "同じスラッグのフォームが既に存在します" },
     })
     .input(signupFormWriteSchema.extend({ id: z.string().min(1) }))
     .output(created),
@@ -64,14 +71,18 @@ export const websiteContract = {
     .output(z.array(landingPageSchema)),
   createPage: oc
     .route({ method: "POST", path: "/website/pages", successStatus: 201 })
-    .errors(authedErrors)
-    .input(landingPageWriteSchema)
+    .errors({
+      ...authedErrors,
+      PAGE_SLUG_TAKEN: { status: 409, message: "同じスラッグのページが既に存在します" },
+    })
+    .input(landingPageCreateSchema)
     .output(z.object({ id: z.string(), versionId: z.string() })),
   updatePage: oc
     .route({ method: "PATCH", path: "/website/pages/{id}" })
     .errors({
       ...notFound("PAGE_NOT_FOUND", "ページが見つかりません"),
       PAGE_ARCHIVED: { status: 409, message: "アーカイブ済みページは編集できません" },
+      PAGE_SLUG_TAKEN: { status: 409, message: "同じスラッグのページが既に存在します" },
     })
     .input(landingPageWriteSchema.extend({ id: z.string().min(1) }))
     .output(z.object({ id: z.string(), versionId: z.string() })),

@@ -1,7 +1,17 @@
-import { authed, requireRole } from "../orpc/base";
+import { authed, requireRole, sessionOnly } from "../orpc/base";
 import { createApiKey } from "./api-key-service";
-import { getEmailBrandProfile, getWorkspace, updateEmailBrandProfile } from "./service";
+import {
+  createWorkspace,
+  getEmailBrandProfile,
+  getWorkspace,
+  updateEmailBrandProfile,
+} from "./service";
 import { createWebhookEndpoint, listWebhookEndpoints } from "./webhook-endpoint-service";
+
+export const createWorkspaceProcedure = sessionOnly.workspace.create.handler(
+  async ({ context, input }) =>
+    createWorkspace(context.database, context.env, context.headers, input.name),
+);
 
 export const getWorkspaceProcedure = authed.workspace.get.handler(async ({ context }) =>
   getWorkspace(context.database, context.workspace),
@@ -49,6 +59,7 @@ export const createApiKeyProcedure = authed.workspace.createApiKey.handler(
 );
 
 export const workspaceProcedures = {
+  create: createWorkspaceProcedure,
   get: getWorkspaceProcedure,
   getEmailBrand: getEmailBrandProcedure,
   updateEmailBrand: updateEmailBrandProcedure,

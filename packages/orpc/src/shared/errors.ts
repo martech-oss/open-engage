@@ -23,6 +23,11 @@ export const forbiddenError = {
 
 export const authedErrors = { ...workspaceErrors, ...forbiddenError } as const;
 
+export const sessionErrors = {
+  UNAUTHORIZED: workspaceErrors.UNAUTHORIZED,
+  ORIGIN_MISMATCH: workspaceErrors.ORIGIN_MISMATCH,
+} as const;
+
 export const briefContextErrors = {
   BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
   BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },

@@ -6,7 +6,7 @@ import {
   type WorkspaceRole,
 } from "@openengage/core/shared";
 
-import { member } from "../auth/schema";
+import { member, organization } from "../auth/schema";
 import type { OpenEngageDatabase } from "../client";
 import { DatabaseRepository } from "../shared/repository-base";
 import { apiKeys } from "./schema";
@@ -84,5 +84,16 @@ export class ApiKeyRepository extends DatabaseRepository {
     createdAt: string;
   }): Promise<void> {
     await this.database.orm.insert(apiKeys).values(input);
+  }
+}
+
+export class OrganizationRepository extends DatabaseRepository {
+  public async isSlugAvailable(slug: string): Promise<boolean> {
+    const rows = await this.database.orm
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.slug, slug))
+      .limit(1);
+    return rows.length === 0;
   }
 }

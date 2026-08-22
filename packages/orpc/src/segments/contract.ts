@@ -12,6 +12,7 @@ import {
   segmentRowSchema,
   segmentValidationResultSchema,
 } from "@openengage/core/segments";
+import { normalizeSlug } from "@openengage/core/shared";
 
 import { authedErrors, briefContextErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema } from "../shared/schemas";
@@ -53,7 +54,13 @@ export const segmentsContract = {
       z
         .object({
           name: z.string().trim().min(1).max(191),
-          slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+          slug: z
+            .string()
+            .trim()
+            .min(1)
+            .max(191)
+            .transform((value) => normalizeSlug(value, { fallback: "segment" }))
+            .optional(),
           description: z.string().trim().max(1_000).default(""),
           kind: z.enum(["static", "dynamic"]),
           filter: segmentFilterSchema.optional(),

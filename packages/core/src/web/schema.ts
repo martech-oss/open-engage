@@ -1,5 +1,6 @@
 import * as z from "zod";
 
+import { normalizeSlug } from "../shared/schema";
 import { contentDocumentSchema } from "./content";
 
 export const publishStatusSchema = z.enum(["draft", "published"]);
@@ -126,11 +127,17 @@ export const siteTrackingSchema = z.object({
 });
 export type SiteTracking = z.infer<typeof siteTrackingSchema>;
 
-const slugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const normalizedSlugSchema = (fallback: string) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(191)
+    .transform((value) => normalizeSlug(value, { fallback }));
 
 export const signupFormWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
-  slug: slugSchema,
+  slug: normalizedSlugSchema("signup-form"),
   status: publishStatusSchema.default("draft"),
   definition: signupFormDefinitionSchema,
   allowedDomains: z.array(z.string()).default([]),
@@ -138,14 +145,22 @@ export const signupFormWriteSchema = z.object({
   successMessage: z.string().max(500).default("ありがとうございます。"),
 });
 export type SignupFormWrite = z.infer<typeof signupFormWriteSchema>;
+export const signupFormCreateSchema = signupFormWriteSchema.extend({
+  slug: normalizedSlugSchema("signup-form").optional(),
+});
+export type SignupFormCreate = z.infer<typeof signupFormCreateSchema>;
 
 export const landingPageWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
-  slug: slugSchema,
+  slug: normalizedSlugSchema("landing-page"),
   status: publishStatusSchema.default("draft"),
   content: contentDocumentSchema,
 });
 export type LandingPageWrite = z.infer<typeof landingPageWriteSchema>;
+export const landingPageCreateSchema = landingPageWriteSchema.extend({
+  slug: normalizedSlugSchema("landing-page").optional(),
+});
+export type LandingPageCreate = z.infer<typeof landingPageCreateSchema>;
 
 export const siteMessageWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
@@ -179,7 +194,7 @@ export type CustomRedirect = z.infer<typeof customRedirectSchema>;
 
 export const customRedirectWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
-  slug: slugSchema,
+  slug: normalizedSlugSchema("redirect"),
   /** Only http(s): the public route 302s here, so anything else is an open redirect. */
   destinationUrl: z.url().refine(
     (value) => {

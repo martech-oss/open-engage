@@ -5,6 +5,7 @@ import {
   marketingCapabilitySnapshotSchema,
   projectBriefReferenceSchema,
 } from "../projects/schema.js";
+import { normalizeSlug } from "../shared/schema.js";
 import { segmentFilterSchema } from "./schema.js";
 
 export const SEGMENT_RESOURCE_KINDS = [
@@ -31,7 +32,12 @@ export type SegmentResourceOption = z.infer<typeof segmentResourceOptionSchema>;
 export const segmentDefinitionSchema = z
   .object({
     name: z.string().trim().min(1).max(191),
-    slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    slug: z
+      .string()
+      .trim()
+      .min(1)
+      .max(191)
+      .transform((value) => normalizeSlug(value, { fallback: "segment" })),
     description: z.string().trim().max(1_000).default(""),
     kind: z.enum(["static", "dynamic"]),
     filter: segmentFilterSchema.nullable(),

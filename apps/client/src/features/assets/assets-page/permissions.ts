@@ -1,8 +1,11 @@
-import type { WorkspaceRole } from "@openengage/core/shared";
+import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
-const WRITE_ROLES = new Set<WorkspaceRole>(["marketer", "admin", "owner"]);
-const DELETE_ROLES = new Set<WorkspaceRole>(["admin", "owner"]);
-
-export function assetPermissions(role: WorkspaceRole): { canWrite: boolean; canDelete: boolean } {
-  return { canWrite: WRITE_ROLES.has(role), canDelete: DELETE_ROLES.has(role) };
+export function assetPermissions(capabilities: WorkspaceCapabilities): {
+  canWrite: boolean;
+  canDelete: boolean;
+} {
+  return {
+    canWrite: capabilities.manageMarketing,
+    canDelete: capabilities.manageWorkspace,
+  };
 }

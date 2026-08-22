@@ -44,7 +44,11 @@ export function invalidateSegmentQueries(
   ]).then(() => undefined);
 }
 
-export function createDynamicSegment(input: { name: string; slug: string; filter: SegmentFilter }) {
+export function createDynamicSegment(input: {
+  name: string;
+  slug?: string;
+  filter: SegmentFilter;
+}) {
   return orpc.segments.create({ ...input, kind: "dynamic" });
 }
 

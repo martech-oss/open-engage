@@ -37,6 +37,10 @@ export interface WorkspaceAccess {
   session: SessionValue | null;
 }
 
+export interface SessionAccess {
+  session: SessionValue;
+}
+
 export const requestContext = createMiddleware<AppEnvironment>(async (context, next) => {
   const requestId = context.req.header("cf-ray") ?? crypto.randomUUID();
   context.set("database", createDatabase(context.env.DB));
@@ -97,24 +101,7 @@ export async function resolveSessionWorkspaceAccess({
   headers: Headers;
   method: string;
 }): Promise<WorkspaceAccess & { session: SessionValue }> {
-  const auth = createAuth(env);
-  const session = (await auth.api.getSession({
-    headers,
-  })) as SessionValue | null;
-  if (!session) {
-    throw new WorkspaceAccessError(401, "unauthorized", workspaceErrors.UNAUTHORIZED.message);
-  }
-
-  if (isMutation(method)) {
-    const origin = headers.get("origin");
-    if (origin && origin !== new URL(env.APP_URL).origin) {
-      throw new WorkspaceAccessError(
-        403,
-        "origin_mismatch",
-        workspaceErrors.ORIGIN_MISMATCH.message,
-      );
-    }
-  }
+  const { session } = await resolveSessionAccess({ env, headers, method });
 
   const requestedOrganizationId =
     headers.get("x-openengage-workspace") ?? session.session.activeOrganizationId ?? null;
@@ -127,6 +114,33 @@ export async function resolveSessionWorkspaceAccess({
     );
   }
   return { workspace, session };
+}
+
+export async function resolveSessionAccess({
+  env,
+  headers,
+  method,
+}: {
+  env: AppEnvironment["Bindings"];
+  headers: Headers;
+  method: string;
+}): Promise<SessionAccess> {
+  const auth = createAuth(env);
+  const session = (await auth.api.getSession({ headers })) as SessionValue | null;
+  if (!session) {
+    throw new WorkspaceAccessError(401, "unauthorized", workspaceErrors.UNAUTHORIZED.message);
+  }
+  if (isMutation(method)) {
+    const origin = headers.get("origin");
+    if (origin && origin !== new URL(env.APP_URL).origin) {
+      throw new WorkspaceAccessError(
+        403,
+        "origin_mismatch",
+        workspaceErrors.ORIGIN_MISMATCH.message,
+      );
+    }
+  }
+  return { session };
 }
 
 export function apiError(

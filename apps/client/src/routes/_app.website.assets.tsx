@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_app/website/assets")({
   loaderDeps: ({ search }) => search,
   loader: async ({ deps, context }) => {
     await context.queryClient.ensureQueryData(assetsQueryOptions(deps));
-    return { role: context.workspace.role };
+    return { capabilities: context.workspace.capabilities };
   },
   ...routeStatusComponents,
   component: AssetsRoute,
@@ -26,6 +26,6 @@ export const Route = createFileRoute("/_app/website/assets")({
 
 function AssetsRoute() {
   const search = Route.useSearch();
-  const { role } = Route.useLoaderData();
-  return <AssetsPage initialSearch={search} role={role} />;
+  const { capabilities } = Route.useLoaderData();
+  return <AssetsPage initialSearch={search} capabilities={capabilities} />;
 }

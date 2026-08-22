@@ -52,8 +52,75 @@ describe("oRPC contract schemas", () => {
         timezone: "Asia/Tokyo",
         created_at: Date.now(),
         role: "owner",
+        capabilities: {
+          viewReports: true,
+          manageMarketing: true,
+          manageWorkspace: true,
+          manageApiKeys: true,
+        },
       }).role,
     ).toBe("owner");
+  });
+
+  it.each([
+    ["segments.create", contract.segments.create, { name: "日本語", kind: "static" }],
+    [
+      "website.createPage",
+      contract.website.createPage,
+      { name: "日本語", content: { schemaVersion: 1, blocks: [] } },
+    ],
+    [
+      "website.createForm",
+      contract.website.createForm,
+      { name: "日本語", definition: {}, allowedDomains: [], turnstileEnabled: false },
+    ],
+  ] as const)("allows %s input to omit slug", (_label, procedure, input) => {
+    const schema = procedure["~orpc"].inputSchema as z.ZodType;
+    expect(schema.safeParse(input).success).toBe(true);
+  });
+
+  it.each([
+    ["updatePage", { id: "page", name: "日本語", content: { schemaVersion: 1, blocks: [] } }],
+    [
+      "updateForm",
+      {
+        id: "form",
+        name: "日本語",
+        definition: {},
+        allowedDomains: [],
+        turnstileEnabled: false,
+      },
+    ],
+  ] as const)("keeps website.%s update slug explicit", (procedure, input) => {
+    const schema = contract.website[procedure]["~orpc"].inputSchema as z.ZodType;
+    expect(schema.safeParse(input).success).toBe(false);
+  });
+
+  it.each([
+    [
+      contract.segments.create,
+      { name: "Segment", slug: " Segment_日本 ", kind: "static" },
+      "segment",
+    ],
+    [
+      contract.website.createPage,
+      { name: "Page", slug: " Launch_日本 ", content: { schemaVersion: 1, blocks: [] } },
+      "launch",
+    ],
+    [
+      contract.website.createForm,
+      {
+        name: "Form",
+        slug: " Signup_日本 ",
+        definition: {},
+        allowedDomains: [],
+        turnstileEnabled: false,
+      },
+      "signup",
+    ],
+  ] as const)("normalizes explicit resource slugs", (procedure, input, expected) => {
+    const schema = procedure["~orpc"].inputSchema as z.ZodType<{ slug: string }>;
+    expect(schema.parse(input).slug).toBe(expected);
   });
 });
 

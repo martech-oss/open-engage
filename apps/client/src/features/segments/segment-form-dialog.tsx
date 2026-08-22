@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
-import { slugify } from "@/lib/utils";
 import type {
   SegmentFilter,
   SegmentGenerationCatalog,
@@ -87,7 +86,6 @@ export function SegmentFormDialog({
       } else {
         const created = await createSegment.mutateAsync({
           name,
-          slug: slugify(name),
           description,
           kind,
           ...(kind === "dynamic" && filter ? { filter } : {}),

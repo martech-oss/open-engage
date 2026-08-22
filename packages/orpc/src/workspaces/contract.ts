@@ -5,9 +5,14 @@ import { emailBrandProfileSchema, emailBrandProfileWriteSchema } from "@openenga
 import { workspaceRoleSchema } from "@openengage/core/shared";
 import { webhookEndpointRowSchema, workspaceSchema } from "@openengage/core/workspaces";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import { authedErrors, sessionErrors, workspaceErrors } from "../shared/errors";
 
 export const workspaceContract = {
+  create: oc
+    .route({ method: "POST", path: "/workspaces", successStatus: 201 })
+    .errors(sessionErrors)
+    .input(z.object({ name: z.string().trim().min(1).max(191) }))
+    .output(z.object({ id: z.string(), name: z.string(), slug: z.string() })),
   get: oc
     .route({ method: "GET", path: "/workspace" })
     .errors(workspaceErrors)
