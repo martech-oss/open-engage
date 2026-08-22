@@ -63,3 +63,49 @@ The focused final suite contains 11 passing tests across those four files.
 - Adjusted the contact cache-refresh test to assert the actual invalidation boundary because an active query immediately refetches and clears TanStack Query's transient `isInvalidated` flag.
 - Extracted rule form parsing so the editor component satisfies the stricter 120-line function cap.
 - No known concerns remain.
+
+## Fix round 1: scoring prop-only views and dialog sessions
+
+### Findings resolved
+
+1. Split each scoring editor/card into a controller-backed composition shell and a prop-only view:
+   - `ScoringRuleEditorShell` owns rule form parsing and `useScoringRuleEditorController`; `ScoringRuleEditorView` receives item, state, commands, categories, and tags only.
+   - `GradingCriterionEditorShell` owns criterion form parsing and `useGradingCriterionEditorController`; `GradingCriterionEditorView` receives item, state, and commands only.
+   - `ScoringCategoryCardShell` owns category form parsing and `useScoringCategoryEditorController`; `CategoryCardView` receives rows, supplied columns, dialog state, and commands only.
+   - The three prop-only view modules import no query, mutation, controller, form parsing, or FormData APIs.
+   - `scoringCategoryColumns` now lives beside the rule and grading factories in `scoring-columns.tsx`; the grading page constructs and supplies it.
+2. Added explicit per-open session identity:
+   - Rule create and edit commands increment `editor.sessionId`, including reopening the same existing rule.
+   - Grading create and edit commands increment `criterionEditor.sessionId`, including reopening the same criterion.
+   - Category closed-to-open transitions increment `categoryEditor.sessionId`.
+   - Pages key each composition shell by its session ID, so controller error/conditional state and uncontrolled form drafts reset on every reopen while remaining stable within one open session.
+
+### TDD and behavior coverage
+
+- RED was observed with `pnpm --filter @openengage/client exec vitest run src/features/scoring/scoring-controllers.dom.test.tsx src/features/scoring/scoring-editor-shells.dom.test.tsx`:
+  - the new shell module could not be resolved;
+  - rule/grading session IDs were undefined;
+  - the category editor session API did not exist.
+- GREEN focused result: 2 files, 10 tests passed.
+- `scoring-controllers.dom.test.tsx` proves fresh create, same-item edit, grading, and category session IDs.
+- `scoring-editor-shells.dom.test.tsx` renders real shell/view forms and proves:
+  - a rejected rule create retains its changed match field and error during the session, then reopening resets to `any` and clears the error;
+  - a rejected update for the same grading criterion retains its custom-field state and error during the session, then reopening restores the item's original `stage` field and clears the error;
+  - `CategoryCardView` renders supplied rows through supplied columns and delegates the open command without any query provider/controller hook.
+
+### Fix verification
+
+- Focused tests: 2 files, 10 tests passed.
+- Full client tests: `pnpm --filter @openengage/client test` — 60 files, 217 tests passed.
+- Client typecheck: `pnpm --filter @openengage/client typecheck` — passed.
+- Client build: `pnpm --filter @openengage/client build` — Vite client/SSR/OpenEngage server builds and final TypeScript check passed.
+- Full lint: `pnpm lint` — passed with no findings.
+- Scoped format: `pnpm exec oxfmt --check apps/client/src/features/scoring` — all 18 files passed.
+- Whitespace audit: `git diff --check` — passed.
+- Mechanical line audit: all touched scoring entry/controller/shell/view/column/model files are at most 176 lines; all target functions/controllers are at most 108 lines.
+
+### Fix self-review
+
+- Removed a category-open method that existed only for tests; coverage now calls the same `onOpenChange(true)` command used by the real category view.
+- The contact drawer, atomic contact create, export controller, and company invalidation behavior were not changed in this round.
+- No remaining concerns for the two Important findings.

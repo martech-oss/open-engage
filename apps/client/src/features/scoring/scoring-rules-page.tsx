@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { scoringRuleColumns } from "./scoring-columns";
-import { ScoringRuleEditor } from "./scoring-rule-editor";
+import { ScoringRuleEditorShell } from "./scoring-editor-shells";
 import { useScoringRulesController } from "./scoring-rules-controller";
 import { ScoringRulesSummary } from "./scoring-summaries";
 
@@ -47,8 +47,8 @@ export function ScoringRulesPage(): ReactNode {
           />
         </CardContent>
       </Card>
-      <ScoringRuleEditor
-        key={controller.editor.editing?.id ?? "new"}
+      <ScoringRuleEditorShell
+        key={controller.editor.sessionId}
         item={controller.editor.editing}
         open={controller.editor.dialogOpen}
         onOpenChange={controller.editor.onOpenChange}

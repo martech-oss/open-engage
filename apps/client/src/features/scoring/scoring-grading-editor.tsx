@@ -2,39 +2,32 @@ import type { FormEvent, ReactNode } from "react";
 
 import { FormDialog, FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
 import { FieldGroup } from "@/components/ui/field";
-import { getFormString } from "@/lib/form-data";
 import { GRADING_FIELDS, GRADING_OPERATORS } from "@openengage/core/scoring";
 
 import type { GradingCriterionRow } from "./scoring-api";
-import { useGradingCriterionEditorController } from "./scoring-editor-controllers";
 import { GRADING_FIELD_LABELS, GRADING_OPERATOR_LABELS } from "./scoring-labels";
 
-export function GradingCriterionEditor({
-  item,
-  open,
-  onOpenChange,
-  onSaved,
-}: {
+export type GradingCriterionEditorViewProps = {
   item: GradingCriterionRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaved: () => void;
-}): ReactNode {
-  const controller = useGradingCriterionEditorController(item, onSaved);
-  function submit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const fieldKey = getFormString(form, "fieldKey").trim();
-    void controller.save({
-      name: getFormString(form, "name"),
-      field: getFormString(form, "field") as GradingCriterionRow["field"],
-      fieldKey: fieldKey || null,
-      operator: getFormString(form, "operator") as GradingCriterionRow["operator"],
-      value: getFormString(form, "value"),
-      steps: Number(getFormString(form, "steps")) || 0,
-      enabled: getFormString(form, "enabled") !== "disabled",
-    });
-  }
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  busy: boolean;
+  error: string;
+  field: GradingCriterionRow["field"];
+  onFieldChange: (field: GradingCriterionRow["field"]) => void;
+};
+
+export function GradingCriterionEditorView({
+  item,
+  open,
+  onOpenChange,
+  onSubmit,
+  busy,
+  error,
+  field,
+  onFieldChange,
+}: GradingCriterionEditorViewProps): ReactNode {
   return (
     <FormDialog
       open={open}
@@ -42,9 +35,9 @@ export function GradingCriterionEditor({
       title={item ? "グレード条件を編集" : "グレード条件を追加"}
       description="連絡先の属性がこの条件に合致すると、グレードを上下させます。"
       className="sm:max-w-2xl"
-      onSubmit={submit}
-      busy={controller.busy}
-      error={controller.error}
+      onSubmit={onSubmit}
+      busy={busy}
+      error={error}
       submitLabel={item ? "変更を保存" : "条件を追加"}
     >
       <FormInput
@@ -60,7 +53,7 @@ export function GradingCriterionEditor({
           name="field"
           defaultValue={item?.field ?? "custom_field"}
           onChange={(event) =>
-            controller.setField(event.currentTarget.value as GradingCriterionRow["field"])
+            onFieldChange(event.currentTarget.value as GradingCriterionRow["field"])
           }
         >
           {GRADING_FIELDS.map((value) => (
@@ -81,7 +74,7 @@ export function GradingCriterionEditor({
           ))}
         </FormNativeSelect>
       </FieldGroup>
-      {controller.field === "custom_field" ? (
+      {field === "custom_field" ? (
         <FormInput
           label="カスタムフィールドのキー"
           name="fieldKey"

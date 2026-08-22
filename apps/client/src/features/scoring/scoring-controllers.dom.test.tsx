@@ -85,6 +85,44 @@ describe("scoring page controllers", () => {
     expect(toast.error).toHaveBeenCalledWith("archive unavailable");
     expect(toast.success).not.toHaveBeenCalled();
   });
+
+  it("creates a fresh rule editor session for every create and same-item reopen", () => {
+    const { result } = renderHook(() => useScoringRulesController(), { wrapper: queryWrapper() });
+
+    act(() => result.current.editor.openCreate());
+    const createSession = result.current.editor.sessionId;
+    act(() => result.current.editor.close());
+    act(() => result.current.editor.openCreate());
+    const reopenedCreateSession = result.current.editor.sessionId;
+    const item = rule({ id: "rule-1" });
+    act(() => result.current.editor.openEdit(item));
+    const editSession = result.current.editor.sessionId;
+    act(() => result.current.editor.close());
+    act(() => result.current.editor.openEdit(item));
+
+    expect(reopenedCreateSession).toBeGreaterThan(createSession);
+    expect(editSession).toBeGreaterThan(reopenedCreateSession);
+    expect(result.current.editor.sessionId).toBeGreaterThan(editSession);
+  });
+
+  it("creates fresh grading and category sessions after close and reopen", () => {
+    const { result } = renderHook(() => useScoringGradingController(), {
+      wrapper: queryWrapper(),
+    });
+    const item = criterion({ id: "criterion-1" });
+
+    act(() => result.current.criterionEditor.openEdit(item));
+    const criterionSession = result.current.criterionEditor.sessionId;
+    act(() => result.current.criterionEditor.close());
+    act(() => result.current.criterionEditor.openEdit(item));
+    act(() => result.current.categoryEditor.onOpenChange(true));
+    const categorySession = result.current.categoryEditor.sessionId;
+    act(() => result.current.categoryEditor.onOpenChange(false));
+    act(() => result.current.categoryEditor.onOpenChange(true));
+
+    expect(result.current.criterionEditor.sessionId).toBeGreaterThan(criterionSession);
+    expect(result.current.categoryEditor.sessionId).toBeGreaterThan(categorySession);
+  });
 });
 
 describe("scoring editor controllers", () => {

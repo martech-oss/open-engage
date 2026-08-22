@@ -8,10 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { gradeLetter } from "@openengage/core/scoring";
 
-import { CategoryCard } from "./scoring-category-card";
-import { gradingCriterionColumns } from "./scoring-columns";
+import { gradingCriterionColumns, scoringCategoryColumns } from "./scoring-columns";
+import { GradingCriterionEditorShell, ScoringCategoryCardShell } from "./scoring-editor-shells";
 import { useScoringGradingController } from "./scoring-grading-controller";
-import { GradingCriterionEditor } from "./scoring-grading-editor";
 
 export function ScoringGradingPage(): ReactNode {
   const controller = useScoringGradingController();
@@ -19,6 +18,7 @@ export function ScoringGradingPage(): ReactNode {
     controller.criterionEditor.openEdit,
     controller.archiveCriterion,
   );
+  const categoryColumns = scoringCategoryColumns(controller.archiveCategory);
   return (
     <PageLayout
       title="グレードとカテゴリ"
@@ -51,14 +51,15 @@ export function ScoringGradingPage(): ReactNode {
           />
         </CardContent>
       </Card>
-      <CategoryCard
+      <ScoringCategoryCardShell
+        key={controller.categoryEditor.sessionId}
         categories={controller.categories}
-        open={controller.categoryOpen}
-        onOpenChange={controller.setCategoryOpen}
-        onArchive={controller.archiveCategory}
+        columns={categoryColumns}
+        open={controller.categoryEditor.dialogOpen}
+        onOpenChange={controller.categoryEditor.onOpenChange}
       />
-      <GradingCriterionEditor
-        key={controller.criterionEditor.editing?.id ?? "new"}
+      <GradingCriterionEditorShell
+        key={controller.criterionEditor.sessionId}
         item={controller.criterionEditor.editing}
         open={controller.criterionEditor.dialogOpen}
         onOpenChange={controller.criterionEditor.onOpenChange}

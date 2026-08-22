@@ -18,8 +18,10 @@ import { summarizeGradingCriteria } from "./scoring-model";
 export function useScoringGradingController() {
   const { data: criteria } = useSuspenseQuery(gradingCriteriaQueryOptions());
   const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
-  const criterionEditor = useResourceEditor<GradingCriterionRow>();
+  const resourceEditor = useResourceEditor<GradingCriterionRow>();
+  const [criterionSessionId, setCriterionSessionId] = useState(0);
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categorySessionId, setCategorySessionId] = useState(0);
   const archiveCriterionMutation = useArchiveGradingCriterion();
   const archiveCategoryMutation = useArchiveScoringCategory();
 
@@ -41,13 +43,36 @@ export function useScoringGradingController() {
     }
   }
 
+  function openCriterionCreate(): void {
+    setCriterionSessionId((current) => current + 1);
+    resourceEditor.openCreate();
+  }
+
+  function openCriterionEdit(item: GradingCriterionRow): void {
+    setCriterionSessionId((current) => current + 1);
+    resourceEditor.openEdit(item);
+  }
+
+  function onCategoryOpenChange(open: boolean): void {
+    if (open && !categoryOpen) setCategorySessionId((current) => current + 1);
+    setCategoryOpen(open);
+  }
+
   return {
     criteria,
     categories,
     summary: summarizeGradingCriteria(criteria),
-    criterionEditor,
-    categoryOpen,
-    setCategoryOpen,
+    criterionEditor: {
+      ...resourceEditor,
+      sessionId: criterionSessionId,
+      openCreate: openCriterionCreate,
+      openEdit: openCriterionEdit,
+    },
+    categoryEditor: {
+      dialogOpen: categoryOpen,
+      onOpenChange: onCategoryOpenChange,
+      sessionId: categorySessionId,
+    },
     archiveCriterion,
     archiveCategory,
   };

@@ -1,54 +1,32 @@
 import { Layers } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 
-import { ArchiveConfirm, FormDialog, FormInput } from "@/components/app-ui";
+import { FormDialog, FormInput } from "@/components/app-ui";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getFormString } from "@/lib/form-data";
 
 import type { ScoringCategoryRow } from "./scoring-api";
-import { useScoringCategoryEditorController } from "./scoring-editor-controllers";
 
-export function CategoryCard({
-  categories,
-  open,
-  onOpenChange,
-  onArchive,
-}: {
+export type CategoryCardViewProps = {
   categories: ScoringCategoryRow[];
+  columns: DataTableColumn<ScoringCategoryRow>[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onArchive: (item: ScoringCategoryRow) => Promise<void>;
-}): ReactNode {
-  const controller = useScoringCategoryEditorController(() => onOpenChange(false));
-  const columns: DataTableColumn<ScoringCategoryRow>[] = [
-    { key: "name", header: "カテゴリ", cell: (item) => item.name },
-    {
-      key: "slug",
-      header: "スラッグ",
-      cell: (item) => <code className="text-xs">{item.slug}</code>,
-    },
-    {
-      key: "actions",
-      header: "操作",
-      cell: (item) => (
-        <div className="flex justify-end">
-          <ArchiveConfirm
-            label={item.name}
-            description={`「${item.name}」を削除すると、このカテゴリを参照するルールは全体スコアのみに戻ります。`}
-            onConfirm={() => onArchive(item)}
-          />
-        </div>
-      ),
-      headClassName: "text-right",
-    },
-  ];
-  function submit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    void controller.save({ name: getFormString(form, "name"), slug: getFormString(form, "slug") });
-  }
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  busy: boolean;
+  error: string;
+};
+
+export function CategoryCardView({
+  categories,
+  columns,
+  open,
+  onOpenChange,
+  onSubmit,
+  busy,
+  error,
+}: CategoryCardViewProps): ReactNode {
   return (
     <Card>
       <CardHeader>
@@ -78,9 +56,9 @@ export function CategoryCard({
         onOpenChange={onOpenChange}
         title="スコアリングカテゴリを作成"
         description="ルールから参照するスコアの軸です。"
-        onSubmit={submit}
-        busy={controller.busy}
-        error={controller.error}
+        onSubmit={onSubmit}
+        busy={busy}
+        error={error}
         submitLabel="カテゴリを作成"
       >
         <FormInput label="名前" name="name" placeholder="製品A" required />

@@ -5,7 +5,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import type { GradingCriterionRow, ScoringRuleRow } from "./scoring-api";
+import type { GradingCriterionRow, ScoringCategoryRow, ScoringRuleRow } from "./scoring-api";
 import {
   GRADING_FIELD_LABELS,
   GRADING_OPERATOR_LABELS,
@@ -100,6 +100,33 @@ export function gradingCriterionColumns(
     },
     statusColumn(),
     actionColumn(onEdit, onArchive, true),
+  ];
+}
+
+export function scoringCategoryColumns(
+  onArchive: (item: ScoringCategoryRow) => Promise<void>,
+): DataTableColumn<ScoringCategoryRow>[] {
+  return [
+    { key: "name", header: "カテゴリ", cell: (item) => item.name },
+    {
+      key: "slug",
+      header: "スラッグ",
+      cell: (item) => <code className="text-xs">{item.slug}</code>,
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (item) => (
+        <div className="flex justify-end">
+          <ArchiveConfirm
+            label={item.name}
+            description={`「${item.name}」を削除すると、このカテゴリを参照するルールは全体スコアのみに戻ります。`}
+            onConfirm={() => onArchive(item)}
+          />
+        </div>
+      ),
+      headClassName: "text-right",
+    },
   ];
 }
 
