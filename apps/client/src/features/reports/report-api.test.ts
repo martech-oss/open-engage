@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { createReportSearchDefaults, parseReportSearch } from "./report-api";
+import { orpcQuery } from "@/lib/orpc";
+
+import {
+  createReportSearchDefaults,
+  parseReportSearch,
+  reportWorkspaceQueryOptions,
+} from "./report-api";
 
 describe("report search defaults", () => {
   it("derives the 30-day period from the dehydrated render time in the workspace timezone", () => {
@@ -16,5 +22,22 @@ describe("report search defaults", () => {
       currency: "",
     });
     expect(parseReportSearch({}, defaults)).toEqual(defaults);
+  });
+});
+
+describe("report queries", () => {
+  it("uses the generated overview query for the whole reporting workspace", () => {
+    const search = {
+      view: "overview" as const,
+      from: "2026-01-01",
+      to: "2026-01-30",
+      currency: "JPY",
+    };
+
+    expect(reportWorkspaceQueryOptions(search).queryKey).toEqual(
+      orpcQuery.reports.overview.queryOptions({
+        input: { from: search.from, to: search.to, currency: search.currency },
+      }).queryKey,
+    );
   });
 });

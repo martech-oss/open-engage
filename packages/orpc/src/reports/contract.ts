@@ -8,6 +8,7 @@ import {
   emailsReportSchema,
   reportDateRangeSchema,
   reportQuerySchema,
+  reportsOverviewSchema,
   siteReportSchema,
 } from "@openengage/core/reports";
 
@@ -19,6 +20,11 @@ const analystErrors = authedErrors;
 const rangeInput = reportDateRangeSchema;
 
 export const reportsContract = {
+  overview: oc
+    .route({ method: "GET", path: "/reports/overview" })
+    .errors(analystErrors)
+    .input(reportQuerySchema)
+    .output(reportsOverviewSchema),
   contacts: oc
     .route({ method: "GET", path: "/reports/contacts" })
     .errors(analystErrors)

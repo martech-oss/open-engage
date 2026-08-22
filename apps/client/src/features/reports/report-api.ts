@@ -1,7 +1,7 @@
-import { queryOptions } from "@tanstack/react-query";
+import type { QueryFunction, QueryKey } from "@tanstack/react-query";
 
 import { formatIsoDate } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import type {
   AutomationsReport,
   CampaignsReport,
@@ -9,6 +9,7 @@ import type {
   DealsReport,
   EmailsReport,
   ReportCategory,
+  ReportsOverview,
   SiteReport,
 } from "@openengage/core/reports";
 
@@ -43,6 +44,21 @@ export interface ReportWorkspace {
 export interface ReportClock {
   now: string;
   timeZone: string;
+}
+
+type ReportQueryOutput =
+  | ReportsOverview
+  | ContactsReport
+  | AutomationsReport
+  | EmailsReport
+  | DealsReport
+  | SiteReport
+  | CampaignsReport;
+
+interface ReportQueryOptions {
+  queryKey: QueryKey;
+  queryFn: QueryFunction<ReportQueryOutput>;
+  select: (output: ReportQueryOutput) => ReportWorkspace;
 }
 
 export function createReportSearchDefaults(clock: ReportClock): ReportSearch {
@@ -85,38 +101,56 @@ export function parseReportSearch(
   };
 }
 
-export async function loadReportWorkspace(
-  search: ReportSearch,
-  signal?: AbortSignal,
-): Promise<ReportWorkspace> {
+export function reportWorkspaceQueryOptions(search: ReportSearch): ReportQueryOptions {
   const range = { from: search.from, to: search.to };
-  const options = signal ? { signal } : undefined;
   const dealsInput = { ...range, ...(search.currency ? { currency: search.currency } : {}) };
 
-  if (search.view === "overview") {
-    const [contacts, automations, emails, deals, site] = await Promise.all([
-      orpc.reports.contacts(range, options),
-      orpc.reports.automations(range, options),
-      orpc.reports.emails(range, options),
-      orpc.reports.deals(dealsInput, options),
-      orpc.reports.site(range, options),
-    ]);
-    return { view: search.view, contacts, automations, emails, deals, site };
-  }
-
   switch (search.view) {
+    case "overview":
+      return withWorkspaceSelection(orpcQuery.reports.overview.queryOptions({ input: dealsInput }));
     case "contacts":
-      return { view: search.view, contacts: await orpc.reports.contacts(range, options) };
+      return withWorkspaceSelection(orpcQuery.reports.contacts.queryOptions({ input: range }));
     case "automations":
-      return { view: search.view, automations: await orpc.reports.automations(range, options) };
+      return withWorkspaceSelection(orpcQuery.reports.automations.queryOptions({ input: range }));
     case "emails":
-      return { view: search.view, emails: await orpc.reports.emails(range, options) };
+      return withWorkspaceSelection(orpcQuery.reports.emails.queryOptions({ input: range }));
     case "deals":
-      return { view: search.view, deals: await orpc.reports.deals(dealsInput, options) };
+      return withWorkspaceSelection(orpcQuery.reports.deals.queryOptions({ input: dealsInput }));
     case "site":
-      return { view: search.view, site: await orpc.reports.site(range, options) };
+      return withWorkspaceSelection(orpcQuery.reports.site.queryOptions({ input: range }));
     case "campaigns":
-      return { view: search.view, campaigns: await orpc.reports.campaigns(dealsInput, options) };
+      return withWorkspaceSelection(
+        orpcQuery.reports.campaigns.queryOptions({ input: dealsInput }),
+      );
+  }
+}
+
+function withWorkspaceSelection<Output extends ReportQueryOutput>(generated: {
+  queryKey: QueryKey;
+  queryFn: QueryFunction<Output>;
+}): ReportQueryOptions {
+  return {
+    ...generated,
+    queryFn: generated.queryFn,
+    select: toReportWorkspace,
+  };
+}
+
+function toReportWorkspace(output: ReportQueryOutput): ReportWorkspace {
+  if ("contacts" in output) return { view: "overview", ...output };
+  switch (output.category) {
+    case "contacts":
+      return { view: output.category, contacts: output };
+    case "automations":
+      return { view: output.category, automations: output };
+    case "emails":
+      return { view: output.category, emails: output };
+    case "deals":
+      return { view: output.category, deals: output };
+    case "site":
+      return { view: output.category, site: output };
+    case "campaigns":
+      return { view: output.category, campaigns: output };
   }
 }
 
@@ -132,16 +166,4 @@ export function parseDealReportSearch(
 
 export function dealReportQueryOptions(search: DealReportSearch) {
   return reportWorkspaceQueryOptions({ view: "deals", ...search });
-}
-
-/**
- * No single oRPC procedure returns the whole workspace, so the query key is
- * built by hand instead of via `orpcQuery` — it stays namespaced under
- * "reports"/"workspace" so it can never collide with an oRPC-generated key.
- */
-export function reportWorkspaceQueryOptions(search: ReportSearch) {
-  return queryOptions({
-    queryKey: ["reports", "workspace", search] as const,
-    queryFn: ({ signal }) => loadReportWorkspace(search, signal),
-  });
 }

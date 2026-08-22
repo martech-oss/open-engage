@@ -1,13 +1,63 @@
 import * as z from "zod";
 
 export const dashboardSchema = z.object({
-  contacts: z.object({ count: z.number().int().nonnegative() }),
-  automations: z.object({ count: z.number().int().nonnegative() }),
+  asOf: z.iso.datetime(),
+  timezone: z.string(),
+  contacts: z.object({
+    count: z.number().int().nonnegative(),
+    trend: z.object({
+      from: z.iso.date(),
+      to: z.iso.date(),
+      points: z.array(z.object({ day: z.iso.date(), added: z.number().int().nonnegative() })),
+    }),
+    changePercent: z.number().nullable(),
+  }),
+  automations: z.object({
+    count: z.number().int().nonnegative(),
+    draftCount: z.number().int().nonnegative(),
+    enrolledCount: z.number().int().nonnegative(),
+    top: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        active: z.number().int().nonnegative(),
+        completed: z.number().int().nonnegative(),
+        updatedAt: z.iso.datetime(),
+      }),
+    ),
+  }),
   briefs: z.object({ overdueReviews: z.number().int().nonnegative() }),
   deliveries: z.object({
     sent: z.number().int().nonnegative(),
     delivered: z.number().int().nonnegative(),
     failed: z.number().int().nonnegative(),
+    deliveryRate: z.number().nonnegative(),
+    totalsRange: z.object({ from: z.iso.date(), to: z.iso.date() }),
+    health: z.object({
+      from: z.iso.date(),
+      to: z.iso.date(),
+      points: z.array(
+        z.object({
+          day: z.iso.date(),
+          sends: z.number().int().nonnegative(),
+          delivered: z.number().int().nonnegative(),
+          undelivered: z.number().int().nonnegative(),
+        }),
+      ),
+    }),
+    sendChangePercent: z.number().nullable(),
+    deliveryRateChangePoints: z.number().nullable(),
+  }),
+  deals: z.object({
+    range: z.object({ from: z.iso.date(), to: z.iso.date() }),
+    currency: z.string(),
+    created: z.number().int().nonnegative(),
+    openCount: z.number().int().nonnegative(),
+    openValue: z.number().nonnegative(),
+    averageOpenValue: z.number().nonnegative(),
+    openTasks: z.number().int().nonnegative(),
+    overdueTasks: z.number().int().nonnegative(),
+    completedTasks: z.number().int().nonnegative(),
   }),
   recentEvents: z.array(
     z.object({
@@ -253,6 +303,15 @@ export const siteReportSchema = z.object({
   notes: z.object({ messageMetrics: z.string() }),
 });
 export type SiteReport = z.infer<typeof siteReportSchema>;
+
+export const reportsOverviewSchema = z.object({
+  contacts: contactsReportSchema,
+  automations: automationsReportSchema,
+  emails: emailsReportSchema,
+  deals: dealsReportSchema,
+  site: siteReportSchema,
+});
+export type ReportsOverview = z.infer<typeof reportsOverviewSchema>;
 
 /**
  * Campaign attribution. `influencedValue` credits every project that touched a

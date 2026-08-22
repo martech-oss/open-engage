@@ -2,17 +2,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { PageLayout, SimpleBarChart, SimpleEmpty } from "@/components/app-ui";
-import { automationsQueryOptions } from "@/features/automations/automation-api";
-import {
-  contactTrendQueryOptions,
-  dashboardQueryOptions,
-  dealSummaryQueryOptions,
-  deliveryTrendQueryOptions,
-  rateDelta,
-  toDeliveryHealth,
-  TREND_WINDOW,
-  windowDelta,
-} from "@/features/dashboard/dashboard-api";
+import { dashboardQueryOptions, TREND_WINDOW } from "@/features/dashboard/dashboard-api";
 import {
   ActivityRows,
   AutomationRows,
@@ -25,13 +15,9 @@ import {
   PanelLink,
   Sparkline,
 } from "@/features/dashboard/dashboard-widgets";
-import { formatMoney, rate } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { CONTACT_EVENT_LABELS, contactEventTone, type EventTone } from "@/lib/status-labels";
-import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
-
-/** Only the busiest handful of automations fit the panel before it starts scrolling. */
-const AUTOMATION_ROW_LIMIT = 6;
-const ACTIVITY_ROW_LIMIT = 12;
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 const TONE_COLORS: Record<EventTone, string> = {
   success: "var(--color-success)",
@@ -41,37 +27,18 @@ const TONE_COLORS: Record<EventTone, string> = {
 };
 
 export function DashboardPage(): ReactNode {
-  const { renderedAt: now, timeZone } = useWorkspaceTime();
   const { formatRelativeTime } = useWorkspaceFormatters();
-  const clock = { now, timeZone };
   const { data } = useSuspenseQuery(dashboardQueryOptions());
-  const { data: emails } = useSuspenseQuery(deliveryTrendQueryOptions(clock));
-  const { data: contacts } = useSuspenseQuery(contactTrendQueryOptions(clock));
-  const { data: deals } = useSuspenseQuery(dealSummaryQueryOptions(clock));
-  const { data: automations } = useSuspenseQuery(automationsQueryOptions());
+  const deliveryHealth = data.deliveries.health.points;
+  const activeAutomations = data.automations.top.map((item) => ({
+    id: item.id,
+    name: item.name,
+    active: item.active,
+    done: item.completed,
+    lastRun: formatRelativeTime(item.updatedAt),
+  }));
 
-  const deliveryHealth = toDeliveryHealth(emails.trend);
-  const deliveredRate = rate(data.deliveries.delivered, data.deliveries.sent);
-  const sendDelta = windowDelta(emails.trend.map((point) => point.sends));
-  const contactDelta = windowDelta(contacts.trend.map((point) => point.added));
-  const draftAutomations = automations.filter((item) => item.status === "draft").length;
-  const enrolled = automations.reduce((total, item) => total + item.activeCount, 0);
-  const averageDealValue =
-    deals.summary.openCount > 0 ? deals.summary.openValue / deals.summary.openCount : 0;
-
-  const activeAutomations = automations
-    .filter((item) => item.status === "active")
-    .sort((left, right) => right.activeCount - left.activeCount)
-    .slice(0, AUTOMATION_ROW_LIMIT)
-    .map((item) => ({
-      id: item.id,
-      name: item.name,
-      active: item.activeCount,
-      done: item.completedCount,
-      lastRun: formatRelativeTime(item.updatedAt),
-    }));
-
-  const activity = data.recentEvents.slice(0, ACTIVITY_ROW_LIMIT).map((event, index) => ({
+  const activity = data.recentEvents.map((event, index) => ({
     id: `${event.occurredAt}-${index}`,
     label: CONTACT_EVENT_LABELS[event.type] ?? event.type,
     type: event.type,
@@ -102,56 +69,60 @@ export function DashboardPage(): ReactNode {
         <KpiCard
           label="アクティブ連絡先"
           value={data.contacts.count.toLocaleString()}
-          delta={<DeltaChip value={contactDelta.changePercent} />}
+          delta={<DeltaChip value={data.contacts.changePercent} />}
         >
-          <Sparkline values={contacts.trend.slice(-TREND_WINDOW).map((point) => point.added)} />
+          <Sparkline
+            values={data.contacts.trend.points.slice(-TREND_WINDOW).map((point) => point.added)}
+          />
         </KpiCard>
         <KpiCard
           label="30日間の配信"
           value={data.deliveries.sent.toLocaleString()}
-          delta={<DeltaChip value={sendDelta.changePercent} />}
+          delta={<DeltaChip value={data.deliveries.sendChangePercent} />}
         >
-          <Sparkline values={emails.trend.slice(-TREND_WINDOW).map((point) => point.sends)} />
+          <Sparkline values={deliveryHealth.slice(-TREND_WINDOW).map((point) => point.sends)} />
         </KpiCard>
         <KpiCard
           label="配信到達率"
-          value={`${deliveredRate}%`}
-          delta={<DeltaChip value={rateDelta(emails.trend)} unit="pt" />}
+          value={`${data.deliveries.deliveryRate}%`}
+          delta={<DeltaChip value={data.deliveries.deliveryRateChangePoints} unit="pt" />}
         >
-          <MeterBar percent={deliveredRate} />
+          <MeterBar percent={data.deliveries.deliveryRate} />
         </KpiCard>
         <KpiCard
           label="公開オートメーション"
           value={data.automations.count.toLocaleString()}
           delta={
-            <span className="text-[11px] text-muted-foreground">/ 下書き {draftAutomations}</span>
+            <span className="text-[11px] text-muted-foreground">
+              / 下書き {data.automations.draftCount}
+            </span>
           }
         >
-          進行中 {enrolled.toLocaleString()} 件
+          進行中 {data.automations.enrolledCount.toLocaleString()} 件
         </KpiCard>
         <KpiCard
           label="進行中の商談"
-          value={formatMoney(deals.summary.openValue, deals.currency)}
+          value={formatMoney(data.deals.openValue, data.deals.currency)}
           delta={
             <span className="text-[11px] text-muted-foreground">
-              / 新規 {deals.summary.created.toLocaleString()}
+              / 新規 {data.deals.created.toLocaleString()}
             </span>
           }
         >
-          {deals.summary.openCount.toLocaleString()} 件・平均{" "}
-          {formatMoney(Math.round(averageDealValue), deals.currency)}
+          {data.deals.openCount.toLocaleString()} 件・平均{" "}
+          {formatMoney(Math.round(data.deals.averageOpenValue), data.deals.currency)}
         </KpiCard>
         <KpiCard
           label="期限切れタスク"
-          value={deals.summary.overdueTasks.toLocaleString()}
-          emphasis={deals.summary.overdueTasks > 0 ? "alert" : "normal"}
+          value={data.deals.overdueTasks.toLocaleString()}
+          emphasis={data.deals.overdueTasks > 0 ? "alert" : "normal"}
           delta={
             <span className="text-[11px] text-muted-foreground">
-              / 未完了 {deals.summary.openTasks.toLocaleString()}
+              / 未完了 {data.deals.openTasks.toLocaleString()}
             </span>
           }
         >
-          完了 {deals.summary.completedTasks.toLocaleString()} 件
+          完了 {data.deals.completedTasks.toLocaleString()} 件
         </KpiCard>
       </KpiGrid>
 

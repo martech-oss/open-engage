@@ -5,8 +5,16 @@ import { contactReport } from "./contacts-report";
 import { getDashboard } from "./dashboard-service";
 import { dealReport } from "./deals-report";
 import { emailReport } from "./emails-report";
+import { reportsOverview } from "./overview-report";
 import { toReportRange } from "./shared";
 import { siteReport } from "./site-report";
+
+export const reportsOverviewProcedure = authed.reports.overview.handler(
+  ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    return reportsOverview(context.database, context.workspace.workspaceId, input);
+  },
+);
 
 export const contactsReportProcedure = authed.reports.contacts.handler(
   ({ context, input, errors }) => {
@@ -75,6 +83,7 @@ export const dashboardProcedure = authed.dashboard.get.handler(async ({ context 
 });
 
 export const reportProcedures = {
+  overview: reportsOverviewProcedure,
   contacts: contactsReportProcedure,
   automations: automationsReportProcedure,
   emails: emailsReportProcedure,

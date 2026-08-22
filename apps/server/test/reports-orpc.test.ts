@@ -43,6 +43,14 @@ describe("reports over oRPC", () => {
     expect(deals.currency).toBe("JPY");
     expect(site.category).toBe("site");
     expect(site.notes.messageMetrics).toEqual(expect.any(String));
+
+    await expect(client.reports.overview({ ...range, currency: "JPY" })).resolves.toEqual({
+      contacts,
+      automations,
+      emails,
+      deals,
+      site,
+    });
   });
 
   it("rejects a report request below analyst", async () => {
@@ -51,5 +59,9 @@ describe("reports over oRPC", () => {
     await expect(
       client.reports.contacts({ from: "2024-01-01", to: "2024-01-31" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+    await expect(
+      client.reports.overview({ from: "2024-01-01", to: "2024-01-31" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+    await expect(client.dashboard.get()).resolves.toMatchObject({ timezone: "UTC" });
   });
 });
