@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 
 import { MetricCard, PageLayout } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
-import { formatDate, formatMoney, formatMonthDayTime } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 import { statusLabel } from "../../deal-labels";
 import { DealStatusBadge } from "../../deal-widgets";
@@ -14,6 +15,7 @@ import { DealSidebar } from "./sidebar";
 import { DealTasks } from "./tasks";
 
 export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
+  const { formatDate, formatMonthDayTime } = useWorkspaceFormatters();
   const controller = useDealDetailController(dealId);
   const { deal } = controller;
   return (

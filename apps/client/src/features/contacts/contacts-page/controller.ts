@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { refreshSegment as refreshSegmentResource } from "@/features/segments/segment-api";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import {
@@ -27,7 +28,8 @@ import {
 } from "./model";
 import { useKeyedContactSelection } from "./selection";
 
-export function useContactsPageController(initialSearch: ContactSearch, renderedAt: string) {
+export function useContactsPageController(initialSearch: ContactSearch) {
+  const { formatLongDateTime, formatRelativeTime } = useWorkspaceFormatters();
   const queryClient = useQueryClient();
   const paginationKey = contactPaginationKey(initialSearch);
   const {
@@ -121,7 +123,7 @@ export function useContactsPageController(initialSearch: ContactSearch, rendered
   const segmentFilter = selectedSegmentFilter(filters, options);
   const columns = contactColumns({
     contacts,
-    renderedAt,
+    formatRelativeTime,
     selected,
     onSelectedChange: setSelected,
     onOpen: (contact: ContactSummary) => setActiveContactId(contact.id),
@@ -169,7 +171,7 @@ export function useContactsPageController(initialSearch: ContactSearch, rendered
     chooseBulkAction,
     runSelectedBulkAction,
     refreshSegment: () => void refreshSegment(),
-    exportContacts: () => exportVisibleContacts(contacts),
+    exportContacts: () => exportVisibleContacts(contacts, formatLongDateTime),
     refreshContactData,
     refreshOptions,
   };

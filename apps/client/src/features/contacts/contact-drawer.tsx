@@ -44,8 +44,8 @@ import {
 } from "@/features/contacts/contact-api";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString, nullableString } from "@/lib/form-data";
-import { formatLongDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import { type ContactProfile } from "@openengage/core/contacts";
 
 import { ContactAvatar, contactName, ContactStatusBadge, Section, StatCard } from "./contact-bits";
@@ -352,6 +352,7 @@ function ScoreForm({
 }
 
 function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
+  const { formatLongDateTime } = useWorkspaceFormatters();
   const entries = useMemo(
     () =>
       [

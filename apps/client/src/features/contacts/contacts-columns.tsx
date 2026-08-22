@@ -11,7 +11,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatRelativeTime } from "@/lib/format";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import { ContactAvatar, ContactScoreBadge, ContactStatusDot, contactName } from "./contact-bits";
@@ -23,14 +22,14 @@ import { ContactAvatar, ContactScoreBadge, ContactStatusDot, contactName } from 
  */
 export function contactColumns({
   contacts,
-  renderedAt,
+  formatRelativeTime,
   selected,
   onSelectedChange,
   onOpen,
   onArchive,
 }: {
   contacts: ContactSummary[];
-  renderedAt: string;
+  formatRelativeTime: (value: string) => string;
   selected: Set<string>;
   onSelectedChange: (next: Set<string>) => void;
   onOpen: (contact: ContactSummary) => void;
@@ -134,7 +133,7 @@ export function contactColumns({
       key: "updatedAt",
       header: "更新",
       sortValue: (contact) => contact.updatedAt,
-      cell: (contact) => formatRelativeTime(contact.updatedAt, { now: renderedAt }),
+      cell: (contact) => formatRelativeTime(contact.updatedAt),
       headClassName: "w-24 text-right",
       cellClassName: "text-right text-[11px] text-muted-foreground",
     },

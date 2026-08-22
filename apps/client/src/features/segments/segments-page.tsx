@@ -8,7 +8,7 @@ import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDate } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { SegmentDefinition, SegmentRow } from "@openengage/core/segments";
 
 import {
@@ -26,6 +26,7 @@ const SegmentAiSheet = lazy(async () => ({
 }));
 
 export function SegmentsPage(): ReactNode {
+  const { formatDate } = useWorkspaceFormatters();
   const navigate = useNavigate();
   const [{ data: segments }, { data: catalog }] = useSuspenseQueries({
     queries: [segmentsQueryOptions("dynamic"), segmentOptionsQueryOptions()],

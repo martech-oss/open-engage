@@ -15,7 +15,7 @@ import {
   useAiProposalWorkflow,
 } from "@/hooks/use-ai-proposal-workflow";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 
 import {
   projectBriefOptionsQueryOptions,
@@ -40,6 +40,9 @@ import {
 } from "./project-brief-list-filters";
 
 export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
+  const { renderedAt } = useWorkspaceTime();
+  const now = new Date(renderedAt).getTime();
   const { data: briefs } = useSuspenseQuery(projectBriefsQueryOptions());
   const { data: options } = useSuspenseQuery(projectBriefOptionsQueryOptions());
   const navigate = useNavigate();
@@ -57,8 +60,8 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
     onReset: resetCreateState,
   });
   const filtered = useMemo(
-    () => briefs.filter((brief) => matchesProjectBriefSearch(brief, search)),
-    [briefs, search],
+    () => briefs.filter((brief) => matchesProjectBriefSearch(brief, search, now)),
+    [briefs, now, search],
   );
 
   function setSearch(patch: Partial<ProjectBriefSearch>): void {
@@ -193,7 +196,11 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
               <p className="text-muted-foreground">
                 担当 {brief.ownerName} · 承認 {brief.approverName}
               </p>
-              <p className={isReviewOverdue(brief) ? "text-destructive" : "text-muted-foreground"}>
+              <p
+                className={
+                  isReviewOverdue(brief, now) ? "text-destructive" : "text-muted-foreground"
+                }
+              >
                 レビュー {formatDateTime(brief.reviewAt)}
               </p>
             </CardContent>

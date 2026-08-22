@@ -41,12 +41,13 @@ import {
 } from "@/features/companies/company-api";
 import { contactSurnameFirstName } from "@/features/contacts/contact-bits";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { formatDate } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 import { CompanyEnrichmentSheet } from "./company-enrichment-sheet";
 import { AddCompanyContactForm, CompanyForm } from "./company-forms";
 
 export function CompaniesPage({ initialQuery }: { initialQuery: string }): ReactNode {
+  const { formatDate } = useWorkspaceFormatters();
   const navigate = useNavigate();
   const { data: companies } = useSuspenseQuery(companiesQueryOptions(initialQuery));
   const { data: enrichmentCapability } = useSuspenseQuery(

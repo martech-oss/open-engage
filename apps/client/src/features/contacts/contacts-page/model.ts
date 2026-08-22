@@ -1,5 +1,4 @@
 import { exportCsv } from "@/lib/csv";
-import { formatLongDateTime } from "@/lib/format";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import type { ContactOptions, ContactSearch } from "../contact-api";
@@ -50,7 +49,10 @@ export function selectedSegmentFilter(filters: ContactFilters, options: ContactO
   );
 }
 
-export function exportVisibleContacts(contacts: ContactSummary[]): void {
+export function exportVisibleContacts(
+  contacts: ContactSummary[],
+  formatLongDateTime: (value: string) => string,
+): void {
   exportCsv(
     "contacts.csv",
     contacts.map((contact) => ({

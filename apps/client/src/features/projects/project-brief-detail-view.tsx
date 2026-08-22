@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 import type { ProjectBriefDetail, ProjectLinkedResource } from "@openengage/core/projects";
 
 import { baselineLabel, BriefSection } from "./project-brief-detail-components";
@@ -20,10 +20,12 @@ const CAPABILITY_LABELS = {
 } as const;
 
 export function ProjectBriefOverview({ detail }: { detail: ProjectBriefDetail }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
+  const { renderedAt } = useWorkspaceTime();
   const definition = detail.definition;
   return (
     <>
-      {isReviewOverdue(detail.project) ? (
+      {isReviewOverdue(detail.project, new Date(renderedAt).getTime()) ? (
         <Alert variant="destructive">
           <CircleAlert />
           <AlertTitle>レビュー期限を超過しています</AlertTitle>
@@ -202,6 +204,7 @@ export function LinkedResources({
 }
 
 export function ProjectBriefHistory({ detail }: { detail: ProjectBriefDetail }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   return (
     <>
       <section className="space-y-3">

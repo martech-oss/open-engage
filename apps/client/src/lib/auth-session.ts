@@ -3,12 +3,15 @@ import { getRequestHeaders, getRequestUrl } from "@tanstack/react-start/server";
 
 import { authClient } from "@/auth-client";
 
-type CurrentSession = NonNullable<Awaited<ReturnType<typeof authClient.getSession>>["data"]>;
+interface CurrentSession {
+  session: { id: string };
+  user: { id: string; email: string; name: string };
+}
 
 export const getCurrentSession = createIsomorphicFn()
-  .client(async () => {
+  .client(async (): Promise<CurrentSession | null> => {
     const result = await authClient.getSession();
-    return result.data ?? null;
+    return (result.data as CurrentSession | null) ?? null;
   })
   .server(async (): Promise<CurrentSession | null> => {
     const { env } = await import("cloudflare:workers");

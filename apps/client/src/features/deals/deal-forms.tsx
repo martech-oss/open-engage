@@ -25,8 +25,8 @@ import {
 } from "@/features/deals/deal-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
-import { formatMonthDayTime, toDateTimeLocal } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 
 import { taskTypeLabel } from "./deal-labels";
 
@@ -203,6 +203,7 @@ export function DealTaskForm({
   submitLabel: string;
   onSubmit: (values: DealTaskCreate) => Promise<void>;
 }): ReactNode {
+  const { toDateTimeLocal } = useWorkspaceFormatters();
   const { busy, error, run } = useFormSubmission("タスクを保存できませんでした");
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -277,7 +278,12 @@ export function TaskRow({
   onToggle: () => Promise<void>;
   onDelete: () => void;
 }): ReactNode {
-  const overdue = task.status === "open" && task.dueAt && new Date(task.dueAt) < new Date();
+  const { formatMonthDayTime } = useWorkspaceFormatters();
+  const { renderedAt } = useWorkspaceTime();
+  const overdue =
+    task.status === "open" &&
+    task.dueAt &&
+    new Date(task.dueAt).getTime() < new Date(renderedAt).getTime();
   return (
     <div
       className={cn(

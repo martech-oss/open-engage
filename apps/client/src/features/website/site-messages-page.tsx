@@ -29,9 +29,10 @@ import { PublishStatusBadge } from "@/features/website/website-shared";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import { formatDateTime, toDateTimeLocal } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function SiteMessagesPage(): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { data: items } = useSuspenseQuery(siteMessagesQueryOptions());
   const { dialogOpen, editing, openCreate, openEdit, close, onOpenChange } =
     useResourceEditor<SiteMessageRow>();
@@ -206,6 +207,7 @@ function SiteMessageEditor({
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }): ReactNode {
+  const { toDateTimeLocal } = useWorkspaceFormatters();
   const { busy, error, run, setError } = useFormSubmission("保存できませんでした");
 
   const createMessage = useCreateSiteMessage();

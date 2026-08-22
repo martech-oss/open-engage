@@ -42,11 +42,12 @@ import { PublishStatusBadge } from "@/features/website/website-shared";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import { formatDateTime } from "@/lib/format";
 import { slugify } from "@/lib/utils";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { FormField } from "@openengage/core/web";
 
 export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { data: items } = useSuspenseQuery(signupFormsQueryOptions());
   const { dialogOpen, editing, openCreate, openEdit, close, onOpenChange } =
     useResourceEditor<SignupFormRow>();

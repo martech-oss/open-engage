@@ -20,9 +20,10 @@ import {
   useUpdateEmailTrackingSettings,
 } from "@/features/emails/email-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function EmailTrackingPage(): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { data } = useSuspenseQuery(emailTrackingSettingsQueryOptions());
   const [openTrackingEnabled, setOpenTracking] = useState(data.openTrackingEnabled);
   const [clickTrackingEnabled, setClickTracking] = useState(data.clickTrackingEnabled);

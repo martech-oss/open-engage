@@ -1,50 +1,61 @@
+import { createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
+import { attachRouterServerSsrUtils } from "@tanstack/react-router/ssr/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const authState = vi.hoisted(() => ({ getCurrentSession: vi.fn() }));
+import { createQueryClient } from "@/lib/query-client";
 
-vi.mock("@/lib/auth-session", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/auth-session")>()),
-  getCurrentSession: authState.getCurrentSession,
+import { routeTree } from "../routeTree.gen";
+
+const authState = vi.hoisted(() => ({
+  bindingFetch: vi.fn<(request: Request) => Promise<Response>>(),
 }));
 
-import { Route as ProtectedRoute } from "./_app";
-import { Route as LoginRoute } from "./login";
-import { Route as OnboardingRoute } from "./onboarding";
+vi.mock("cloudflare:workers", () => ({
+  env: { SERVER: { fetch: authState.bindingFetch } },
+}));
 
-type BeforeLoad = (input: unknown) => Promise<unknown>;
+vi.mock("@tanstack/react-start/server", () => ({
+  getRequestHeaders: () => new Headers({ cookie: "session=ssr-cookie" }),
+  getRequestUrl: () => new URL("https://client.example.test/"),
+}));
 
-describe("SSR auth redirects", () => {
-  beforeEach(() => authState.getCurrentSession.mockReset());
+async function loadSsrRoute(pathname: string) {
+  const queryClient = createQueryClient();
+  const router = createRouter({
+    routeTree,
+    context: { queryClient },
+    history: createMemoryHistory({ initialEntries: [pathname] }),
+  });
+  setupRouterSsrQueryIntegration({ router, queryClient });
+  attachRouterServerSsrUtils({ router, manifest: undefined });
+  await router.load();
+  await router.serverSsr?.dehydrate();
+  return router;
+}
 
-  it.each([
-    ["protected", ProtectedRoute],
-    ["onboarding", OnboardingRoute],
-  ])("redirects an anonymous %s request to login", async (_name, route) => {
-    authState.getCurrentSession.mockResolvedValue(null);
-    const beforeLoad = route.options.beforeLoad as BeforeLoad;
-
-    await expect(
-      beforeLoad({
-        context: {},
-        location: { href: "/dashboard" },
-      }),
-    ).rejects.toMatchObject({
-      options: {
-        to: "/login",
-        replace: true,
-      },
-    });
+describe("SSR router auth redirects", () => {
+  beforeEach(() => {
+    authState.bindingFetch.mockReset();
   });
 
-  it("redirects an authenticated login request to the dashboard", async () => {
-    authState.getCurrentSession.mockResolvedValue({
-      session: { id: "session-1" },
-      user: { id: "user-1", email: "person@example.test", name: "Person" },
-    });
-    const beforeLoad = LoginRoute.options.beforeLoad as BeforeLoad;
+  it.each([
+    ["protected", "/dashboard"],
+    ["onboarding", "/onboarding"],
+  ])("redirects an anonymous %s request to login", async (_name, pathname) => {
+    authState.bindingFetch.mockResolvedValue(new Response(null, { status: 401 }));
+    const router = await loadSsrRoute(pathname);
 
-    await expect(beforeLoad({})).rejects.toMatchObject({
-      options: { to: "/dashboard", replace: true },
+    expect(authState.bindingFetch).toHaveBeenCalledTimes(1);
+    expect(router.state.redirect).toMatchObject({
+      options: {
+        to: "/login",
+        search: { redirect: pathname },
+        replace: true,
+        statusCode: 307,
+      },
     });
+    expect(router.state.statusCode).toBe(307);
+    router.serverSsr?.cleanup();
   });
 });

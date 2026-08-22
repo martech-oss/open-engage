@@ -22,10 +22,5 @@ export const Route = createFileRoute("/_app/dashboard")({
     ]);
   },
   ...routeStatusComponents,
-  component: DashboardRoute,
+  component: DashboardPage,
 });
-
-function DashboardRoute() {
-  const { renderedAt, workspace } = Route.useRouteContext();
-  return <DashboardPage clock={{ now: renderedAt, timeZone: workspace.timezone }} />;
-}

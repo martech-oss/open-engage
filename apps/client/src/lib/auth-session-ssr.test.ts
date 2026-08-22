@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
   bindingFetch: vi.fn<(request: Request) => Promise<Response>>(),
-  browserSession: vi.fn(),
+  browserSession: vi.fn<() => Promise<{ data: unknown }>>(),
 }));
 
 vi.mock("cloudflare:workers", () => ({

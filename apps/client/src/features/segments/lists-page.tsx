@@ -7,13 +7,14 @@ import { PageLayout } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDate } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { SegmentRow } from "@openengage/core/segments";
 
 import { segmentsQueryOptions } from "./segment-api";
 import { SegmentFormDialog } from "./segment-form-dialog";
 
 export function ListsPage(): ReactNode {
+  const { formatDate } = useWorkspaceFormatters();
   const navigate = useNavigate();
   const { data: lists } = useSuspenseQuery(segmentsQueryOptions("static"));
   const [formOpen, setFormOpen] = useState(false);

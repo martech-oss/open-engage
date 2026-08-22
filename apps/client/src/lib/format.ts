@@ -31,10 +31,9 @@ function dateOnlyParts(value: string): { year: number; month: number; day: numbe
 export function formatDate(value: string, options: DateFormatOptions = {}): string {
   const authored = dateOnlyParts(value);
   if (authored) return `${authored.year}年${authored.month}月${authored.day}日`;
-  return formatter(
-    { year: "numeric", month: "short", day: "numeric" },
-    options.timeZone,
-  ).format(new Date(value));
+  return formatter({ year: "numeric", month: "short", day: "numeric" }, options.timeZone).format(
+    new Date(value),
+  );
 }
 
 /** `2026年7月30日 23:05` */
@@ -53,10 +52,9 @@ export function formatLongDateTime(value: string, options: DateFormatOptions = {
 
 /** `2026/07/30 23:05` */
 export function formatDateTime(value: string, options: DateFormatOptions = {}): string {
-  return formatter(
-    { dateStyle: "medium", timeStyle: "short" },
-    options.timeZone,
-  ).format(new Date(value));
+  return formatter({ dateStyle: "medium", timeStyle: "short" }, options.timeZone).format(
+    new Date(value),
+  );
 }
 
 /** `7月30日 23:05` — omits the year, for dates close to now such as task due dates. */
@@ -138,10 +136,20 @@ export function rate(numerator: number, denominator: number): number {
   return denominator > 0 ? Math.round((numerator / denominator) * 10_000) / 100 : 0;
 }
 
-/** Formats an ISO timestamp for a `<input type="datetime-local">` value, in the viewer's timezone. */
-export function toDateTimeLocal(value: string | null | undefined): string {
+/** Formats an ISO timestamp for a `<input type="datetime-local">` value in an explicit timezone. */
+export function toDateTimeLocal(value: string | null | undefined, timeZone = "UTC"): string {
   if (!value) return "";
   const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }

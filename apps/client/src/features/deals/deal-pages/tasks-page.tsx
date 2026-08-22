@@ -17,12 +17,14 @@ import {
   type TaskSearch,
 } from "@/features/deals/deal-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { formatMonthDayTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 
 import { taskTypeName } from "../deal-labels";
 
 export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
+  const { formatMonthDayTime } = useWorkspaceFormatters();
+  const { renderedAt } = useWorkspaceTime();
   const navigate = useNavigate();
   const { data: tasks } = useSuspenseQuery(tasksQueryOptions(search));
   const updateDealTask = useUpdateDealTask();
@@ -66,7 +68,10 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
       header: "タスク",
       sortValue: (task) => task.title.toLocaleLowerCase(),
       cell: (task) => {
-        const overdue = task.status === "open" && task.dueAt && new Date(task.dueAt) < new Date();
+        const overdue =
+          task.status === "open" &&
+          task.dueAt &&
+          new Date(task.dueAt).getTime() < new Date(renderedAt).getTime();
         return (
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn("font-medium", task.status === "completed" && "line-through")}>

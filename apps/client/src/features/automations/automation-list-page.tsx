@@ -26,7 +26,7 @@ import { FieldGroup } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { AutomationRow } from "@openengage/core/automations";
 
 import {
@@ -46,6 +46,7 @@ const EmailSequenceAiSheet = lazy(async () => ({
 }));
 
 export function AutomationsPage(): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const navigate = useNavigate();
   const { data: automations } = useSuspenseQuery(automationsQueryOptions());
   const { data: allTemplates } = useSuspenseQuery(emailTemplateOptionsQueryOptions());

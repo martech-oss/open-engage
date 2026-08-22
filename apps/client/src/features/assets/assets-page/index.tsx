@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { WorkspaceRole } from "@openengage/core/shared";
 
 import type { AssetSearch, AssetSummary } from "../asset-api";
@@ -20,6 +21,7 @@ export function AssetsPage({
   initialSearch: AssetSearch;
   role: WorkspaceRole;
 }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const controller = useAssetsPageController(initialSearch, role);
   const renderActions = (asset: AssetSummary): ReactNode => (
     <AssetActions
@@ -29,7 +31,7 @@ export function AssetsPage({
       handlers={controller.actionHandlers}
     />
   );
-  const columns = createAssetColumns(renderActions);
+  const columns = createAssetColumns(renderActions, formatDateTime);
   return (
     <PageLayout
       title="アセット"

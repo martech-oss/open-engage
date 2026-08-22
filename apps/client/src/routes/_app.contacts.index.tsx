@@ -27,10 +27,5 @@ export const Route = createFileRoute("/_app/contacts/")({
 });
 
 function ContactsRoute() {
-  return (
-    <ContactsPage
-      initialSearch={Route.useSearch()}
-      renderedAt={Route.useRouteContext().renderedAt}
-    />
-  );
+  return <ContactsPage initialSearch={Route.useSearch()} />;
 }

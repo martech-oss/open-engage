@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/item";
 import { type MessageVariableRow, useArchiveEmailVariable } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function VariableReference({ variables }: { variables: MessageVariableRow[] }): ReactNode {
   const builtInVariables = [
@@ -65,6 +65,7 @@ export function VariableTable({
   loading: boolean;
   onEdit: (variable: MessageVariableRow) => void;
 }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const archiveVariable = useArchiveEmailVariable();
   async function archive(variable: MessageVariableRow) {
     try {

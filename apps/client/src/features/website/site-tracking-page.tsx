@@ -41,7 +41,7 @@ import {
 } from "@/features/website/website-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function SiteTrackingPage(): ReactNode {
   const { data } = useSuspenseQuery(siteTrackingQueryOptions());
@@ -233,6 +233,7 @@ function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode
 }
 
 function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const columns: DataTableColumn<SiteTrackingData["recentEvents"][number]>[] = [
     {
       key: "resourceId",

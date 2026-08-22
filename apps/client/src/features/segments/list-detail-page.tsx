@@ -28,7 +28,7 @@ import { contactName, contactOptionLabel } from "@/features/contacts/contact-bit
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
-import { formatDate } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import {
@@ -39,6 +39,7 @@ import {
 import { SegmentFormDialog } from "./segment-form-dialog";
 
 export function ListDetailPage({ listId }: { listId: string }): ReactNode {
+  const { formatDate } = useWorkspaceFormatters();
   const queryClient = useQueryClient();
   const { data: list } = useSuspenseQuery(segmentQueryOptions(listId));
   const { data: contactOptions } = useSuspenseQuery(listMemberOptionsQueryOptions());

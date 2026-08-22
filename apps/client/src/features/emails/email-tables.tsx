@@ -12,7 +12,7 @@ import {
   usePublishEmailTemplate,
 } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function TemplateTable({
   items,
@@ -23,6 +23,7 @@ export function TemplateTable({
   loading: boolean;
   onEdit: (template: EmailTemplateRow) => void;
 }): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const publishTemplate = usePublishEmailTemplate();
   const archiveTemplate = useArchiveEmailTemplate();
 

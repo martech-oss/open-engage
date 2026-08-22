@@ -31,8 +31,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { type DealPipeline, type DealSummary } from "@/features/deals/deal-api";
-import { formatMoney, formatMonthDayTime } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 import { DealStatusBadge } from "./deal-widgets";
 
@@ -55,6 +56,7 @@ export function DealBoard({
   onEditStage: (stageId: string) => void;
   onDeleteStage: (stageId: string) => void;
 }): ReactNode {
+  const { formatMonthDayTime } = useWorkspaceFormatters();
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   return (
     <div className="overflow-x-auto pb-3">

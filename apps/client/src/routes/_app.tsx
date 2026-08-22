@@ -5,6 +5,7 @@ import { RouteError, RoutePending } from "@/components/route-status";
 import { AppShell } from "@/layouts/app-shell";
 import { getCurrentSession } from "@/lib/auth-session";
 import { workspaceQueryOptions } from "@/lib/workspace";
+import { WorkspaceTimeProvider } from "@/lib/workspace-time";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: async ({ context, location }) => {
@@ -33,6 +34,10 @@ export const Route = createFileRoute("/_app")({
 });
 
 function ProtectedLayout() {
-  const { session, workspace } = Route.useRouteContext();
-  return <AppShell user={session.user} workspace={workspace} />;
+  const { renderedAt, session, workspace } = Route.useRouteContext();
+  return (
+    <WorkspaceTimeProvider value={{ timeZone: workspace.timezone, renderedAt }}>
+      <AppShell user={session.user} workspace={workspace} />
+    </WorkspaceTimeProvider>
+  );
 }

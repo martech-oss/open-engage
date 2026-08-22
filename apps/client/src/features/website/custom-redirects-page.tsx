@@ -26,9 +26,10 @@ import {
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
-import { formatDateTime } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function CustomRedirectsPage(): ReactNode {
+  const { formatDateTime } = useWorkspaceFormatters();
   const { data: items } = useSuspenseQuery(customRedirectsQueryOptions());
   // The public URL embeds the workspace slug, which the tracking settings
   // already resolve for the install snippet on the neighbouring tab.

@@ -16,7 +16,7 @@ import {
 } from "@/features/contacts/contact-api";
 import { contactName } from "@/features/contacts/contact-bits";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { formatDate } from "@/lib/format";
+import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import {
@@ -34,6 +34,7 @@ const SegmentAiSheet = lazy(async () => ({
 }));
 
 export function SegmentDetailPage({ segmentId }: { segmentId: string }): ReactNode {
+  const { formatDate } = useWorkspaceFormatters();
   const { data: segment } = useSuspenseQuery(segmentQueryOptions(segmentId));
   const { data: catalog } = useSuspenseQuery(segmentOptionsQueryOptions());
   const updateSegment = useUpdateSegment();

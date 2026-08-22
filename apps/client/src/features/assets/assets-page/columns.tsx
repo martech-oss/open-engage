@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 import type { DataTableColumn } from "@/components/data-table";
-import { formatDateTime } from "@/lib/format";
 
 import { formatBytes, type AssetSummary } from "../asset-api";
 import { AssetKindBadge, AssetThumbnail, AssetVisibilityBadge } from "../asset-bits";
 
 export function createAssetColumns(
   renderActions: (asset: AssetSummary) => ReactNode,
+  formatDateTime: (value: string) => string,
 ): DataTableColumn<AssetSummary>[] {
   return [
     {

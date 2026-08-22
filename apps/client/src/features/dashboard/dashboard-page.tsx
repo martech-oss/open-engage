@@ -8,7 +8,6 @@ import {
   dashboardQueryOptions,
   dealSummaryQueryOptions,
   deliveryTrendQueryOptions,
-  type DashboardClock,
   rateDelta,
   toDeliveryHealth,
   TREND_WINDOW,
@@ -26,8 +25,9 @@ import {
   PanelLink,
   Sparkline,
 } from "@/features/dashboard/dashboard-widgets";
-import { formatMoney, formatRelativeTime, rate } from "@/lib/format";
+import { formatMoney, rate } from "@/lib/format";
 import { CONTACT_EVENT_LABELS, contactEventTone, type EventTone } from "@/lib/status-labels";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 
 /** Only the busiest handful of automations fit the panel before it starts scrolling. */
 const AUTOMATION_ROW_LIMIT = 6;
@@ -40,7 +40,10 @@ const TONE_COLORS: Record<EventTone, string> = {
   neutral: "var(--color-muted-foreground)",
 };
 
-export function DashboardPage({ clock }: { clock: DashboardClock }): ReactNode {
+export function DashboardPage(): ReactNode {
+  const { renderedAt: now, timeZone } = useWorkspaceTime();
+  const { formatRelativeTime } = useWorkspaceFormatters();
+  const clock = { now, timeZone };
   const { data } = useSuspenseQuery(dashboardQueryOptions());
   const { data: emails } = useSuspenseQuery(deliveryTrendQueryOptions(clock));
   const { data: contacts } = useSuspenseQuery(contactTrendQueryOptions(clock));
@@ -65,14 +68,14 @@ export function DashboardPage({ clock }: { clock: DashboardClock }): ReactNode {
       name: item.name,
       active: item.activeCount,
       done: item.completedCount,
-      lastRun: formatRelativeTime(item.updatedAt, { now: clock.now }),
+      lastRun: formatRelativeTime(item.updatedAt),
     }));
 
   const activity = data.recentEvents.slice(0, ACTIVITY_ROW_LIMIT).map((event, index) => ({
     id: `${event.occurredAt}-${index}`,
     label: CONTACT_EVENT_LABELS[event.type] ?? event.type,
     type: event.type,
-    at: formatRelativeTime(event.occurredAt, { now: clock.now }),
+    at: formatRelativeTime(event.occurredAt),
     color: TONE_COLORS[contactEventTone(event.type)],
   }));
 
