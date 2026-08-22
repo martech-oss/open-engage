@@ -10,23 +10,32 @@ import {
 
 import { createSegmentCondition, normalizeSegmentOperator } from "./segment-fields";
 
-export function createDefaultSegmentFilter(catalog: SegmentGenerationCatalog): SegmentFilter {
+export interface SegmentDefaultValues {
+  dateTimeLocal: string;
+}
+
+export function createDefaultSegmentFilter(
+  catalog: SegmentGenerationCatalog,
+  defaults: SegmentDefaultValues,
+): SegmentFilter {
   return {
     kind: "group",
     combinator: "and",
-    children: [createDefaultSegmentCondition("status", catalog)],
+    children: [createDefaultSegmentCondition("status", catalog, defaults)],
   };
 }
 
 export function createDefaultSegmentCondition(
   field: SegmentField,
   catalog: SegmentGenerationCatalog,
+  defaults: SegmentDefaultValues,
 ): SegmentCondition {
   const options = segmentOptionsForField(field, catalog);
-  const keyOptions = field === "event" ? catalog.events : catalog.customFields;
+  const keyOptions =
+    field === "event" ? catalog.events : field === "custom_field" ? catalog.customFields : [];
   const keyOption = keyOptions[0];
   const operator = normalizeSegmentOperator(field, field === "event" ? "exists" : "eq");
-  const rawValue = defaultRawValueForField(field, catalog, options, keyOption);
+  const rawValue = defaultRawValueForField(field, catalog, options, keyOption, defaults);
   return createSegmentCondition(field, operator, rawValue, keyOption?.value, keyOption?.dataType);
 }
 
@@ -54,6 +63,7 @@ export function removeSegmentNode(
   root: SegmentFilter,
   path: readonly number[],
   catalog: SegmentGenerationCatalog,
+  defaults: SegmentDefaultValues,
 ): SegmentFilter {
   if (path.length === 0 || root.kind !== "group") return root;
   const [index, ...rest] = path;
@@ -62,11 +72,14 @@ export function removeSegmentNode(
     const children = root.children.filter((_, childIndex) => childIndex !== index);
     return {
       ...root,
-      children: children.length > 0 ? children : [createDefaultSegmentCondition("status", catalog)],
+      children:
+        children.length > 0
+          ? children
+          : [createDefaultSegmentCondition("status", catalog, defaults)],
     };
   }
   const child = root.children[index];
-  const nextChild = removeSegmentNode(child, rest, catalog);
+  const nextChild = removeSegmentNode(child, rest, catalog, defaults);
   if (nextChild === child) return root;
   return {
     ...root,
@@ -80,19 +93,21 @@ export function appendSegmentCondition(
   root: SegmentFilter,
   path: readonly number[],
   catalog: SegmentGenerationCatalog,
+  defaults: SegmentDefaultValues,
 ): SegmentFilter {
-  return appendSegmentChild(root, path, createDefaultSegmentCondition("status", catalog));
+  return appendSegmentChild(root, path, createDefaultSegmentCondition("status", catalog, defaults));
 }
 
 export function appendSegmentGroup(
   root: SegmentFilter,
   path: readonly number[],
   catalog: SegmentGenerationCatalog,
+  defaults: SegmentDefaultValues,
 ): SegmentFilter {
   return appendSegmentChild(root, path, {
     kind: "group",
     combinator: "and",
-    children: [createDefaultSegmentCondition("status", catalog)],
+    children: [createDefaultSegmentCondition("status", catalog, defaults)],
   });
 }
 
@@ -138,19 +153,26 @@ function defaultRawValueForField(
   catalog: SegmentGenerationCatalog,
   options: SegmentResourceOption[],
   keyOption: SegmentResourceOption | undefined,
+  defaults: SegmentDefaultValues,
 ): string {
   if (field === "status") return "active";
   if (field === "stage") return catalog.stages[0] ?? "lead";
   return (
     options[0]?.value ??
-    defaultSegmentRawValue(keyOption?.dataType ?? getSegmentFieldDefinition(field).valueType)
+    defaultSegmentRawValue(
+      keyOption?.dataType ?? getSegmentFieldDefinition(field).valueType,
+      defaults,
+    )
   );
 }
 
-export function defaultSegmentRawValue(valueType?: string): string {
+export function defaultSegmentRawValue(
+  valueType: string | undefined,
+  defaults: SegmentDefaultValues,
+): string {
   if (valueType === "number") return "0";
   if (valueType === "boolean") return "false";
-  if (valueType === "date") return new Date().toISOString().slice(0, 16);
+  if (valueType === "date") return defaults.dateTimeLocal;
   return "value";
 }
 

@@ -35,3 +35,17 @@ Completed the reviewed Task 6C slice without changing server validation or route
 ## Concerns
 
 None.
+
+## Fix round 1: deterministic segment defaults and literal edges
+
+- Replaced the ambient `new Date()` default with a required `SegmentDefaultValues.dateTimeLocal` input throughout the pure segment model.
+- The segment form derives that value from the workspace render clock with `toDateTimeLocal(renderedAt)` and passes it through the builder/editor boundary.
+- Corrected keyed-option selection so custom-field metadata cannot override ordinary fields such as `created_at`.
+- Added hand-derived literal coverage for deterministic injected dates, boolean defaults, empty catalog fallbacks, nested condition/group append, invalid append paths, and append attempts targeting conditions.
+- No-op append assertions verify root identity preservation; identical catalog/default inputs produce the exact same date AST.
+- RED evidence: the injected `2026-01-02T10:30` date test received `"0"` before the fix, exposing both ambient time and the custom-field metadata leak.
+- Focused model/editor verification: 23/23 passed across 3 files.
+- Full client verification: 252/252 passed across 66 files.
+- Client typecheck/build, repository lint, architecture check (135 policy tests; 903 source files), and scoped format check passed.
+- Production line audit: all touched files are at most 199 lines; the largest touched controller/editor function is 114 lines.
+- Pure-model ambient-source audit: no `Date`, `Intl`, or `window` references remain in `segment-builder-model.ts`.

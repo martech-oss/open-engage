@@ -13,12 +13,14 @@ import {
   defaultSegmentRawValue,
   normalizeCustomFieldOperator,
   rawSegmentConditionValue,
+  type SegmentDefaultValues,
 } from "./segment-builder-model";
 import { createSegmentCondition, normalizeSegmentOperator } from "./segment-fields";
 
 export function SegmentConditionValueEditor({
   condition,
   catalog,
+  defaults,
   options,
   customField,
   needsValue,
@@ -27,6 +29,7 @@ export function SegmentConditionValueEditor({
 }: {
   condition: SegmentCondition;
   catalog: SegmentGenerationCatalog;
+  defaults: SegmentDefaultValues;
   options: SegmentResourceOption[];
   customField: SegmentResourceOption | undefined;
   needsValue: boolean;
@@ -52,7 +55,7 @@ export function SegmentConditionValueEditor({
               createSegmentCondition(
                 condition.field,
                 operator,
-                defaultSegmentRawValue(selected?.dataType),
+                defaultSegmentRawValue(selected?.dataType, defaults),
                 key,
                 selected?.dataType,
               ),

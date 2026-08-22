@@ -7,10 +7,13 @@ import {
   appendSegmentGroup,
   createDefaultSegmentCondition,
   createDefaultSegmentFilter,
+  defaultSegmentRawValue,
   normalizeCustomFieldOperator,
   removeSegmentNode,
   replaceSegmentNode,
 } from "./segment-builder-model";
+
+const defaults = { dateTimeLocal: "2026-01-02T10:30" };
 
 const catalog: SegmentGenerationCatalog = {
   tags: [{ id: "tag-1", name: "顧客", value: "tag-1" }],
@@ -22,6 +25,16 @@ const catalog: SegmentGenerationCatalog = {
   stages: ["subscriber", "lead"],
 };
 
+const emptyCatalog: SegmentGenerationCatalog = {
+  tags: [],
+  staticSegments: [],
+  companies: [],
+  subscriptionTopics: [],
+  events: [],
+  customFields: [],
+  stages: [],
+};
+
 const emailCondition = {
   kind: "condition",
   field: "email",
@@ -31,8 +44,8 @@ const emailCondition = {
 
 describe("segment builder model defaults", () => {
   it("creates a literal status filter without sharing mutable children", () => {
-    const first = createDefaultSegmentFilter(catalog);
-    const second = createDefaultSegmentFilter(catalog);
+    const first = createDefaultSegmentFilter(catalog, defaults);
+    const second = createDefaultSegmentFilter(catalog, defaults);
 
     expect(first).toEqual({
       kind: "group",
@@ -46,25 +59,92 @@ describe("segment builder model defaults", () => {
   });
 
   it("uses catalog values and keyed defaults for relation, event, and custom fields", () => {
-    expect(createDefaultSegmentCondition("tag", catalog)).toEqual({
+    expect(createDefaultSegmentCondition("tag", catalog, defaults)).toEqual({
       kind: "condition",
       field: "tag",
       operator: "eq",
       value: "tag-1",
     });
-    expect(createDefaultSegmentCondition("event", catalog)).toEqual({
+    expect(createDefaultSegmentCondition("event", catalog, defaults)).toEqual({
       kind: "condition",
       field: "event",
       key: "purchased",
       operator: "exists",
       value: null,
     });
-    expect(createDefaultSegmentCondition("custom_field", catalog)).toEqual({
+    expect(createDefaultSegmentCondition("custom_field", catalog, defaults)).toEqual({
       kind: "condition",
       field: "custom_field",
       key: "seat_count",
       operator: "eq",
       value: 0,
+    });
+  });
+
+  it("uses the exact injected date and stays deterministic for identical inputs", () => {
+    const first = createDefaultSegmentCondition("created_at", catalog, defaults);
+    const second = createDefaultSegmentCondition("created_at", catalog, defaults);
+
+    expect(first).toEqual({
+      kind: "condition",
+      field: "created_at",
+      operator: "eq",
+      value: "2026-01-02T10:30",
+    });
+    expect(second).toEqual({
+      kind: "condition",
+      field: "created_at",
+      operator: "eq",
+      value: "2026-01-02T10:30",
+    });
+  });
+
+  it("uses the literal boolean default for a boolean custom field", () => {
+    expect(
+      createDefaultSegmentCondition(
+        "custom_field",
+        {
+          ...emptyCatalog,
+          customFields: [
+            { id: "field-boolean", name: "有効", value: "enabled", dataType: "boolean" },
+          ],
+        },
+        defaults,
+      ),
+    ).toEqual({
+      kind: "condition",
+      field: "custom_field",
+      key: "enabled",
+      operator: "eq",
+      value: false,
+    });
+    expect(defaultSegmentRawValue("boolean", defaults)).toBe("false");
+  });
+
+  it("uses literal fallback values when catalog options are empty", () => {
+    expect(createDefaultSegmentCondition("stage", emptyCatalog, defaults)).toEqual({
+      kind: "condition",
+      field: "stage",
+      operator: "eq",
+      value: "lead",
+    });
+    expect(createDefaultSegmentCondition("tag", emptyCatalog, defaults)).toEqual({
+      kind: "condition",
+      field: "tag",
+      operator: "eq",
+      value: "value",
+    });
+    expect(createDefaultSegmentCondition("event", emptyCatalog, defaults)).toEqual({
+      kind: "condition",
+      field: "event",
+      operator: "exists",
+      value: null,
+    });
+    expect(createDefaultSegmentCondition("custom_field", emptyCatalog, defaults)).toEqual({
+      kind: "condition",
+      field: "custom_field",
+      operator: "eq",
+      value: "value",
     });
   });
 });
@@ -123,7 +203,7 @@ describe("segment builder immutable AST commands", () => {
   });
 
   it("removes a nested node and restores a valid default when a group becomes empty", () => {
-    expect(removeSegmentNode(root, [1, 0], catalog)).toEqual({
+    expect(removeSegmentNode(root, [1, 0], catalog, defaults)).toEqual({
       kind: "group",
       combinator: "and",
       children: [
@@ -138,13 +218,13 @@ describe("segment builder immutable AST commands", () => {
   });
 
   it("does not remove the root or follow an invalid path", () => {
-    expect(removeSegmentNode(root, [], catalog)).toBe(root);
-    expect(removeSegmentNode(root, [4], catalog)).toBe(root);
+    expect(removeSegmentNode(root, [], catalog, defaults)).toBe(root);
+    expect(removeSegmentNode(root, [4], catalog, defaults)).toBe(root);
   });
 
   it("appends literal condition and group defaults without mutating the source", () => {
-    const conditionResult = appendSegmentCondition(root, [], catalog);
-    const groupResult = appendSegmentGroup(root, [], catalog);
+    const conditionResult = appendSegmentCondition(root, [], catalog, defaults);
+    const groupResult = appendSegmentGroup(root, [], catalog, defaults);
 
     expect(conditionResult.kind === "group" && conditionResult.children.at(-1)).toEqual({
       kind: "condition",
@@ -158,6 +238,50 @@ describe("segment builder immutable AST commands", () => {
       children: [{ kind: "condition", field: "status", operator: "eq", value: "active" }],
     });
     expect(root.kind === "group" && root.children).toHaveLength(2);
+  });
+
+  it("appends literal defaults inside a nested group", () => {
+    expect(appendSegmentCondition(root, [1], catalog, defaults)).toEqual({
+      kind: "group",
+      combinator: "and",
+      children: [
+        emailCondition,
+        {
+          kind: "group",
+          combinator: "or",
+          children: [
+            { kind: "condition", field: "score", operator: "gte", value: 10 },
+            { kind: "condition", field: "status", operator: "eq", value: "active" },
+          ],
+        },
+      ],
+    });
+    expect(appendSegmentGroup(root, [1], catalog, defaults)).toEqual({
+      kind: "group",
+      combinator: "and",
+      children: [
+        emailCondition,
+        {
+          kind: "group",
+          combinator: "or",
+          children: [
+            { kind: "condition", field: "score", operator: "gte", value: 10 },
+            {
+              kind: "group",
+              combinator: "and",
+              children: [{ kind: "condition", field: "status", operator: "eq", value: "active" }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("preserves identity when append paths are invalid or target a condition", () => {
+    expect(appendSegmentCondition(root, [9], catalog, defaults)).toBe(root);
+    expect(appendSegmentGroup(root, [9, 0], catalog, defaults)).toBe(root);
+    expect(appendSegmentCondition(root, [0], catalog, defaults)).toBe(root);
+    expect(appendSegmentGroup(root, [0], catalog, defaults)).toBe(root);
   });
 });
 

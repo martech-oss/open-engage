@@ -1,13 +1,9 @@
-import { RefreshCw } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
-import { FormDialog, FormInput, LoadingButton } from "@/components/app-ui";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { FormDialog } from "@/components/app-ui";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 import type {
   SegmentFilter,
   SegmentGenerationCatalog,
@@ -16,7 +12,12 @@ import type {
 
 import { useCreateSegment, usePreviewSegment, useUpdateSegment } from "./segment-api";
 import { audienceGroupLabel } from "./segment-bits";
-import { defaultSegmentFilter, SegmentBuilder } from "./segment-builder";
+import { createDefaultSegmentFilter } from "./segment-builder-model";
+import {
+  DynamicSegmentFields,
+  SegmentIdentityFields,
+  StaticSegmentFields,
+} from "./segment-form-fields";
 
 export function SegmentFormDialog({
   open,
@@ -39,9 +40,12 @@ export function SegmentFormDialog({
   const { mutateAsync: previewSegmentFilter } = previewSegment;
   const label = audienceGroupLabel(kind);
   const { busy, error, run } = useFormSubmission(`${label}を保存できませんでした`);
-  const [filter, setFilter] = useState<SegmentFilter | null>(
+  const { renderedAt } = useWorkspaceTime();
+  const { toDateTimeLocal } = useWorkspaceFormatters();
+  const defaults = { dateTimeLocal: toDateTimeLocal(renderedAt) };
+  const [filter, setFilter] = useState<SegmentFilter | null>(() =>
     kind === "dynamic"
-      ? (initial?.filterAst ?? (catalog ? defaultSegmentFilter(catalog) : null))
+      ? (initial?.filterAst ?? (catalog ? createDefaultSegmentFilter(catalog, defaults) : null))
       : null,
   );
   const [previewError, setPreviewError] = useState("");
@@ -97,16 +101,6 @@ export function SegmentFormDialog({
     });
   }
 
-  async function preview(): Promise<void> {
-    if (!filter) return;
-    setPreviewError("");
-    try {
-      await previewSegmentFilter({ filter });
-    } catch (cause) {
-      setPreviewError(getErrorMessage(cause, "条件をプレビューできませんでした"));
-    }
-  }
-
   return (
     <FormDialog
       open={open}
@@ -123,71 +117,34 @@ export function SegmentFormDialog({
       submitLabel={initial ? "更新" : "作成"}
       {...(kind === "dynamic" ? { className: "sm:max-w-4xl" } : {})}
     >
-      <FormInput label="名前" name="name" defaultValue={initial?.name} required />
-      <Field>
-        <FieldLabel htmlFor="segment-description">説明</FieldLabel>
-        <Input id="segment-description" name="description" defaultValue={initial?.description} />
-      </Field>
+      <SegmentIdentityFields initial={initial} />
       {kind === "static" ? (
-        <Field>
-          <FieldLabel htmlFor="membership-source">メンバーの選定元</FieldLabel>
-          <Input
-            id="membership-source"
-            name="membershipSource"
-            defaultValue={initial?.membershipSource ?? "手動選定"}
-            required
-          />
-          <FieldDescription>作成後、この画面からメンバーを追加・削除できます。</FieldDescription>
-        </Field>
+        <StaticSegmentFields initial={initial} />
       ) : catalog && filter ? (
-        <FieldGroup>
-          <Field>
-            <FieldLabel>オーディエンス条件</FieldLabel>
-            <SegmentBuilder value={filter} catalog={catalog} onChange={setFilter} />
-          </Field>
-          <div className="flex items-center gap-3">
-            <LoadingButton
-              type="button"
-              variant="outline"
-              busy={previewSegment.isPending}
-              busyLabel="確認中…"
-              onClick={() => void preview()}
-            >
-              <RefreshCw data-icon="inline-start" />
-              人数を確認
-            </LoadingButton>
-            {previewSegment.data ? (
-              <strong>{previewSegment.data.matchedCount.toLocaleString()}件</strong>
-            ) : null}
-          </div>
-          {previewError ? (
-            <Alert variant="destructive">
-              <AlertTitle>条件が無効です</AlertTitle>
-              <AlertDescription>{previewError}</AlertDescription>
-            </Alert>
-          ) : null}
-          {previewSegment.data?.contacts.length ? (
-            <ItemGroup>
-              {previewSegment.data.contacts.slice(0, 5).map((contact) => (
-                <Item key={contact.id} variant="outline" size="sm">
-                  <ItemContent>
-                    <ItemTitle>{contact.email ?? contact.externalId ?? contact.id}</ItemTitle>
-                    <ItemDescription>
-                      {contact.stage} · score {contact.score}
-                    </ItemDescription>
-                  </ItemContent>
-                </Item>
-              ))}
-            </ItemGroup>
-          ) : null}
-          <Alert>
-            <AlertTitle>配信時のガードレール</AlertTitle>
-            <AlertDescription>
-              グローバル配信停止、bounce・complaint抑止、送信頻度上限はセグメント条件とは別に、送信時に必ず評価されます。
-            </AlertDescription>
-          </Alert>
-        </FieldGroup>
+        <DynamicSegmentFields
+          catalog={catalog}
+          filter={filter}
+          defaults={defaults}
+          previewPending={previewSegment.isPending}
+          previewData={previewSegment.data}
+          previewError={previewError}
+          onFilterChange={setFilter}
+          onPreview={() => void runSegmentPreview(filter, previewSegmentFilter, setPreviewError)}
+        />
       ) : null}
     </FormDialog>
   );
+}
+
+async function runSegmentPreview(
+  filter: SegmentFilter,
+  preview: (input: { filter: SegmentFilter }) => Promise<unknown>,
+  setError: (message: string) => void,
+): Promise<void> {
+  setError("");
+  try {
+    await preview({ filter });
+  } catch (cause) {
+    setError(getErrorMessage(cause, "条件をプレビューできませんでした"));
+  }
 }

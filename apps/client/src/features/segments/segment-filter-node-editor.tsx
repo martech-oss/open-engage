@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { SegmentFilter, SegmentGenerationCatalog } from "@openengage/core/segments";
 
+import type { SegmentDefaultValues } from "./segment-builder-model";
 import { SegmentConditionEditor } from "./segment-condition-editor";
 
 type NodeEditorProps = {
   node: SegmentFilter;
   path: number[];
   catalog: SegmentGenerationCatalog;
+  defaults: SegmentDefaultValues;
   onReplace: (path: number[], node: SegmentFilter) => void;
   onRemove: (path: number[]) => void;
   onAppendCondition: (path: number[]) => void;
@@ -18,12 +20,14 @@ type NodeEditorProps = {
 };
 
 export function SegmentFilterNodeEditor(props: NodeEditorProps): ReactNode {
-  const { node, path, catalog, onReplace, onRemove, onAppendCondition, onAppendGroup } = props;
+  const { node, path, catalog, defaults, onReplace, onRemove, onAppendCondition, onAppendGroup } =
+    props;
   if (node.kind === "condition") {
     return (
       <SegmentConditionEditor
         condition={node}
         catalog={catalog}
+        defaults={defaults}
         onChange={(condition) => onReplace(path, condition)}
         {...(path.length === 0 ? {} : { onRemove: () => onRemove(path) })}
       />

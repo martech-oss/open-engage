@@ -5,7 +5,7 @@ import type { SegmentFilter, SegmentGenerationCatalog } from "@openengage/core/s
 import {
   appendSegmentCondition,
   appendSegmentGroup,
-  createDefaultSegmentFilter,
+  type SegmentDefaultValues,
   removeSegmentNode,
   replaceSegmentNode,
 } from "./segment-builder-model";
@@ -14,10 +14,12 @@ import { SegmentFilterNodeEditor } from "./segment-filter-node-editor";
 export function SegmentBuilder({
   value,
   catalog,
+  defaults,
   onChange,
 }: {
   value: SegmentFilter;
   catalog: SegmentGenerationCatalog;
+  defaults: SegmentDefaultValues;
   onChange: (filter: SegmentFilter) => void;
 }): ReactNode {
   return (
@@ -26,11 +28,10 @@ export function SegmentBuilder({
       path={[]}
       catalog={catalog}
       onReplace={(path, node) => onChange(replaceSegmentNode(value, path, node))}
-      onRemove={(path) => onChange(removeSegmentNode(value, path, catalog))}
-      onAppendCondition={(path) => onChange(appendSegmentCondition(value, path, catalog))}
-      onAppendGroup={(path) => onChange(appendSegmentGroup(value, path, catalog))}
+      defaults={defaults}
+      onRemove={(path) => onChange(removeSegmentNode(value, path, catalog, defaults))}
+      onAppendCondition={(path) => onChange(appendSegmentCondition(value, path, catalog, defaults))}
+      onAppendGroup={(path) => onChange(appendSegmentGroup(value, path, catalog, defaults))}
     />
   );
 }
-
-export const defaultSegmentFilter = createDefaultSegmentFilter;

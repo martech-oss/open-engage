@@ -16,6 +16,7 @@ import {
   customFieldOperatorAllowed,
   rawSegmentConditionValue,
   segmentOptionsForField,
+  type SegmentDefaultValues,
 } from "./segment-builder-model";
 import { SegmentConditionValueEditor } from "./segment-condition-value-editor";
 import {
@@ -28,11 +29,13 @@ import {
 export function SegmentConditionEditor({
   condition,
   catalog,
+  defaults,
   onChange,
   onRemove,
 }: {
   condition: SegmentCondition;
   catalog: SegmentGenerationCatalog;
+  defaults: SegmentDefaultValues;
   onChange: (condition: SegmentCondition) => void;
   onRemove?: () => void;
 }): ReactNode {
@@ -79,7 +82,9 @@ export function SegmentConditionEditor({
         value={condition.field}
         aria-label="フィールド"
         onChange={(event) =>
-          onChange(createDefaultSegmentCondition(event.target.value as SegmentField, catalog))
+          onChange(
+            createDefaultSegmentCondition(event.target.value as SegmentField, catalog, defaults),
+          )
         }
       >
         {segmentFieldOptions.map((option) => (
@@ -102,6 +107,7 @@ export function SegmentConditionEditor({
       <SegmentConditionValueEditor
         condition={condition}
         catalog={catalog}
+        defaults={defaults}
         options={segmentOptionsForField(condition.field, catalog)}
         customField={customField}
         needsValue={segmentConditionNeedsValue(condition.field, condition.operator)}
