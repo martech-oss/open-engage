@@ -1,6 +1,6 @@
 import { Sparkles } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   AppDialog,
@@ -36,7 +36,24 @@ export function CompanyForm({
   enrichmentEnabled = false,
   submitLabel,
   onSubmit,
-}: {
+}: CompanyFormProps): ReactNode {
+  return (
+    <CompanyFormContent
+      key={open ? `${initialName}:${initialDomain}` : "closed"}
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      initialName={initialName}
+      initialDomain={initialDomain}
+      enrichmentEnabled={enrichmentEnabled}
+      submitLabel={submitLabel}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+interface CompanyFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -46,18 +63,23 @@ export function CompanyForm({
   enrichmentEnabled?: boolean;
   submitLabel: string;
   onSubmit: (values: { name: string; domain?: string }) => Promise<void>;
-}): ReactNode {
+}
+
+function CompanyFormContent({
+  open,
+  onOpenChange,
+  title,
+  description,
+  initialName = "",
+  initialDomain = "",
+  enrichmentEnabled = false,
+  submitLabel,
+  onSubmit,
+}: CompanyFormProps): ReactNode {
   const { busy, error, run } = useFormSubmission("会社を保存できませんでした");
   const [name, setName] = useState(initialName);
   const [domain, setDomain] = useState(initialDomain);
   const [showEnrichment, setShowEnrichment] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setName(initialName);
-    setDomain(initialDomain);
-    setShowEnrichment(false);
-  }, [initialDomain, initialName, open]);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();

@@ -28,5 +28,5 @@ export const Route = createFileRoute("/_app/companies/")({
 
 function CompaniesRoute() {
   const { q } = Route.useSearch();
-  return <CompaniesPage initialQuery={q} />;
+  return <CompaniesPage key={q} initialQuery={q} />;
 }
