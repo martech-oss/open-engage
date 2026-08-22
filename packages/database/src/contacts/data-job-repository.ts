@@ -215,14 +215,13 @@ export class DataJobWorkerRepository extends DatabaseRepository {
     leaseId: string;
     cursor: Record<string, unknown>;
     count: number;
-    attempts: number;
     now: string;
   }): Promise<boolean> {
     const result = await this.database.orm
       .update(importJobs)
       .set({
         status: "processing",
-        cursor: JSON.stringify({ ...input.cursor, attempts: input.attempts }),
+        cursor: JSON.stringify({ ...input.cursor, attempts: 0 }),
         processed: sql`${importJobs.processed} + ${input.count}`,
         succeeded: sql`${importJobs.succeeded} + ${input.count}`,
         updatedAt: input.now,

@@ -9,7 +9,7 @@ import {
   type ContactImportRow,
 } from "@openengage/database/contacts";
 
-import { PermanentChannelError } from "../channels";
+import { PermanentChannelError, TransientChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
 import { parseJsonRecord, stringValue } from "../platform/values";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
@@ -242,12 +242,10 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
         leaseId: job.leaseId,
         cursor: nextCursor,
         count: contacts.length,
-        attempts: job.attempts,
         now: new Date().toISOString(),
       });
-      if (advanced) {
-        await env.JOBS_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
-      }
+      requireExportLease(advanced, "recording progress");
+      await env.JOBS_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
       return;
     }
     const chunks: BlobPart[] = [];
@@ -263,7 +261,7 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
         contentDisposition: `attachment; filename="openengage-contacts-${jobId}.csv"`,
       },
     });
-    await repository.completeExportForLease({
+    const completed = await repository.completeExportForLease({
       jobId,
       leaseId: job.leaseId,
       cursor: nextCursor,
@@ -271,12 +269,14 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
       attempts: job.attempts,
       now: new Date().toISOString(),
     });
+    requireExportLease(completed, "completing");
   } catch (error) {
+    if (error instanceof ContactExportLeaseLostError) throw error;
     const message = error instanceof Error ? error.message.slice(0, 2_000) : String(error);
     const terminal = error instanceof PermanentChannelError || job.attempts >= 5;
     const now = new Date().toISOString();
     if (terminal) {
-      await repository.failExportForLease({
+      const failed = await repository.failExportForLease({
         jobId,
         leaseId: job.leaseId,
         error:
@@ -285,18 +285,30 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
             : message,
         now,
       });
+      requireExportLease(failed, "recording terminal failure");
       if (!(error instanceof PermanentChannelError)) {
         throw new PermanentChannelError("Contact export attempts exhausted");
       }
     } else {
-      await repository.returnExportToPending({
+      const returned = await repository.returnExportToPending({
         jobId,
         leaseId: job.leaseId,
         error: message,
         now,
       });
+      requireExportLease(returned, "returning to pending");
     }
     throw error;
+  }
+}
+
+class ContactExportLeaseLostError extends TransientChannelError {
+  public override readonly name = "ContactExportLeaseLostError";
+}
+
+function requireExportLease(updated: boolean, operation: string): void {
+  if (!updated) {
+    throw new ContactExportLeaseLostError(`Contact export lease lost while ${operation}`);
   }
 }
 

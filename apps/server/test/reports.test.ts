@@ -11,6 +11,46 @@ import {
 import { seedMember, seedWorkspaceClient } from "./factory";
 
 describe("Reporting", () => {
+  it("runs the maximum 366-day overview range in D1 with ordered workspace-day labels", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB, {
+      role: "analyst",
+      timezone: "Asia/Tokyo",
+    });
+    const orm = createDatabase(env.DB).orm;
+    await orm.insert(contactsTable).values([
+      {
+        id: uuidv7(),
+        workspaceId,
+        email: "range-first@example.com",
+        stage: "lead",
+        score: 0,
+        status: "active",
+        customFields: "{}",
+        createdAt: "2023-12-31T15:30:00.000Z",
+        updatedAt: "2023-12-31T15:30:00.000Z",
+      },
+      {
+        id: uuidv7(),
+        workspaceId,
+        email: "range-last@example.com",
+        stage: "lead",
+        score: 0,
+        status: "active",
+        customFields: "{}",
+        createdAt: "2024-12-31T14:30:00.000Z",
+        updatedAt: "2024-12-31T14:30:00.000Z",
+      },
+    ]);
+
+    const report = await client.reports.overview({ from: "2024-01-01", to: "2024-12-31" });
+
+    expect(report.contacts.summary.newContacts).toBe(2);
+    expect(report.contacts.trend).toEqual([
+      { day: "2024-01-01", added: 1, archived: 0 },
+      { day: "2024-12-31", added: 1, archived: 0 },
+    ]);
+  });
+
   it.each([
     {
       name: "Tokyo early hour through overview",

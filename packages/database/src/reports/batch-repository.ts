@@ -4,13 +4,14 @@ import { DatabaseRepository } from "../shared/repository-base";
 import type { ReportDateRange, ReportRow } from "./types";
 
 export function reportDaysCte(range: ReportDateRange): SQL {
-  const values = range.days.map(
-    (day) => sql`(${day.day}, ${day.fromTimestamp}, ${day.toExclusiveTimestamp})`,
-  );
-  return sql`report_days(day, from_timestamp, to_exclusive_timestamp) AS (VALUES ${sql.join(
-    values,
-    sql`, `,
-  )})`;
+  const days = JSON.stringify(range.days);
+  return sql`report_days(day, from_timestamp, to_exclusive_timestamp) AS (
+    SELECT
+      json_extract(value, '$.day'),
+      json_extract(value, '$.fromTimestamp'),
+      json_extract(value, '$.toExclusiveTimestamp')
+    FROM json_each(${days})
+  )`;
 }
 
 export abstract class ReportsBatchRepository extends DatabaseRepository {

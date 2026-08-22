@@ -156,7 +156,7 @@ describe("contact export jobs", () => {
         partNumber: 1,
         lastId: "bulk-0999",
         filter: { query: "bulk-", status: "active" },
-        attempts: 1,
+        attempts: 0,
       }),
     });
 
@@ -212,7 +212,7 @@ describe("contact export jobs", () => {
     await expect(getDataJob(database, workspace.workspaceId, jobId)).resolves.toMatchObject({
       status: "processing",
       processed: 1_000,
-      attempts: 1,
+      attempts: 0,
     });
   });
 
