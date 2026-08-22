@@ -22,6 +22,7 @@ export async function verifyClientBundles({ root = resolve(import.meta.dirname, 
   const routeEntries = Object.keys(manifest).filter((key) =>
     /^src\/routes\/.*\?tsr-split=component$/.test(key),
   );
+  const routerRegistryEntries = findTanstackRouterRegistryEntries(manifest, routeEntries);
 
   requireEntries(manifest, [canvasEntry, editorRoute, listRoute, ...chartRouteAllowlist]);
   const editorDynamics = new Set(manifest[editorRoute].dynamicImports ?? []);
@@ -55,7 +56,7 @@ export async function verifyClientBundles({ root = resolve(import.meta.dirname, 
     ) {
       throw new Error(`${route}: ordinary route shell statically reaches XYFlow JavaScript or CSS`);
     }
-    const completeRouteClosure = routeClosure(manifest, route);
+    const completeRouteClosure = routeClosure(manifest, route, routerRegistryEntries);
     if (
       route !== editorRoute &&
       (intersects(completeRouteClosure, xyflowEntries) ||
@@ -73,7 +74,7 @@ export async function verifyClientBundles({ root = resolve(import.meta.dirname, 
   }
   for (const route of routeEntries) {
     if (chartRouteAllowlist.has(route)) continue;
-    if (intersects(routeClosure(manifest, route), rechartsEntries)) {
+    if (intersects(routeClosure(manifest, route, routerRegistryEntries), rechartsEntries)) {
       throw new Error(`${route}: only exact Dashboard/Reports routes may reach Recharts`);
     }
   }
@@ -87,18 +88,38 @@ export async function verifyClientBundles({ root = resolve(import.meta.dirname, 
   };
 }
 
-function routeClosure(manifest, route) {
-  const visited = closure(manifest, route, false);
-  const pending = [...(manifest[route].dynamicImports ?? [])];
-  const expandedDynamicEntries = new Set();
+function routeClosure(manifest, route, routerRegistryEntries) {
+  const pending = [route];
+  const visited = new Set();
   while (pending.length > 0) {
-    const dynamicEntry = pending.pop();
-    if (!dynamicEntry || expandedDynamicEntries.has(dynamicEntry)) continue;
-    expandedDynamicEntries.add(dynamicEntry);
-    for (const dependency of closure(manifest, dynamicEntry, false)) visited.add(dependency);
-    pending.push(...(manifest[dynamicEntry]?.dynamicImports ?? []));
+    const current = pending.pop();
+    if (!current || visited.has(current)) continue;
+    const chunk = manifest[current];
+    if (!chunk) throw new Error(`production manifest has a dangling chunk reference: ${current}`);
+    visited.add(current);
+    pending.push(...(chunk.imports ?? []));
+    if (!routerRegistryEntries.has(current)) pending.push(...(chunk.dynamicImports ?? []));
   }
   return visited;
+}
+
+function findTanstackRouterRegistryEntries(manifest, routeEntries) {
+  const tanstackClientEntry =
+    /(?:^|\/)node_modules\/@tanstack\/react-start\/dist\/plugin\/default-entry\/client\.[cm]?[jt]sx?$/;
+  return new Set(
+    Object.entries(manifest)
+      .filter(([key, chunk]) => {
+        const source = (chunk.src ?? key).replaceAll("\\", "/");
+        const registeredEntries = new Set(chunk.dynamicImports ?? []);
+        return (
+          chunk.isEntry === true &&
+          tanstackClientEntry.test(source) &&
+          routeEntries.length > 0 &&
+          routeEntries.every((route) => registeredEntries.has(route))
+        );
+      })
+      .map(([key]) => key),
+  );
 }
 
 function closure(manifest, entry, includeDynamic) {

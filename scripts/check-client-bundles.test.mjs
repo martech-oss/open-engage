@@ -85,3 +85,51 @@ test("uses exact chart route allowlists instead of route-name substrings", async
 
   await assert.rejects(() => verifyClientBundles({ root }), /reports-preview.*Recharts/i);
 });
+
+test("rejects XYFlow dynamically imported by a route's shared static dependency", async (t) => {
+  const root = await fixture(t, (manifest, assets) => {
+    manifest[ordinaryRoute].imports = ["_shared-feature.js"];
+    manifest["_shared-feature.js"] = entry("shared-feature.js", {
+      dynamicImports: [canvas],
+    });
+    assets["shared-feature.js"] = "export const loadCanvas = () => import('./canvas.js');";
+  });
+
+  await assert.rejects(() => verifyClientBundles({ root }), /ordinary route.*XYFlow/i);
+});
+
+test("rejects Recharts dynamically imported by a route's shared static dependency", async (t) => {
+  const root = await fixture(t, (manifest, assets) => {
+    manifest[ordinaryRoute].imports = ["_shared-feature.js"];
+    manifest["_shared-feature.js"] = entry("shared-feature.js", {
+      dynamicImports: ["_charts.js"],
+    });
+    assets["shared-feature.js"] = "export const loadChart = () => import('./charts.js');";
+  });
+
+  await assert.rejects(() => verifyClientBundles({ root }), /contacts.*Recharts/i);
+});
+
+test("does not attribute TanStack router registry dynamics to every route", async (t) => {
+  const root = await fixture(t, (manifest, assets) => {
+    const registry =
+      "../../node_modules/@tanstack/react-start/dist/plugin/default-entry/client.tsx";
+    manifest[ordinaryRoute].imports = [registry];
+    manifest[registry] = entry("router-registry.js", {
+      dynamicImports: [
+        editorRoute,
+        listRoute,
+        ordinaryRoute,
+        dashboardRoute,
+        reportsRoute,
+        dealReportsRoute,
+      ],
+      isDynamicEntry: false,
+      isEntry: true,
+      src: registry,
+    });
+    assets["router-registry.js"] = "export const registeredRoutes = true;";
+  });
+
+  await assert.doesNotReject(() => verifyClientBundles({ root }));
+});
