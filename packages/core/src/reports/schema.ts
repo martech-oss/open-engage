@@ -1,5 +1,12 @@
 import * as z from "zod";
 
+const dashboardEventSchema = z.object({
+  type: z.string(),
+  occurredAt: z.string(),
+  contactId: z.string().nullable(),
+  properties: z.record(z.string(), z.unknown()),
+});
+
 export const dashboardSchema = z.object({
   asOf: z.iso.datetime(),
   timezone: z.string(),
@@ -59,14 +66,8 @@ export const dashboardSchema = z.object({
     overdueTasks: z.number().int().nonnegative(),
     completedTasks: z.number().int().nonnegative(),
   }),
-  recentEvents: z.array(
-    z.object({
-      type: z.string(),
-      occurredAt: z.string(),
-      contactId: z.string().nullable(),
-      properties: z.record(z.string(), z.unknown()),
-    }),
-  ),
+  recentEvents: z.array(dashboardEventSchema),
+  recentActivity: z.array(dashboardEventSchema),
 });
 export type Dashboard = z.infer<typeof dashboardSchema>;
 

@@ -50,6 +50,7 @@ describe("dashboard read model", () => {
       },
       briefs: { overdueReviews: 0 },
       recentEvents: [],
+      recentActivity: [],
     });
     expect(dashboard.contacts.trend.points).toHaveLength(14);
     expect(dashboard.contacts.trend.points).toEqual(
@@ -59,6 +60,54 @@ describe("dashboard read model", () => {
       ]),
     );
     expect(dashboard.deliveries.health.points).toHaveLength(14);
+  });
+
+  it("uses workspace-local midnight for persisted contact and delivery trend membership", async () => {
+    const { workspaceId } = await seedWorkspace(env.DB, {
+      timezone: "America/Los_Angeles",
+    });
+    const beforeBoundary = "2025-12-19T07:59:59.999Z";
+    const atBoundary = "2025-12-19T08:00:00.000Z";
+    const contactIds = [uuidv7(), uuidv7()];
+    const deliveryIds = [uuidv7(), uuidv7()];
+    await env.DB.batch([
+      ...contactIds.map((id, index) => {
+        const createdAt = index === 0 ? beforeBoundary : atBoundary;
+        return env.DB.prepare(
+          `INSERT INTO contacts
+           (id, workspace_id, email, stage, score, status, custom_fields, created_at, updated_at)
+           VALUES (?, ?, ?, 'lead', 0, 'active', '{}', ?, ?)`,
+        ).bind(id, workspaceId, `boundary-${index}@example.com`, createdAt, createdAt);
+      }),
+      ...deliveryIds.map((id, index) => {
+        const createdAt = index === 0 ? beforeBoundary : atBoundary;
+        return env.DB.prepare(
+          `INSERT INTO deliveries
+           (id, workspace_id, contact_id, channel, purpose, provider, recipient,
+            idempotency_key, payload, status, attempts, created_at, updated_at)
+           VALUES (?, ?, ?, 'email', 'marketing', 'cloudflare', 'boundary@example.com',
+                   ?, '{}', 'delivered', 1, ?, ?)`,
+        ).bind(id, workspaceId, contactIds[index], `boundary-${id}`, createdAt, createdAt);
+      }),
+    ]);
+
+    // 08:00Z is midnight in Los Angeles on Dec 19. The record one millisecond
+    // earlier belongs to Dec 18 and is outside the 14-day Dec 19-Jan 1 window.
+    const dashboard = await getDashboard(env.DB, workspaceId, {
+      now: "2026-01-02T01:30:00.000Z",
+    });
+
+    expect(dashboard.contacts.count).toBe(2);
+    expect(dashboard.contacts.trend.points.find((point) => point.day === "2025-12-19")).toEqual({
+      day: "2025-12-19",
+      added: 1,
+    });
+    expect(dashboard.deliveries.health.points.find((point) => point.day === "2025-12-19")).toEqual({
+      day: "2025-12-19",
+      sends: 1,
+      delivered: 1,
+      undelivered: 0,
+    });
   });
 
   it("calculates populated dashboard totals, changes, rankings, and limits", async () => {
@@ -109,8 +158,10 @@ describe("dashboard read model", () => {
       completedTasks: 1,
     });
     expect(dashboard.briefs.overdueReviews).toBe(1);
-    expect(dashboard.recentEvents).toHaveLength(12);
-    expect(dashboard.recentEvents[0]).toMatchObject({ type: "event_12" });
+    expect(dashboard.recentEvents).toHaveLength(20);
+    expect(dashboard.recentEvents[0]).toMatchObject({ type: "event_20" });
+    expect(dashboard.recentActivity).toHaveLength(12);
+    expect(dashboard.recentActivity[0]).toMatchObject({ type: "event_20" });
   });
 });
 
@@ -242,7 +293,7 @@ async function seedDashboardData(workspaceId: string, userId: string): Promise<v
        VALUES (?, ?, 'approved', 1, 1, ?, ?, 'acquisition', '2026-01-01T00:00:00.000Z',
                '{}', ?, ?, ?, ?)`,
     ).bind(projectId, workspaceId, userId, approverUserId, AS_OF, approverUserId, AS_OF, AS_OF),
-    ...Array.from({ length: 13 }, (_, index) =>
+    ...Array.from({ length: 21 }, (_, index) =>
       env.DB.prepare(
         `INSERT INTO contact_events
          (id, workspace_id, contact_id, type, properties, occurred_at, created_at)

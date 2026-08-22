@@ -40,7 +40,7 @@ export class DashboardReportsRepository extends ReportsBatchRepository {
       `,
       sql`
         SELECT ${contactEvents.type}, ${contactEvents.occurredAt}, ${contactEvents.contactId}, ${contactEvents.properties} FROM ${contactEvents}
-        WHERE ${contactEvents.workspaceId} = ${workspaceId} ORDER BY ${contactEvents.occurredAt} DESC LIMIT 12
+        WHERE ${contactEvents.workspaceId} = ${workspaceId} ORDER BY ${contactEvents.occurredAt} DESC LIMIT 20
       `,
     );
     return {

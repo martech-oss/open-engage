@@ -38,7 +38,7 @@ export function DashboardPage(): ReactNode {
     lastRun: formatRelativeTime(item.updatedAt),
   }));
 
-  const activity = data.recentEvents.map((event, index) => ({
+  const activity = data.recentActivity.map((event, index) => ({
     id: `${event.occurredAt}-${index}`,
     label: CONTACT_EVENT_LABELS[event.type] ?? event.type,
     type: event.type,
