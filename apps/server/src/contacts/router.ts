@@ -1,5 +1,6 @@
-import { ContactRepository } from "@openengage/database/contacts";
+import { ContactRelationInvalidError, ContactRepository } from "@openengage/database/contacts";
 import { writeAuditLog } from "@openengage/database/platform";
+import { isUniqueConstraintError } from "@openengage/database/shared";
 import { ack, CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -11,6 +12,12 @@ import {
   startContactImport,
 } from "./import-export-service";
 import { createContact, getContactTimeline, listContacts, recordContactApiEvent } from "./service";
+
+const CONTACT_EMAIL_UNIQUE_COLUMNS = ["contacts.workspace_id", "contacts.email"] as const;
+const CONTACT_EXTERNAL_ID_UNIQUE_COLUMNS = [
+  "contacts.workspace_id",
+  "contacts.external_id",
+] as const;
 
 export const listContactsProcedure = authed.contacts.list.handler(async ({ context, input }) =>
   listContacts(context.database, context.workspace, input),
@@ -77,7 +84,16 @@ export const createContactProcedure = authed.contacts.create.handler(
       );
       return contact;
     } catch (error) {
-      throw errors.CONTACT_CONFLICT({ cause: error });
+      if (error instanceof ContactRelationInvalidError) {
+        throw errors.CONTACT_RELATION_INVALID({ data: { field: error.field }, cause: error });
+      }
+      if (
+        isUniqueConstraintError(error, CONTACT_EMAIL_UNIQUE_COLUMNS) ||
+        isUniqueConstraintError(error, CONTACT_EXTERNAL_ID_UNIQUE_COLUMNS)
+      ) {
+        throw errors.CONTACT_CONFLICT({ cause: error });
+      }
+      throw error;
     }
   },
 );

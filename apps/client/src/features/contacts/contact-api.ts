@@ -1,4 +1,9 @@
-import { type QueryClient, keepPreviousData, useMutation } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  keepPreviousData,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
@@ -117,12 +122,39 @@ export function invalidateContactOptions(queryClient: QueryClient): Promise<void
   return queryClient.invalidateQueries({ queryKey: orpcQuery.contacts.options.key() });
 }
 
-/**
- * No built-in invalidation: creating a contact is one step of a form that also
- * assigns tags/segment/company, so the caller invalidates once everything settles.
- */
 export function useCreateContact() {
-  return useMutation(orpcQuery.contacts.create.mutationOptions());
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.contacts.create.mutationOptions(),
+    onSuccess: (_contact, variables) => invalidateCreatedContactQueries(queryClient, variables),
+  });
+}
+
+/** Refreshes every read model affected by the single atomic create command. */
+export function invalidateCreatedContactQueries(
+  queryClient: QueryClient,
+  relations: { companyId?: string | undefined; segmentId?: string | undefined },
+): Promise<void> {
+  return Promise.all([
+    invalidateContactsList(queryClient),
+    invalidateContactOptions(queryClient),
+    ...(relations.companyId
+      ? [
+          queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() }),
+          queryClient.invalidateQueries({
+            queryKey: orpcQuery.companies.get.key({ input: { id: relations.companyId } }),
+          }),
+        ]
+      : []),
+    ...(relations.segmentId
+      ? [
+          queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() }),
+          queryClient.invalidateQueries({
+            queryKey: orpcQuery.segments.get.key({ input: { id: relations.segmentId } }),
+          }),
+        ]
+      : []),
+  ]).then(() => undefined);
 }
 
 export function contactProfileQueryOptions(contactId: string) {
@@ -163,25 +195,6 @@ export function removeContactFromSegment(contactId: string, resourceId: string) 
 
 export function bulkUpdateContacts(input: ContactBulkAction) {
   return orpc.contacts.bulkUpdate(input);
-}
-
-export async function assignInitialContactRelations(input: {
-  contactId: string;
-  tagId?: string;
-  segmentId?: string;
-  companyId?: string;
-}): Promise<void> {
-  await Promise.all([
-    input.tagId ? assignContactTag(input.contactId, input.tagId) : Promise.resolve(),
-    input.segmentId ? addContactToSegment(input.contactId, input.segmentId) : Promise.resolve(),
-    input.companyId
-      ? orpc.companies.assignContact({
-          id: input.companyId,
-          contactId: input.contactId,
-          isPrimary: true,
-        })
-      : Promise.resolve(),
-  ]);
 }
 
 function optionalNumber(value: string): number | undefined {

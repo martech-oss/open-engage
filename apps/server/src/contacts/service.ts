@@ -10,7 +10,13 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
 
-import { recordContactEvent } from "../contacts/event-service";
+import { processPendingPublicFormEvent, recordContactEvent } from "../contacts/event-service";
+
+export interface CreateContactCommand extends ContactCreate {
+  tagId?: string | undefined;
+  segmentId?: string | undefined;
+  companyId?: string | undefined;
+}
 
 export async function listContacts(
   database: OpenEngageDatabase,
@@ -31,20 +37,18 @@ export async function listContacts(
 export async function createContact(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  input: ContactCreate,
+  input: CreateContactCommand,
   queue?: Queue,
 ): Promise<Contact> {
   const repository = new ContactRepository(database, workspace);
-  const contact = await repository.createContact(input);
-  await recordContactEvent(database, {
-    workspaceId: workspace.workspaceId,
-    contactId: contact.id,
-    type: "contact_created",
-    resourceType: "contact",
-    resourceId: contact.id,
-    ...(queue ? { queue } : {}),
+  const { tagId, segmentId, companyId, ...contactInput } = input;
+  const created = await repository.createContactWithInitialRelations(contactInput, {
+    ...(tagId ? { tagId } : {}),
+    ...(segmentId ? { segmentId } : {}),
+    ...(companyId ? { companyId } : {}),
   });
-  return contact;
+  await processPendingPublicFormEvent(database, created.eventId, queue);
+  return created.contact;
 }
 
 export async function getContactTimeline(

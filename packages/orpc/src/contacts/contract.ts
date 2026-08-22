@@ -17,6 +17,14 @@ const contactNotFound = {
   CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
 } as const;
 
+const contactCreateCommandSchema = contactCreateSchema.and(
+  z.object({
+    tagId: z.string().min(1).optional(),
+    segmentId: z.string().min(1).optional(),
+    companyId: z.string().min(1).optional(),
+  }),
+);
+
 export const contactsContract = {
   list: oc
     .route({ method: "GET", path: "/contacts" })
@@ -57,8 +65,13 @@ export const contactsContract = {
         status: 409,
         message: "同じメールアドレスまたは外部IDの連絡先が既に存在します",
       },
+      CONTACT_RELATION_INVALID: {
+        status: 422,
+        message: "指定された連絡先の関連先が無効です",
+        data: z.object({ field: z.enum(["tagId", "segmentId", "companyId"]) }),
+      },
     })
-    .input(contactCreateSchema)
+    .input(contactCreateCommandSchema)
     .output(contactSchema),
   update: oc
     .route({ method: "PATCH", path: "/contacts/{id}" })

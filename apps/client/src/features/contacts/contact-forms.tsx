@@ -4,12 +4,7 @@ import { type FormEvent, type ReactNode } from "react";
 import { FormDialog, FormInput, FormNativeSelect } from "@/components/app-ui";
 import { FieldGroup } from "@/components/ui/field";
 import { NativeSelectOption } from "@/components/ui/native-select";
-import { invalidateCompanyQueries } from "@/features/companies/company-api";
-import {
-  assignInitialContactRelations,
-  useCreateContact,
-  type ContactOptions,
-} from "@/features/contacts/contact-api";
+import { useCreateContact, type ContactOptions } from "@/features/contacts/contact-api";
 import { createDynamicSegment, invalidateSegmentsList } from "@/features/segments/segment-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString, optionalString } from "@/lib/form-data";
@@ -28,13 +23,15 @@ export function ContactCreateForm({
   onSaved: () => Promise<void>;
 }): ReactNode {
   const createContact = useCreateContact();
-  const queryClient = useQueryClient();
   const { busy, error, run } = useFormSubmission("保存できませんでした");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      const contact = await createContact.mutateAsync({
+      const tagId = optionalString(form.get("tagId"));
+      const segmentId = optionalString(form.get("segmentId"));
+      const companyId = optionalString(form.get("companyId"));
+      await createContact.mutateAsync({
         email: optionalString(form.get("email")),
         firstName: optionalString(form.get("firstName")),
         lastName: optionalString(form.get("lastName")),
@@ -42,19 +39,10 @@ export function ContactCreateForm({
         externalId: optionalString(form.get("externalId")),
         stage: optionalString(form.get("stage")) ?? "lead",
         customFields: {},
-      });
-      const tagId = optionalString(form.get("tagId"));
-      const segmentId = optionalString(form.get("segmentId"));
-      const companyId = optionalString(form.get("companyId"));
-      await assignInitialContactRelations({
-        contactId: contact.id,
         ...(tagId ? { tagId } : {}),
         ...(segmentId ? { segmentId } : {}),
         ...(companyId ? { companyId } : {}),
       });
-      if (companyId) {
-        await invalidateCompanyQueries(queryClient, companyId);
-      }
       await onSaved();
     });
   }

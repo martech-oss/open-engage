@@ -15,6 +15,7 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 
 import {
   contactSchema,
@@ -25,15 +26,41 @@ import {
 import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
 
 import { deliveries } from "../messaging/schema";
-import { segmentMemberships } from "../segments/schema";
+import { segmentMemberships, segments } from "../segments/schema";
 import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
 import type { CursorPage } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { companyContacts, contacts, contactTags } from "./schema";
+import { contactEventProjectionRows } from "./event-repository";
+import {
+  companies,
+  companyContacts,
+  contactEventOutbox,
+  contactEventProjections,
+  contactEvents,
+  contacts,
+  contactTags,
+  tags,
+} from "./schema";
 
 type ContactRow = typeof contacts.$inferSelect;
+
+export type InitialContactRelationField = "tagId" | "segmentId" | "companyId";
+
+export interface InitialContactRelations {
+  tagId?: string;
+  segmentId?: string;
+  companyId?: string;
+}
+
+export class ContactRelationInvalidError extends Error {
+  public override readonly name = "ContactRelationInvalidError";
+
+  public constructor(public readonly field: InitialContactRelationField) {
+    super(`Invalid initial contact relation: ${field}`);
+  }
+}
 
 export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
   public async listContacts(input: {
@@ -200,6 +227,136 @@ export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
       updatedAt: now,
     });
     return ensureLoaded(await this.getContact(id), "Created contact");
+  }
+
+  /**
+   * Creates a contact, its selected initial memberships, and the durable
+   * contact-created event in one D1 batch. Every relation is checked before
+   * the first authoritative write is prepared for execution.
+   */
+  public async createContactWithInitialRelations(
+    input: ContactCreate,
+    relations: InitialContactRelations,
+  ): Promise<{ contact: Contact; eventId: string }> {
+    await this.validateInitialRelations(relations);
+
+    const workspaceId = this.context.workspaceId;
+    const id = uuidv7();
+    const eventId = uuidv7();
+    const now = nowIso();
+    const orm = this.database.orm;
+    const statements: BatchItem<"sqlite">[] = [
+      orm.insert(contacts).values({
+        id,
+        workspaceId,
+        email: input.email?.toLowerCase() ?? null,
+        firstName: input.firstName ?? null,
+        lastName: input.lastName ?? null,
+        phone: input.phone ?? null,
+        externalId: input.externalId ?? null,
+        stage: input.stage ?? "lead",
+        score: 0,
+        status: "active",
+        customFields: JSON.stringify(input.customFields),
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ];
+    if (relations.tagId) {
+      statements.push(
+        orm.insert(contactTags).values({
+          workspaceId,
+          contactId: id,
+          tagId: relations.tagId,
+          createdAt: now,
+        }),
+      );
+    }
+    if (relations.segmentId) {
+      statements.push(
+        orm.insert(segmentMemberships).values({
+          workspaceId,
+          segmentId: relations.segmentId,
+          contactId: id,
+          source: "static",
+          joinedAt: now,
+        }),
+      );
+    }
+    if (relations.companyId) {
+      statements.push(
+        orm.insert(companyContacts).values({
+          workspaceId,
+          companyId: relations.companyId,
+          contactId: id,
+          title: null,
+          isPrimary: true,
+          createdAt: now,
+        }),
+      );
+    }
+    const event = {
+      id: eventId,
+      workspaceId,
+      contactId: id,
+      visitorId: null,
+      type: "contact_created",
+      resourceType: "contact",
+      resourceId: id,
+      properties: JSON.stringify({}),
+      occurredAt: now,
+      createdAt: now,
+    };
+    statements.push(
+      orm.insert(contactEvents).values(event),
+      orm.insert(contactEventOutbox).values({
+        eventId,
+        workspaceId,
+        status: "pending",
+        createdAt: now,
+      }),
+      orm.insert(contactEventProjections).values(contactEventProjectionRows(event)),
+    );
+
+    await orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    return {
+      contact: ensureLoaded(await this.getContact(id), "Created contact"),
+      eventId,
+    };
+  }
+
+  private async validateInitialRelations(relations: InitialContactRelations): Promise<void> {
+    const workspaceId = this.context.workspaceId;
+    if (relations.tagId) {
+      const tag = await this.database.orm
+        .select({ id: tags.id })
+        .from(tags)
+        .where(and(eq(tags.workspaceId, workspaceId), eq(tags.id, relations.tagId)))
+        .get();
+      if (!tag) throw new ContactRelationInvalidError("tagId");
+    }
+    if (relations.segmentId) {
+      const segment = await this.database.orm
+        .select({ id: segments.id })
+        .from(segments)
+        .where(
+          and(
+            eq(segments.workspaceId, workspaceId),
+            eq(segments.id, relations.segmentId),
+            eq(segments.kind, "static"),
+          ),
+        )
+        .get();
+      if (!segment) throw new ContactRelationInvalidError("segmentId");
+    }
+    if (relations.companyId) {
+      const company = await this.database.orm
+        .select({ id: companies.id })
+        .from(companies)
+        .where(and(eq(companies.workspaceId, workspaceId), eq(companies.id, relations.companyId)))
+        .get();
+      if (!company) throw new ContactRelationInvalidError("companyId");
+    }
   }
 
   public async updateContact(id: string, input: ContactUpdate): Promise<Contact | null> {

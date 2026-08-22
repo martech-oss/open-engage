@@ -35,7 +35,6 @@ export function ContactOverlays({
         options={options}
         onSaved={async () => {
           onShowCreateChange(false);
-          await onContactDataChanged();
         }}
       />
       <SegmentSaveForm
