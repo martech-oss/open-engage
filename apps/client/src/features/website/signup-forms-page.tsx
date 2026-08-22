@@ -8,7 +8,7 @@ import { useSignupFormsController } from "./signup-forms-controller";
 import { signupFormColumns, SignupFormsSummary } from "./signup-forms-view";
 
 export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
-  const controller = useSignupFormsController();
+  const controller = useSignupFormsController(workspaceSlug);
   const { formatDateTime } = useWorkspaceFormatters();
   const editor = controller.editor;
   return (
@@ -19,10 +19,10 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
       summary={<SignupFormsSummary items={controller.items} />}
       listTitle="フォーム一覧"
       columns={signupFormColumns({
-        workspaceSlug,
         formatDateTime,
         onEdit: editor.openEdit,
         onArchive: controller.archive,
+        publicUrls: controller.publicUrls,
       })}
       rows={controller.items}
       rowKey={(item) => item.id}

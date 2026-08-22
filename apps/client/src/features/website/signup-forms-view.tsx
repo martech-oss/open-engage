@@ -10,15 +10,15 @@ import type { SignupFormRow } from "./website-api";
 import { PublishStatusBadge } from "./website-shared";
 
 export function signupFormColumns({
-  workspaceSlug,
   formatDateTime,
   onEdit,
   onArchive,
+  publicUrls,
 }: {
-  workspaceSlug: string;
   formatDateTime: (value: string) => string;
   onEdit: (item: SignupFormRow) => void;
   onArchive: (item: SignupFormRow) => Promise<void>;
+  publicUrls: (item: SignupFormRow) => { page: string; embed: string };
 }): DataTableColumn<SignupFormRow>[] {
   return [
     {
@@ -47,8 +47,8 @@ export function signupFormColumns({
       key: "actions",
       header: "操作",
       cell: (item) => {
-        const publicUrl = `${window.location.origin}/f/${workspaceSlug}/${item.slug}`;
-        const embedCode = `<script async src="${window.location.origin}/api/public/forms/${workspaceSlug}/${item.slug}/embed.js"></script>`;
+        const urls = publicUrls(item);
+        const embedCode = `<script async src="${urls.embed}"></script>`;
         return (
           <div className="flex justify-end gap-1">
             <CopyButton value={embedCode} label="埋め込み" />
@@ -58,7 +58,7 @@ export function signupFormColumns({
                 variant="outline"
                 render={
                   <a
-                    href={publicUrl}
+                    href={urls.page}
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`${item.name}を表示`}

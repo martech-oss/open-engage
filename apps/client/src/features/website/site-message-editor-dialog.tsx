@@ -13,6 +13,7 @@ import { saveResource } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
+import { SiteMessageScheduleFields } from "./site-message-schedule-fields";
 import { type SiteMessageRow, useCreateSiteMessage, useUpdateSiteMessage } from "./website-api";
 
 export function SiteMessageEditorDialog({
@@ -121,20 +122,10 @@ export function SiteMessageEditorDialog({
         placeholder="/pricing*"
         required
       />
-      <FieldGroup className="grid gap-4 sm:grid-cols-2">
-        <FormInput
-          label="表示開始"
-          name="startsAt"
-          type="datetime-local"
-          defaultValue={toDateTimeLocal(item?.startsAt)}
-        />
-        <FormInput
-          label="表示終了"
-          name="endsAt"
-          type="datetime-local"
-          defaultValue={toDateTimeLocal(item?.endsAt)}
-        />
-      </FieldGroup>
+      <SiteMessageScheduleFields
+        startsAt={toDateTimeLocal(item?.startsAt)}
+        endsAt={toDateTimeLocal(item?.endsAt)}
+      />
     </FormDialog>
   );
 }

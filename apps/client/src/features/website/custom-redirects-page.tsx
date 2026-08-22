@@ -34,10 +34,10 @@ export function CustomRedirectsPage(): ReactNode {
       listTitle="リンク一覧"
       listDescription="計測用URLをコピーして、広告やSNSの遷移先に設定してください。"
       columns={customRedirectColumns({
-        workspaceSlug: controller.workspaceSlug,
         formatDateTime,
         onEdit: editor.openEdit,
         onArchive: controller.archive,
+        publicUrl: controller.publicUrl,
       })}
       rows={controller.items}
       rowKey={(item) => item.id}

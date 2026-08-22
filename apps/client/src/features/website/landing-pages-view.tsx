@@ -10,15 +10,15 @@ import type { LandingPageRow } from "./website-api";
 import { PublishStatusBadge } from "./website-shared";
 
 export function landingPageColumns({
-  workspaceSlug,
   formatDateTime,
   onEdit,
   onArchive,
+  publicUrl,
 }: {
-  workspaceSlug: string;
   formatDateTime: (value: string) => string;
   onEdit: (item: LandingPageRow) => void;
   onArchive: (item: LandingPageRow) => Promise<void>;
+  publicUrl: (item: LandingPageRow) => string;
 }): DataTableColumn<LandingPageRow>[] {
   return [
     {
@@ -38,7 +38,7 @@ export function landingPageColumns({
       key: "actions",
       header: "操作",
       cell: (item) => {
-        const url = `${window.location.origin}/p/${workspaceSlug}/${item.slug}`;
+        const url = publicUrl(item);
         return (
           <div className="flex justify-end gap-1">
             <CopyButton value={url} label="URL" />

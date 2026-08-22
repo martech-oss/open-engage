@@ -9,15 +9,15 @@ import { summarizeCustomRedirects } from "./resource-model";
 import type { CustomRedirectRow } from "./website-api";
 
 export function customRedirectColumns({
-  workspaceSlug,
   formatDateTime,
   onEdit,
   onArchive,
+  publicUrl,
 }: {
-  workspaceSlug: string;
   formatDateTime: (value: string) => string;
   onEdit: (item: CustomRedirectRow) => void;
   onArchive: (item: CustomRedirectRow) => Promise<void>;
+  publicUrl: (item: CustomRedirectRow) => string;
 }): DataTableColumn<CustomRedirectRow>[] {
   return [
     {
@@ -34,7 +34,7 @@ export function customRedirectColumns({
       key: "url",
       header: "計測用URL",
       cell: (item) => {
-        const url = publicUrl(workspaceSlug, item.slug);
+        const url = publicUrl(item);
         return (
           <div className="flex items-center gap-1">
             <code className="max-w-72 truncate text-xs">{url}</code>
@@ -109,8 +109,4 @@ export function CustomRedirectsSummary({ items }: { items: CustomRedirectRow[] }
       ))}
     </MetricGrid>
   );
-}
-
-function publicUrl(workspaceSlug: string, redirectSlug: string): string {
-  return `${window.location.origin}/r/${workspaceSlug}/${redirectSlug}`;
 }

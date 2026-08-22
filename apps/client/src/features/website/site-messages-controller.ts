@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { useResourceEditor } from "@/hooks/use-resource-editor";
 
-import { archiveWebsiteResource } from "./resource-model";
+import { archiveWebsiteResource } from "./resource-controller-actions";
 import {
   siteMessagesQueryOptions,
   type SiteMessageRow,

@@ -1,7 +1,7 @@
 import { KeyRound } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { FormInput, SuccessAlert } from "@/components/app-ui";
+import { ErrorAlert, FormInput, SuccessAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
@@ -25,6 +25,7 @@ export function TwoFactorPanel(): ReactNode {
         </div>
       </CardHeader>
       <CardContent>
+        {controller.error ? <ErrorAlert>{controller.error}</ErrorAlert> : null}
         {!controller.setup ? (
           <form onSubmit={(event) => void controller.enable(event)}>
             <FieldGroup>

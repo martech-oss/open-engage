@@ -8,7 +8,7 @@ import { landingPageColumns, LandingPagesSummary } from "./landing-pages-view";
 import { WebsiteResourceListPage } from "./resource-page";
 
 export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
-  const controller = useLandingPagesController();
+  const controller = useLandingPagesController(workspaceSlug);
   const { formatDateTime } = useWorkspaceFormatters();
   const editor = controller.editor;
   return (
@@ -20,10 +20,10 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
       listTitle="ページ一覧"
       listDescription="公開URLと現在のバージョンを管理します。"
       columns={landingPageColumns({
-        workspaceSlug,
         formatDateTime,
         onEdit: editor.openEdit,
         onArchive: controller.archive,
+        publicUrl: controller.publicUrl,
       })}
       rows={controller.items}
       rowKey={(item) => item.id}

@@ -3,7 +3,8 @@ import { toast } from "sonner";
 
 import { useResourceEditor } from "@/hooks/use-resource-editor";
 
-import { archiveWebsiteResource } from "./resource-model";
+import { websitePublicUrls } from "./public-urls";
+import { archiveWebsiteResource } from "./resource-controller-actions";
 import {
   customRedirectsQueryOptions,
   siteTrackingQueryOptions,
@@ -13,13 +14,14 @@ import {
   useUpdateCustomRedirect,
 } from "./website-api";
 
-export function useCustomRedirectsController() {
+export function useCustomRedirectsController(publicOrigin?: string) {
   const { data: items } = useSuspenseQuery(customRedirectsQueryOptions());
   const { data: tracking } = useSuspenseQuery(siteTrackingQueryOptions());
   const editor = useResourceEditor<CustomRedirectRow>();
   const archiveMutation = useArchiveCustomRedirect();
   const createMutation = useCreateCustomRedirect();
   const updateMutation = useUpdateCustomRedirect();
+  const urls = websitePublicUrls(tracking.workspaceSlug, publicOrigin);
   const archive = (item: CustomRedirectRow) =>
     archiveWebsiteResource({
       archive: () => archiveMutation.mutateAsync({ id: item.id }),
@@ -28,10 +30,10 @@ export function useCustomRedirectsController() {
     });
   return {
     items,
-    workspaceSlug: tracking.workspaceSlug,
     editor,
     archive,
     createMutation,
     updateMutation,
+    publicUrl: (item: CustomRedirectRow) => urls.customRedirect(item.slug),
   };
 }
