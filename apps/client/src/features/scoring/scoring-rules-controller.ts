@@ -1,0 +1,37 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { getErrorMessage } from "@/hooks/use-form-submission";
+import { useResourceEditor } from "@/hooks/use-resource-editor";
+
+import {
+  scoringCategoriesQueryOptions,
+  scoringRulesQueryOptions,
+  type ScoringRuleRow,
+  useArchiveScoringRule,
+} from "./scoring-api";
+import { summarizeScoringRules } from "./scoring-model";
+
+export function useScoringRulesController() {
+  const { data: rules } = useSuspenseQuery(scoringRulesQueryOptions());
+  const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
+  const editor = useResourceEditor<ScoringRuleRow>();
+  const archiveMutation = useArchiveScoringRule();
+
+  async function archive(item: ScoringRuleRow): Promise<void> {
+    try {
+      await archiveMutation.mutateAsync({ id: item.id });
+      toast.success("ルールをアーカイブしました");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "アーカイブできませんでした"));
+    }
+  }
+
+  return {
+    rules,
+    categories,
+    summary: summarizeScoringRules(rules, categories.length),
+    editor,
+    archive,
+  };
+}
