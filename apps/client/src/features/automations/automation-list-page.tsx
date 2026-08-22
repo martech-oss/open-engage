@@ -5,13 +5,13 @@ import { lazy, type ReactNode, Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
-  AppDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
   PageLayout,
   SimpleEmpty,
 } from "@/components/app-ui";
+import { AppDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import {
   Card,

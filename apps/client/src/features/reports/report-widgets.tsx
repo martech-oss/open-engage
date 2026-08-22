@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 
-import { EmptyState, SimpleBarChart } from "@/components/app-ui";
+import { EmptyState } from "@/components/app-ui";
+import { SimpleBarChart } from "@/components/app-ui/bar-chart";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,

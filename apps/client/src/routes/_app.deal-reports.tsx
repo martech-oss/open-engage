@@ -1,7 +1,7 @@
 import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
-import { DealReportsPage } from "@/features/deals/deal-pages";
+import { DealReportsPage } from "@/features/deals/deal-pages/deal-reports-page";
 import {
   createReportSearchDefaults,
   dealReportQueryOptions,

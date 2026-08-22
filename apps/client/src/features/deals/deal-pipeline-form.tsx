@@ -2,7 +2,8 @@ import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm, FormDialog, FormInput } from "@/components/app-ui";
+import { FormInput } from "@/components/app-ui";
+import { ArchiveConfirm, FormDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

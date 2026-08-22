@@ -1,16 +1,4 @@
-import {
-  Clock3,
-  GitBranch,
-  Mail,
-  MousePointerClick,
-  Pause,
-  Play,
-  RotateCcw,
-  Save,
-  Send,
-  Sparkles,
-  TriangleAlert,
-} from "lucide-react";
+import { Pause, Play, RotateCcw, Save, Send, Sparkles, TriangleAlert } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -26,10 +14,8 @@ import {
   useSaveAutomationDraft,
   useSetAutomationStatus,
 } from "./automation-api";
-import { StepButton } from "./automation-flow-node";
 import { AutomationStatusBadge } from "./automation-status-badge";
 import type { AutomationDraft, AutomationOptions } from "./automation-types";
-import { useAutomationBuilder } from "./use-automation-builder";
 
 const AutomationFlowCanvas = lazy(() => import("./automation-flow-canvas"));
 const AutomationAiSheet = lazy(async () => ({
@@ -48,8 +34,7 @@ export function AutomationBuilder({
   const saveDraft = useSaveAutomationDraft();
   const publishDraft = usePublishAutomationDraft();
   const setAutomationStatus = useSetAutomationStatus();
-  const builder = useAutomationBuilder(initialDraft.graph);
-  const { definition, selectedNode, flowNodes, flowEdges } = builder;
+  const [definition, setDefinition] = useState(initialDraft.graph);
   const [status, setStatus] = useState(initialDraft.status);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -73,17 +58,6 @@ export function AutomationBuilder({
     [definition],
   );
   const blockingIssues = [...new Set([...graphIssues, ...templateIssues])];
-
-  function addNode(kind: "email" | "delay" | "decision" | "condition"): void {
-    const result = builder.addNode(kind, options);
-    if (result === "template_missing") {
-      toast.error("先にメールテンプレートを作成してください");
-      return;
-    }
-    toast.success(
-      result === "connected" ? "ステップを追加して接続しました" : "ステップを追加しました",
-    );
-  }
 
   async function save(publish = false): Promise<void> {
     setSaving(true);
@@ -127,9 +101,7 @@ export function AutomationBuilder({
             aria-label="オートメーション名"
             className="h-auto border-0 px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
             value={definition.name}
-            onChange={(event) =>
-              builder.replaceDefinition({ ...definition, name: event.target.value })
-            }
+            onChange={(event) => setDefinition({ ...definition, name: event.target.value })}
           />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <AutomationStatusBadge status={status} />
@@ -157,7 +129,7 @@ export function AutomationBuilder({
               variant="ghost"
               disabled={saving}
               onClick={() => {
-                builder.replaceDefinition(undoDefinition);
+                setDefinition(undoDefinition);
                 setUndoDefinition(null);
                 toast.success("AI適用前の状態に戻しました");
               }}
@@ -191,54 +163,19 @@ export function AutomationBuilder({
           <AlertDescription>{blockingIssues.join(" / ")}</AlertDescription>
         </Alert>
       ) : null}
-      <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] grid-cols-[64px_minmax(0,1fr)] bg-muted/60 lg:grid-cols-[180px_minmax(0,1fr)_320px]">
-        <div className="flex flex-col gap-2 border-r bg-background p-2 lg:p-3">
-          <div className="hidden px-1 pb-1 text-xs font-medium text-muted-foreground lg:block">
-            ステップを追加
+      <Suspense
+        fallback={
+          <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] place-items-center bg-muted/60">
+            <Spinner />
           </div>
-          <StepButton icon={Mail} label="メール" onClick={() => addNode("email")} />
-          <StepButton icon={Clock3} label="待機" onClick={() => addNode("delay")} />
-          <StepButton
-            icon={MousePointerClick}
-            label="行動を待つ"
-            onClick={() => addNode("decision")}
-          />
-          <StepButton icon={GitBranch} label="条件分岐" onClick={() => addNode("condition")} />
-        </div>
-        <Suspense
-          fallback={
-            <div className="col-span-2 grid place-items-center">
-              <Spinner />
-            </div>
-          }
-        >
-          <AutomationFlowCanvas
-            flowNodes={flowNodes}
-            flowEdges={flowEdges}
-            definition={definition}
-            selectedNode={selectedNode}
-            options={options}
-            onNodesChange={builder.onNodesChange}
-            onEdgesChange={builder.onEdgesChange}
-            onConnect={(connection) => {
-              if (builder.connect(connection)) toast.success("ノードを接続しました");
-              else toast.error("循環する接続は作成できません");
-            }}
-            onSelectNode={builder.selectNode}
-            onUpdateNode={(update) => {
-              if (selectedNode) builder.updateNode(selectedNode.id, update);
-            }}
-            onConnectionChange={(sourceId, branch, targetId) => {
-              if (!builder.setConnection(sourceId, branch, targetId)) {
-                toast.error("循環する接続は作成できません");
-                return;
-              }
-              toast.success(targetId ? "接続先を更新しました" : "接続を解除しました");
-            }}
-            onDelete={builder.deleteSelectedNode}
-          />
-        </Suspense>
-      </div>
+        }
+      >
+        <AutomationFlowCanvas
+          definition={definition}
+          options={options}
+          onDefinitionChange={setDefinition}
+        />
+      </Suspense>
       <Suspense fallback={null}>
         {aiOpen ? (
           <AutomationAiSheet
@@ -249,7 +186,7 @@ export function AutomationBuilder({
             currentDefinition={definition}
             onApply={async (nextDefinition) => {
               setUndoDefinition(definition);
-              builder.replaceDefinition(nextDefinition);
+              setDefinition(nextDefinition);
               setAiOpen(false);
               toast.success("AIの提案をキャンバスに適用しました。保存前に内容を確認してください");
             }}

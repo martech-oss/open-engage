@@ -1,7 +1,8 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { PageLayout, SimpleBarChart, SimpleEmpty } from "@/components/app-ui";
+import { PageLayout, SimpleEmpty } from "@/components/app-ui";
+import { SimpleBarChart } from "@/components/app-ui/bar-chart";
 import { dashboardQueryOptions, TREND_WINDOW } from "@/features/dashboard/dashboard-api";
 import {
   ActivityRows,

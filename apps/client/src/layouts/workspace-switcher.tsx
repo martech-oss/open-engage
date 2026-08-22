@@ -5,7 +5,8 @@ import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/auth-client";
-import { FormDialog, FormInput } from "@/components/app-ui";
+import { FormInput } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import {
   DropdownMenu,
   DropdownMenuContent,

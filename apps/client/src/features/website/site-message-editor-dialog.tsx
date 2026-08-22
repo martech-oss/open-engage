@@ -1,12 +1,7 @@
 import { type FormEvent, type ReactNode } from "react";
 
-import {
-  FormDialog,
-  FormInput,
-  FormNativeSelect,
-  FormSelectOption,
-  FormTextarea,
-} from "@/components/app-ui";
+import { FormInput, FormNativeSelect, FormSelectOption, FormTextarea } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { FieldGroup } from "@/components/ui/field";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";

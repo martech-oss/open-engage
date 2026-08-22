@@ -1,7 +1,8 @@
 import { Archive, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { ArchiveConfirm, ErrorAlert as ErrorNotice } from "@/components/app-ui";
+import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,

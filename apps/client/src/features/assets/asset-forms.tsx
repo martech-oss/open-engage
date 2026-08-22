@@ -2,16 +2,14 @@ import { UploadCloud } from "lucide-react";
 import { type DragEvent, type FormEvent, type ReactNode, useState } from "react";
 
 import {
-  AppDialog,
-  ConfirmDialog,
   ErrorAlert,
-  FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
   FormTextarea,
   LoadingButton,
 } from "@/components/app-ui";
+import { AppDialog, ConfirmDialog, FormDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";

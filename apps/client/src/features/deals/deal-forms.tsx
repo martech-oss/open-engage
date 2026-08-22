@@ -2,7 +2,6 @@ import { Check, Pencil, Trash2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 
 import {
-  ConfirmDialog,
   ErrorAlert,
   FormInput,
   FormNativeSelect,
@@ -10,6 +9,7 @@ import {
   FormTextarea,
   LoadingButton,
 } from "@/components/app-ui";
+import { ConfirmDialog } from "@/components/app-ui/dialogs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";

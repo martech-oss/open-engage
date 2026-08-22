@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode } from "react";
 
-import { FormDialog, FormInput } from "@/components/app-ui";
+import { FormInput } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import type { DealStage } from "@/features/deals/deal-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";

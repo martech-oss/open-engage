@@ -3,7 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { ImagesIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { AppDialog, EmptyState } from "@/components/app-ui";
+import { EmptyState } from "@/components/app-ui";
+import { AppDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import {
   Item,

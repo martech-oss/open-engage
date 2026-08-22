@@ -1,6 +1,7 @@
 import type { FormEvent, ReactNode } from "react";
 
-import { FormDialog, FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
+import { FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { FieldGroup } from "@/components/ui/field";
 import { GRADING_FIELDS, GRADING_OPERATORS } from "@openengage/core/scoring";
 

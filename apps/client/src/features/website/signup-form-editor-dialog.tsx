@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { FormDialog } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 import type { FormField } from "@openengage/core/web";

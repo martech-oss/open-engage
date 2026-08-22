@@ -7,7 +7,7 @@ import {
   type Node,
   type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useMemo, useReducer } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type {
   AutomationDefinition,
@@ -56,12 +56,11 @@ export function automationBuilderReducer(
   }
 }
 
-export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
-  const [state, dispatch] = useReducer(automationBuilderReducer, {
-    definition: initialDefinition,
-    selectedNodeId: initialDefinition.nodes[0]?.id ?? null,
-  });
-  const { definition, selectedNodeId } = state;
+export function useAutomationBuilder(
+  definition: AutomationDefinition,
+  onDefinitionChange: (definition: AutomationDefinition) => void,
+) {
+  const [selectedNodeId, setSelectedNodeId] = useState(definition.nodes[0]?.id ?? null);
   const selectedNode = definition.nodes.find((node) => node.id === selectedNodeId) ?? null;
 
   const flowNodes: Node[] = useMemo(
@@ -97,28 +96,22 @@ export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       const changed = applyNodeChanges(changes, flowNodes);
-      dispatch({
-        type: "replace_definition",
-        definition: {
-          ...definition,
-          nodes: definition.nodes.map((node) => {
-            const flow = changed.find((item) => item.id === node.id);
-            return flow ? { ...node, position: flow.position } : node;
-          }),
-        },
+      onDefinitionChange({
+        ...definition,
+        nodes: definition.nodes.map((node) => {
+          const flow = changed.find((item) => item.id === node.id);
+          return flow ? { ...node, position: flow.position } : node;
+        }),
       });
     },
-    [definition, flowNodes],
+    [definition, flowNodes, onDefinitionChange],
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       const changed = applyEdgeChanges(changes, flowEdges);
-      dispatch({
-        type: "replace_definition",
-        definition: { ...definition, edges: changed.map(toAutomationEdge) },
-      });
+      onDefinitionChange({ ...definition, edges: changed.map(toAutomationEdge) });
     },
-    [definition, flowEdges],
+    [definition, flowEdges, onDefinitionChange],
   );
 
   function connect(connection: Connection): boolean {
@@ -126,17 +119,14 @@ export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
     const branch = isBranch(connection.sourceHandle) ? connection.sourceHandle : "next";
     const next = withAutomationConnection(definition, connection.source, connection.target, branch);
     if (!next) return false;
-    dispatch({ type: "replace_definition", definition: next });
+    onDefinitionChange(next);
     return true;
   }
 
   function updateNode(nodeId: string, update: (node: AutomationNode) => AutomationNode): void {
-    dispatch({
-      type: "replace_definition",
-      definition: {
-        ...definition,
-        nodes: definition.nodes.map((node) => (node.id === nodeId ? update(node) : node)),
-      },
+    onDefinitionChange({
+      ...definition,
+      nodes: definition.nodes.map((node) => (node.id === nodeId ? update(node) : node)),
     });
   }
 
@@ -176,26 +166,23 @@ export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
             ),
         )?.[0]
       : undefined;
-    dispatch({
-      type: "replace_and_select",
-      definition: {
-        ...definition,
-        nodes: [...definition.nodes, node],
-        edges:
-          selectedNode && freeBranch
-            ? [
-                ...definition.edges,
-                {
-                  id: crypto.randomUUID(),
-                  source: selectedNode.id,
-                  target: node.id,
-                  branch: freeBranch,
-                },
-              ]
-            : definition.edges,
-      },
-      nodeId: id,
+    onDefinitionChange({
+      ...definition,
+      nodes: [...definition.nodes, node],
+      edges:
+        selectedNode && freeBranch
+          ? [
+              ...definition.edges,
+              {
+                id: crypto.randomUUID(),
+                source: selectedNode.id,
+                target: node.id,
+                branch: freeBranch,
+              },
+            ]
+          : definition.edges,
     });
+    setSelectedNodeId(id);
     return freeBranch ? "connected" : "unconnected";
   }
 
@@ -206,23 +193,20 @@ export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
   ): boolean {
     const next = withAutomationConnection(definition, sourceId, targetId || null, branch);
     if (!next) return false;
-    dispatch({ type: "replace_definition", definition: next });
+    onDefinitionChange(next);
     return true;
   }
 
   function deleteSelectedNode(): void {
     if (!selectedNode || selectedNode.type === "source") return;
-    dispatch({
-      type: "replace_and_select",
-      definition: {
-        ...definition,
-        nodes: definition.nodes.filter((node) => node.id !== selectedNode.id),
-        edges: definition.edges.filter(
-          (edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id,
-        ),
-      },
-      nodeId: null,
+    onDefinitionChange({
+      ...definition,
+      nodes: definition.nodes.filter((node) => node.id !== selectedNode.id),
+      edges: definition.edges.filter(
+        (edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id,
+      ),
     });
+    setSelectedNodeId(null);
   }
 
   return {
@@ -238,8 +222,6 @@ export function useAutomationBuilder(initialDefinition: AutomationDefinition) {
     addNode,
     setConnection,
     deleteSelectedNode,
-    replaceDefinition: (next: AutomationDefinition) =>
-      dispatch({ type: "replace_definition", definition: next }),
-    selectNode: (nodeId: string | null) => dispatch({ type: "select_node", nodeId }),
+    selectNode: setSelectedNodeId,
   };
 }

@@ -1,7 +1,8 @@
 import { ExternalLink, FileStack, Globe2, Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { ArchiveConfirm, CopyButton, MetricCard, MetricGrid } from "@/components/app-ui";
+import { CopyButton, MetricCard, MetricGrid } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import type { DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 

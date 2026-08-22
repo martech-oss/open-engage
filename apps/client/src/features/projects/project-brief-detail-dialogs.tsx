@@ -2,7 +2,8 @@ import { Sparkles } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { AppDialog, ErrorAlert, LoadingButton } from "@/components/app-ui";
+import { ErrorAlert, LoadingButton } from "@/components/app-ui";
+import { AppDialog } from "@/components/app-ui/dialogs";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";

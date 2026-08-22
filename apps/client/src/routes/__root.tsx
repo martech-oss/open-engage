@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import "@xyflow/react/dist/style.css";
 import "../styles.css";
 
 export interface RouterContext {

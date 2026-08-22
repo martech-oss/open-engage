@@ -3,7 +3,8 @@ import { Plus, Tags } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { FormDialog, FormInput, PageLayout } from "@/components/app-ui";
+import { FormInput, PageLayout } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

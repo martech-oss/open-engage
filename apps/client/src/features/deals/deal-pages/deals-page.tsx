@@ -4,13 +4,8 @@ import { Pencil, Plus, Search } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  AppDialog,
-  EmptyState,
-  FormNativeSelect,
-  FormSelectOption,
-  PageLayout,
-} from "@/components/app-ui";
+import { EmptyState, FormNativeSelect, FormSelectOption, PageLayout } from "@/components/app-ui";
+import { AppDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";

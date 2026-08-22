@@ -1189,6 +1189,106 @@ await test("architecture policy accepts and rejects controlled repositories", as
       want: "unresolved client alias",
     },
     {
+      name: "rejects route-local SSR opt-outs",
+      files: {
+        "apps/client/src/routes/_app.contacts.tsx":
+          "declare function createFileRoute(path: string): (options: unknown) => unknown;\n" +
+          'export const Route = createFileRoute("/_app/contacts")({ ssr: false });\n',
+      },
+      want: "route ssr:false",
+    },
+    {
+      name: "allows the word ssr false outside a route option",
+      files: {
+        "apps/client/src/features/contacts/labels.ts":
+          'export const documentation = "route ssr: false is forbidden";\n',
+      },
+    },
+    {
+      name: "rejects direct client role equality used as permission logic",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const canManage = (workspace: { role: string }) => workspace.role === "admin";\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
+      name: "rejects direct client role permission sets",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const canManage = (role: string) => ["owner", "admin"].includes(role);\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
+      name: "rejects renamed client role equality",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const canManage = (currentRole: string) => currentRole !== "viewer";\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
+      name: "rejects a client role Set even before its permission lookup",
+      files: {
+        "apps/client/src/features/settings/permissions.ts":
+          'export const privileged = new Set(["owner", "admin"]);\n',
+      },
+      want: "server-provided capabilities",
+    },
+    {
+      name: "allows role labels and role display values",
+      files: {
+        "apps/client/src/features/settings/role-labels.tsx":
+          'const labels = { owner: "所有者", admin: "管理者" };\n' +
+          "export const RoleLabel = ({ member }: { member: { role: string } }) => <span>{member.role}</span>;\n" +
+          "void labels;\n",
+      },
+    },
+    {
+      name: "allows direct role logic in test fixtures",
+      files: {
+        "apps/client/src/features/settings/permissions.test.ts":
+          'export const expected = ({ role }: { role: string }) => role === "admin";\n',
+      },
+    },
+    {
+      name: "rejects RPCLink transport setup outside the shared client module",
+      files: {
+        "apps/client/src/features/contacts/transport.ts":
+          'import { RPCLink } from "@orpc/client/fetch";\nexport const link = new RPCLink({});\n',
+      },
+      want: "shared client oRPC module",
+    },
+    {
+      name: "allows RPCLink transport setup in the shared client module",
+      files: {
+        "apps/client/src/lib/orpc.ts":
+          'import { RPCLink } from "@orpc/client/fetch";\nexport const link = new RPCLink({});\n',
+      },
+    },
+    {
+      name: "allows focused Task 6 files and functions at their ratchet limits",
+      files: {
+        "apps/client/src/features/segments/segment-builder.tsx": componentLines(120),
+        "apps/client/src/features/emails/email-block-editor.tsx": sourceLines(250),
+      },
+    },
+    {
+      name: "rejects a focused Task 6 file above 250 lines",
+      files: {
+        "apps/client/src/features/emails/email-block-editor.tsx": sourceLines(251),
+      },
+      want: "Task 6 hotspot.*over 250 lines",
+    },
+    {
+      name: "rejects a focused Task 6 function above 120 lines",
+      files: {
+        "apps/client/src/features/segments/segment-builder.tsx": componentLines(121),
+      },
+      want: "Task 6 hotspot function.*over 120 lines",
+    },
+    {
       name: "rejects platform to channels inversion",
       files: {
         "apps/server/src/platform/signatures.ts": 'import "../channels/index";\n',

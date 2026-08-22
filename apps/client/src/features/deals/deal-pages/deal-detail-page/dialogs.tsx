@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 
-import { AppDialog } from "@/components/app-ui";
+import { AppDialog } from "@/components/app-ui/dialogs";
 
 import type { DealDetailData, DealOptions, DealTask } from "../../deal-api";
 import { DealForm, DealTaskForm } from "../../deal-forms";

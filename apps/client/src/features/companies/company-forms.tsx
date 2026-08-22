@@ -2,14 +2,8 @@ import { Sparkles } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
 
-import {
-  AppDialog,
-  EmptyState,
-  FormDialog,
-  FormInput,
-  FormNativeSelect,
-  FormSelectOption,
-} from "@/components/app-ui";
+import { EmptyState, FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
+import { AppDialog, FormDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {

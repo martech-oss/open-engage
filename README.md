@@ -108,6 +108,21 @@ platform / projects / reports / scoring / segments / web / workspaces
 
 ### apps/client のUI・データ層規約
 
+画面とデータ更新の責務は次の境界に固定します:
+
+| 関心事              | Client (`apps/client`)                                              | Server / Database                                                 |
+| ------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 表示・入力          | 画面構成、入力中のdraft、開閉・選択状態                             | 表示用DTO、選択肢、server capabilityを返す                        |
+| 認可                | server capabilityから表示可否を決める（roleから権限を再構成しない） | Workspace roleと対象resourceを検証し、capabilityを決定する        |
+| 読み取り            | feature APIのquery options/hookを使い、loaderで必要なcacheを温める  | Repositoryを通じてscope済みデータを取得する                       |
+| 単一resource更新    | 1つのmutationを呼び、成功後に関連queryを無効化する                  | 入力検証、認可、永続化、監査を完結する                            |
+| 複数resource更新    | 1つのuser actionにつき1つのserver commandを呼ぶ                     | transaction/補償を含む一連の更新を1 commandとしてatomicに実行する |
+| 外部I/O・長時間処理 | command受付結果と進捗を表示する                                     | Service/Queue/Agentで外部I/O、retry、実行状態を管理する           |
+
+1回のuser actionがContact作成とtag/company割り当てのように複数resourceを変更する場合、
+Clientで`create`後に`assign`を順番に呼んではいけません。oRPC contractに意図を表す単一の
+server commandを定義し、Server側で認可・transaction・監査・失敗時の扱いを完結させます。
+
 `components/app-ui/`はドメインを問わない共有UIコンポーネントです。新しい画面を作る前に
 まずここを確認してください:
 
@@ -120,6 +135,9 @@ platform / projects / reports / scoring / segments / web / workspaces
 | `feedback.tsx`    | `EmptyState`, `SimpleEmpty`, `ErrorAlert`, `SuccessAlert`, `LoadingButton`            |
 | `copy-button.tsx` | `CopyButton`(値または埋め込みコードのコピー)                                          |
 | `bar-chart.tsx`   | `SimpleBarChart`(日次バーチャート、recharts配線を隠蔽)                                |
+
+`bar-chart.tsx`と`dialogs.tsx`はoptionalで比較的重い境界なので`app-ui/index.tsx`から再exportしません。
+利用側は`@/components/app-ui/bar-chart`または`@/components/app-ui/dialogs`を直接importします。
 
 `features/<domain>/resource-page.tsx`のような、特定ドメイン専用のページ合成コンポーネント
 (例: `features/website/resource-page.tsx`の`WebsiteResourceListPage`)はここには置きません。
@@ -142,9 +160,8 @@ platform / projects / reports / scoring / segments / web / workspaces
   (コンポーネント側は`useSuspenseQuery`/`useQuery`に渡すだけで、`orpcQuery`を直接importしない)。
 - 作成・更新・削除は`use<Verb><Domain>()`という名前のhookにし、内部で`useMutation`を呼び、
   意味のあるキャッシュ無効化を`onSuccess`に持たせる。単純なCRUD(作成・更新・アーカイブ)は
-  built-in invalidationを持たせ、複数ステップの操作の一部(例: 連絡先作成の直後にタグ・会社を
-  割り当てる)は無効化を呼び出し側に委ねる薄いhookにし、理由を一行コメントで残す
-  (`features/contacts/contact-api.ts`の`useCreateContact`が参考実装)。
+  built-in invalidationを持たせる。複数resourceを変更するuser actionは、上記の通りClientで
+  複数mutationを連結せず、意図を表す単一server commandとして実装する。
 - コンポーネント(`.tsx`)から`orpc`/`orpcQuery`を直接importしないこと。
   `scripts/check-architecture.mjs`がこれを機械的に強制します。
 

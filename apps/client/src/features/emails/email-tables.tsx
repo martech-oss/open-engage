@@ -2,7 +2,7 @@ import { Pencil } from "lucide-react";
 import { type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

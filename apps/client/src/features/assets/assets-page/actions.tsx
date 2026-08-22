@@ -1,7 +1,8 @@
 import { ArchiveRestore, Pencil, Replace } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { ArchiveConfirm, CopyButton } from "@/components/app-ui";
+import { CopyButton } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 
 import { assetRawUrl, type AssetSummary } from "../asset-api";

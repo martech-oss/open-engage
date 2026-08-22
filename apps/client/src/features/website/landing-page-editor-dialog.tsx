@@ -2,7 +2,8 @@ import { Image as ImageIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { FormDialog, FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
+import { FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { AssetPickerDialog } from "@/features/assets/asset-picker";

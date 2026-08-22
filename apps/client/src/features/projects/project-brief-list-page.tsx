@@ -4,7 +4,8 @@ import { Plus, Sparkles } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { AppDialog, ErrorAlert, LoadingButton, PageLayout, SimpleEmpty } from "@/components/app-ui";
+import { ErrorAlert, LoadingButton, PageLayout, SimpleEmpty } from "@/components/app-ui";
+import { AppDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";

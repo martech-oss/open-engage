@@ -1,5 +1,3 @@
-import { type Edge } from "@xyflow/react";
-
 import {
   type AutomationDefinition,
   type AutomationEdge,
@@ -100,7 +98,14 @@ export function isBranch(value: string | null | undefined): value is AutomationE
   return value === "next" || value === "yes" || value === "no" || value === "timeout";
 }
 
-export function toAutomationEdge(edge: Edge): AutomationEdge {
+export interface AutomationFlowEdge {
+  data?: Record<string, unknown>;
+  id: string;
+  source: string;
+  target: string;
+}
+
+export function toAutomationEdge(edge: AutomationFlowEdge): AutomationEdge {
   return {
     id: edge.id,
     source: edge.source,

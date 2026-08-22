@@ -1,7 +1,8 @@
 import { Layers } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 
-import { FormDialog, FormInput } from "@/components/app-ui";
+import { FormInput } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

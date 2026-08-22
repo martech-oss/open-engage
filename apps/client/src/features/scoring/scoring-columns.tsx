@@ -1,6 +1,6 @@
 import { Pencil } from "lucide-react";
 
-import { ArchiveConfirm } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import type { DataTableColumn } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

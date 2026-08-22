@@ -1,7 +1,7 @@
 import { Archive } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { ArchiveConfirm } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 

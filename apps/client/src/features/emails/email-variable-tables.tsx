@@ -2,7 +2,8 @@ import { Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm, CopyButton } from "@/components/app-ui";
+import { CopyButton } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui/dialogs";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

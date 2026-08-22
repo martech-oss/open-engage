@@ -2,7 +2,8 @@ import { Sparkles } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { FormDialog, FormInput, FormTextarea } from "@/components/app-ui";
+import { FormInput, FormTextarea } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";

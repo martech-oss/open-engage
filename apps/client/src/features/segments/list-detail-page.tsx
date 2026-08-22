@@ -4,14 +4,8 @@ import { ArrowLeft, Pencil, Plus, UserMinus, Users } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  AppDialog,
-  EmptyState,
-  FormDialog,
-  FormNativeSelect,
-  FormSelectOption,
-  PageLayout,
-} from "@/components/app-ui";
+import { EmptyState, FormNativeSelect, FormSelectOption, PageLayout } from "@/components/app-ui";
+import { AppDialog, FormDialog } from "@/components/app-ui/dialogs";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

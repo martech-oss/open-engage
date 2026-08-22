@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode } from "react";
 
-import { FormDialog, FormInput, FormNativeSelect } from "@/components/app-ui";
+import { FormInput, FormNativeSelect } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { FieldGroup } from "@/components/ui/field";
 import { NativeSelectOption } from "@/components/ui/native-select";
 import { useCreateContact, type ContactOptions } from "@/features/contacts/contact-api";
