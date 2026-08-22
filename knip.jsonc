@@ -27,6 +27,8 @@
         "!src/routes/**/*.test.tsx",
       ],
       "project": ["src/**/*.{ts,tsx,css}", "vite.config.ts", "vitest.config.ts"],
+      // `cloudflare:workers` is a Workers runtime virtual module, not an npm dependency.
+      "ignoreDependencies": ["cloudflare"],
     },
     "apps/agent": {
       "entry": ["src/app.ts", "src/cloudflare.ts", "flue.config.ts", "vite.config.ts"],

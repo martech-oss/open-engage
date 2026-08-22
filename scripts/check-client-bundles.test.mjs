@@ -54,12 +54,12 @@ function entry(file, overrides = {}) {
   return { file: `assets/${file}`, isDynamicEntry: true, ...overrides };
 }
 
-test("accepts the exact automation and chart production bundle boundaries", async (t) => {
+void test("accepts the exact automation and chart production bundle boundaries", async (t) => {
   const root = await fixture(t);
   await assert.doesNotReject(() => verifyClientBundles({ root }));
 });
 
-test("rejects an ordinary route that statically reaches the XYFlow canvas chunk and CSS", async (t) => {
+void test("rejects an ordinary route that statically reaches the XYFlow canvas chunk and CSS", async (t) => {
   const root = await fixture(t, (manifest) => {
     manifest[ordinaryRoute].imports = [canvas];
   });
@@ -67,7 +67,7 @@ test("rejects an ordinary route that statically reaches the XYFlow canvas chunk 
   await assert.rejects(() => verifyClientBundles({ root }), /ordinary route.*XYFlow/i);
 });
 
-test("rejects global XYFlow CSS outside the lazy canvas closure", async (t) => {
+void test("rejects global XYFlow CSS outside the lazy canvas closure", async (t) => {
   const root = await fixture(t, (manifest, assets) => {
     manifest[listRoute].css = ["assets/global.css"];
     assets["assets/global.css"] = ".react-flow__edge { stroke: black; }";
@@ -76,7 +76,7 @@ test("rejects global XYFlow CSS outside the lazy canvas closure", async (t) => {
   await assert.rejects(() => verifyClientBundles({ root }), /XYFlow CSS.*canvas/i);
 });
 
-test("uses exact chart route allowlists instead of route-name substrings", async (t) => {
+void test("uses exact chart route allowlists instead of route-name substrings", async (t) => {
   const root = await fixture(t, (manifest, assets) => {
     const previewRoute = "src/routes/_app.reports-preview.tsx?tsr-split=component";
     manifest[previewRoute] = entry("reports-preview.js", { imports: ["_charts.js"] });
@@ -86,7 +86,7 @@ test("uses exact chart route allowlists instead of route-name substrings", async
   await assert.rejects(() => verifyClientBundles({ root }), /reports-preview.*Recharts/i);
 });
 
-test("rejects XYFlow dynamically imported by a route's shared static dependency", async (t) => {
+void test("rejects XYFlow dynamically imported by a route's shared static dependency", async (t) => {
   const root = await fixture(t, (manifest, assets) => {
     manifest[ordinaryRoute].imports = ["_shared-feature.js"];
     manifest["_shared-feature.js"] = entry("shared-feature.js", {
@@ -98,7 +98,7 @@ test("rejects XYFlow dynamically imported by a route's shared static dependency"
   await assert.rejects(() => verifyClientBundles({ root }), /ordinary route.*XYFlow/i);
 });
 
-test("rejects Recharts dynamically imported by a route's shared static dependency", async (t) => {
+void test("rejects Recharts dynamically imported by a route's shared static dependency", async (t) => {
   const root = await fixture(t, (manifest, assets) => {
     manifest[ordinaryRoute].imports = ["_shared-feature.js"];
     manifest["_shared-feature.js"] = entry("shared-feature.js", {
@@ -110,7 +110,7 @@ test("rejects Recharts dynamically imported by a route's shared static dependenc
   await assert.rejects(() => verifyClientBundles({ root }), /contacts.*Recharts/i);
 });
 
-test("does not attribute TanStack router registry dynamics to every route", async (t) => {
+void test("does not attribute TanStack router registry dynamics to every route", async (t) => {
   const root = await fixture(t, (manifest, assets) => {
     const registry =
       "../../node_modules/@tanstack/react-start/dist/plugin/default-entry/client.tsx";

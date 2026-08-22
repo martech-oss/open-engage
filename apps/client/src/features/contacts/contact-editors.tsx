@@ -1,18 +1,10 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Filter, X } from "lucide-react";
+import { Filter, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
-import {
-  assignCompanyContact,
-  invalidateCompanyQueries,
-  removeCompanyContact,
-} from "@/features/companies/company-api";
-import { type CompanyOption, type SegmentOption } from "@/features/contacts/contact-api";
-import { useFormSubmission } from "@/hooks/use-form-submission";
+import type { SegmentOption } from "@/features/contacts/contact-api";
 import type { ContactProfile } from "@openengage/core/contacts";
 
 import { ControlledSelect, Section } from "./contact-bits";
@@ -81,101 +73,6 @@ export function RelationEditor({
           </Button>
         </div>
       )}
-    </Section>
-  );
-}
-
-export function CompanyEditor({
-  contactId,
-  companies,
-  options,
-  disabled,
-  onChanged,
-}: {
-  contactId: string;
-  companies: ContactProfile["companies"];
-  options: CompanyOption[];
-  disabled: boolean;
-  onChanged: () => Promise<void>;
-}): ReactNode {
-  const [selectedId, setSelectedId] = useState("");
-  // addCompany/removeCompany share one busy/error pair, same as before.
-  const { busy, error, run } = useFormSubmission("会社を更新できませんでした");
-  const assigned = new Set(companies.map((company) => company.id));
-  const queryClient = useQueryClient();
-
-  async function addCompany() {
-    if (!selectedId) return;
-    await run(async () => {
-      await assignCompanyContact({
-        companyId: selectedId,
-        contactId,
-        isPrimary: companies.length === 0,
-      });
-      await invalidateCompanyQueries(queryClient, selectedId);
-      setSelectedId("");
-      await onChanged();
-    });
-  }
-
-  async function removeCompany(companyId: string) {
-    await run(async () => {
-      await removeCompanyContact(companyId, contactId);
-      await invalidateCompanyQueries(queryClient, companyId);
-      await onChanged();
-    });
-  }
-
-  return (
-    <Section title="会社" icon={<Building2 />}>
-      <div className="flex flex-wrap gap-2">
-        {companies.map((company) => (
-          <Badge key={company.id} variant="outline">
-            <Building2 />
-            {company.name}
-            {company.isPrimary ? " · 主担当" : ""}
-            {!disabled ? (
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                disabled={busy}
-                onClick={() => void removeCompany(company.id)}
-                aria-label={`${company.name}との関連を解除`}
-              >
-                <X />
-              </Button>
-            ) : null}
-          </Badge>
-        ))}
-        {companies.length === 0 ? (
-          <span className="text-sm text-muted-foreground">未所属</span>
-        ) : null}
-      </div>
-      {error ? <ErrorNotice>{error}</ErrorNotice> : null}
-      {!disabled ? (
-        <div className="flex gap-2">
-          <ControlledSelect
-            value={selectedId}
-            onValueChange={setSelectedId}
-            placeholder="追加する会社を選択"
-            className="flex-1"
-            options={options
-              .filter((company) => !assigned.has(company.id))
-              .map((company) => ({
-                value: company.id,
-                label: company.name,
-              }))}
-          />
-          <Button
-            variant="outline"
-            className="shrink-0"
-            disabled={!selectedId || busy}
-            onClick={() => void addCompany()}
-          >
-            追加
-          </Button>
-        </div>
-      ) : null}
     </Section>
   );
 }

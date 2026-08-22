@@ -7,7 +7,6 @@ import {
 
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
-  CompanyOption,
   ContactBulkAction,
   ContactDataJob,
   ContactExportFilter,
@@ -18,7 +17,7 @@ import type {
   SegmentOption,
 } from "@openengage/core/contacts";
 
-export type { CompanyOption, ContactOptions, SegmentOption };
+export type { ContactOptions, SegmentOption };
 
 export type ContactStatus = "active" | "archived" | "anonymous" | "all";
 export type ContactSort = "updatedAt" | "createdAt" | "score" | "name" | "email";

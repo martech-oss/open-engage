@@ -16,7 +16,7 @@ import { DataTableFooter } from "./data-table-footer";
 import { DataTableHeader } from "./data-table-header";
 import type { DataTableProps } from "./data-table-types";
 
-export type { DataTableColumn, DataTablePagination } from "./data-table-types";
+export type { DataTableColumn } from "./data-table-types";
 
 /**
  * Shared table shell. Local TanStack sorting is available only for complete

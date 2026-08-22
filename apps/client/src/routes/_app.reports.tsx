@@ -1,8 +1,4 @@
-import {
-  createFileRoute,
-  redirect,
-  type SearchSchemaInput,
-} from "@tanstack/react-router";
+import { createFileRoute, redirect, type SearchSchemaInput } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
 import {
