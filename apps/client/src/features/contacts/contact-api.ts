@@ -9,6 +9,8 @@ import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
   CompanyOption,
   ContactBulkAction,
+  ContactDataJob,
+  ContactExportFilter,
   ContactListInput,
   ContactOptions,
   ContactScoreAdjust,
@@ -99,6 +101,35 @@ export function buildContactSearchInput(search: ContactSearch, cursor?: string):
     ...(scoreMin === undefined ? {} : { scoreMin }),
     ...(scoreMax === undefined ? {} : { scoreMax }),
   };
+}
+
+/** Normalizes active filters without leaking list paging or sort state. */
+export function buildContactExportFilter(search: ContactSearch): ContactExportFilter {
+  const query = search.q.trim();
+  const scoreMin = optionalNumber(search.scoreMin);
+  const scoreMax = optionalNumber(search.scoreMax);
+  return {
+    status: search.status,
+    ...(query ? { query } : {}),
+    ...(search.stage ? { stage: search.stage } : {}),
+    ...(search.tagId ? { tagId: search.tagId } : {}),
+    ...(search.companyId ? { companyId: search.companyId } : {}),
+    ...(search.segmentId ? { segmentId: search.segmentId } : {}),
+    ...(scoreMin === undefined ? {} : { scoreMin }),
+    ...(scoreMax === undefined ? {} : { scoreMax }),
+  };
+}
+
+export function startContactExport(input: { filter: ContactExportFilter }) {
+  return orpc.contacts.startExport(input);
+}
+
+export function getContactDataJob(jobId: string): Promise<ContactDataJob> {
+  return orpc.contacts.getDataJob({ id: jobId });
+}
+
+export function downloadContactExport(jobId: string): Promise<File> {
+  return orpc.contacts.downloadExport({ id: jobId });
 }
 
 export function contactsQueryOptions(search: ContactSearch, cursor?: string) {

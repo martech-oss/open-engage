@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { contactDataJobSchema } from "@openengage/core/contacts";
+import { contactDataJobSchema, contactExportFilterSchema } from "@openengage/core/contacts";
 import { deadLetterRowSchema } from "@openengage/core/platform";
 import { dashboardSchema } from "@openengage/core/reports";
 
@@ -39,6 +39,7 @@ export const contactDataContract = {
   startExport: oc
     .route({ method: "POST", path: "/contacts/exports", successStatus: 202 })
     .errors(authedErrors)
+    .input(z.object({ filter: contactExportFilterSchema.optional() }).optional())
     .output(z.object({ jobId: z.string() })),
   getDataJob: oc
     .route({ method: "GET", path: "/contacts/data-jobs/{id}" })

@@ -151,9 +151,9 @@ export const importContactsProcedure = authed.contacts.startImport.handler(
 );
 
 export const exportContactsProcedure = authed.contacts.startExport.handler(
-  async ({ context, errors }) => {
+  async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-    return startContactExport(context.database, context.env.JOBS_QUEUE, context.workspace);
+    return startContactExport(context.database, context.env.JOBS_QUEUE, context.workspace, input);
   },
 );
 

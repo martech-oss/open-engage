@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,11 @@ import { ContactsPage } from "./contacts-page";
 
 const doubles = vi.hoisted(() => ({
   bulkUpdateContacts: vi.fn<(input: unknown) => Promise<void>>(),
+  startContactExport: vi.fn<(input: unknown) => Promise<{ jobId: string }>>(),
+  getContactDataJob: vi.fn<(jobId: string) => Promise<Record<string, unknown>>>(),
+  downloadContactExport: vi.fn<(jobId: string) => Promise<File>>(),
+  exportCsv: vi.fn<() => void>(),
+  saveFile: vi.fn<(file: File) => void>(),
 }));
 
 const contact: ContactSummary = {
@@ -88,7 +93,12 @@ vi.mock("@/components/app-ui", () => ({
   ErrorAlert: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   FormInput: () => null,
   FormNativeSelect: () => null,
-  PageLayout: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+  PageLayout: ({ children, action }: { children: ReactNode; action?: ReactNode }) => (
+    <main>
+      {action}
+      {children}
+    </main>
+  ),
 }));
 
 vi.mock("@/components/data-table", () => ({
@@ -125,6 +135,9 @@ vi.mock("./contact-api", async (importOriginal) => {
   return {
     ...original,
     bulkUpdateContacts: doubles.bulkUpdateContacts,
+    startContactExport: doubles.startContactExport,
+    getContactDataJob: doubles.getContactDataJob,
+    downloadContactExport: doubles.downloadContactExport,
     contactOptionsQueryOptions: () => ({}),
     contactsQueryOptions: () => ({}),
     invalidateContactOptions: () => Promise.resolve(),
@@ -158,6 +171,11 @@ vi.mock("./contact-filters", () => ({
   }),
 }));
 
+vi.mock("@/lib/csv", () => ({
+  exportCsv: doubles.exportCsv,
+  saveFile: doubles.saveFile,
+}));
+
 vi.mock("./contact-forms", () => ({
   ContactCreateForm: () => null,
   SegmentSaveForm: () => null,
@@ -184,6 +202,11 @@ vi.mock("./contacts-toolbar", () => ({
 
 beforeEach(() => {
   doubles.bulkUpdateContacts.mockReset().mockResolvedValue(undefined);
+  doubles.startContactExport.mockReset();
+  doubles.getContactDataJob.mockReset();
+  doubles.downloadContactExport.mockReset();
+  doubles.exportCsv.mockReset();
+  doubles.saveFile.mockReset();
 });
 
 afterEach(cleanup);
@@ -255,6 +278,94 @@ describe("ContactsPage keyed selection", () => {
   });
 });
 
+describe("ContactsPage export controller", () => {
+  it("sends only normalized active filters to the server job and saves its completed File", async () => {
+    const file = new File(["server csv"], "contacts.csv", { type: "text/csv" });
+    doubles.startContactExport.mockResolvedValue({ jobId: "export-job" });
+    doubles.getContactDataJob.mockResolvedValue(dataJob("completed", 72));
+    doubles.downloadContactExport.mockResolvedValue(file);
+    render(
+      <ContactsPage
+        initialSearch={{
+          ...contactSearchDefaults,
+          q: "  needle  ",
+          stage: "customer",
+          tagId: "tag-a",
+          companyId: "company-a",
+          segmentId: "segment-a",
+          scoreMin: "10",
+          scoreMax: "90",
+          sort: "email",
+          direction: "asc",
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "エクスポート" }));
+
+    await waitFor(() =>
+      expect(doubles.startContactExport).toHaveBeenCalledWith({
+        filter: {
+          query: "needle",
+          status: "active",
+          stage: "customer",
+          tagId: "tag-a",
+          companyId: "company-a",
+          segmentId: "segment-a",
+          scoreMin: 10,
+          scoreMax: 90,
+        },
+      }),
+    );
+    await waitFor(() => expect(doubles.saveFile).toHaveBeenCalledWith(file));
+    expect(doubles.getContactDataJob).toHaveBeenCalledWith("export-job");
+    expect(doubles.downloadContactExport).toHaveBeenCalledWith("export-job");
+    expect(doubles.exportCsv).not.toHaveBeenCalled();
+  });
+
+  it("shows server progress and cancels the next poll when the page unmounts", async () => {
+    vi.useFakeTimers();
+    try {
+      doubles.startContactExport.mockResolvedValue({ jobId: "pending-job" });
+      doubles.getContactDataJob.mockResolvedValue(dataJob("processing", 12));
+      const view = render(<ContactsPage initialSearch={contactSearchDefaults} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "エクスポート" }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("エクスポート中（12件）")).toBeTruthy();
+      expect(doubles.getContactDataJob).toHaveBeenCalledTimes(1);
+      view.unmount();
+      await act(async () => vi.advanceTimersByTimeAsync(2_000));
+      expect(doubles.getContactDataJob).toHaveBeenCalledTimes(1);
+      expect(doubles.downloadContactExport).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("exposes a failed export and retries the whole job", async () => {
+    const file = new File(["retried csv"], "contacts.csv", { type: "text/csv" });
+    doubles.startContactExport
+      .mockRejectedValueOnce(new Error("export unavailable"))
+      .mockResolvedValueOnce({ jobId: "retry-job" });
+    doubles.getContactDataJob.mockResolvedValue(dataJob("completed", 1));
+    doubles.downloadContactExport.mockResolvedValue(file);
+    render(<ContactsPage initialSearch={contactSearchDefaults} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "エクスポート" }));
+    expect(await screen.findByText("export unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "再試行" }));
+
+    await waitFor(() => expect(doubles.startContactExport).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(doubles.saveFile).toHaveBeenCalledWith(file));
+  });
+});
+
 function chooseTagBulkAction(): void {
   fireEvent.click(screen.getByRole("checkbox", { name: "Alice Aを選択" }));
   fireEvent.click(screen.getByRole("button", { name: "タグを追加" }));
@@ -264,4 +375,18 @@ function chooseTagBulkAction(): void {
 
 function search(q: string): ContactSearch {
   return { ...contactSearchDefaults, q };
+}
+
+function dataJob(status: string, processed: number) {
+  return {
+    id: "export-job",
+    kind: "contact_export",
+    status,
+    processed,
+    succeeded: processed,
+    failed: 0,
+    errorManifestKey: null,
+    createdAt: "2026-08-23T00:00:00.000Z",
+    updatedAt: "2026-08-23T00:00:00.000Z",
+  };
 }

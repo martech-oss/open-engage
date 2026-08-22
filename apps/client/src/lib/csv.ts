@@ -27,3 +27,14 @@ export function exportCsv(filename: string, rows: Array<Record<string, string | 
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+/** Saves a server-produced File only when running in a browser. */
+export function saveFile(file: File): void {
+  if (typeof document === "undefined" || typeof URL.createObjectURL !== "function") return;
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

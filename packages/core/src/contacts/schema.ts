@@ -51,9 +51,7 @@ const contactSummarySchema = contactSchema.extend({
 
 export type ContactSummary = z.infer<typeof contactSummarySchema>;
 
-export const contactListInputSchema = z.object({
-  cursor: z.string().optional(),
-  limit: z.number().int().min(1).max(100).optional(),
+export const contactExportFilterSchema = z.object({
   query: z.string().trim().optional(),
   status: z.enum(["active", "archived", "anonymous", "all"]).optional(),
   stage: z.string().optional(),
@@ -62,6 +60,12 @@ export const contactListInputSchema = z.object({
   segmentId: z.string().optional(),
   scoreMin: z.number().optional(),
   scoreMax: z.number().optional(),
+});
+export type ContactExportFilter = z.infer<typeof contactExportFilterSchema>;
+
+export const contactListInputSchema = contactExportFilterSchema.extend({
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
   sort: z.enum(["createdAt", "updatedAt", "score", "name", "email"]).optional(),
   direction: z.enum(["asc", "desc"]).optional(),
 });

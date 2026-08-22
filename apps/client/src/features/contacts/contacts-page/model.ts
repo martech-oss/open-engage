@@ -1,9 +1,5 @@
-import { exportCsv } from "@/lib/csv";
-import type { ContactSummary } from "@openengage/core/contacts";
-
 import type { ContactOptions, ContactSearch } from "../contact-api";
 import type { BulkAction } from "../contact-bits";
-import { contactName } from "../contact-bits";
 import type { ContactFilters } from "../contact-filters";
 import { createSegmentFilter } from "../segment-filter";
 
@@ -46,25 +42,5 @@ export function selectedSegmentFilter(filters: ContactFilters, options: ContactO
       scoreMax: filters.scoreMax,
     },
     options,
-  );
-}
-
-export function exportVisibleContacts(
-  contacts: ContactSummary[],
-  formatLongDateTime: (value: string) => string,
-): void {
-  exportCsv(
-    "contacts.csv",
-    contacts.map((contact) => ({
-      名前: contactName(contact),
-      メール: contact.email ?? "",
-      電話番号: contact.phone ?? "",
-      状態: contact.status,
-      ステージ: contact.stage,
-      会社: contact.companies.map((company) => company.name).join(" / "),
-      タグ: contact.tags.map((tag) => tag.name).join(" / "),
-      スコア: contact.score,
-      更新日: formatLongDateTime(contact.updatedAt),
-    })),
   );
 }

@@ -1,20 +1,25 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { refreshSegment as refreshSegmentResource } from "@/features/segments/segment-api";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { saveFile } from "@/lib/csv";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import {
+  buildContactExportFilter,
   bulkUpdateContacts,
   CONTACTS_PAGE_SIZE,
   contactOptionsQueryOptions,
   type ContactSearch,
   contactsQueryOptions,
+  downloadContactExport,
+  getContactDataJob,
   invalidateContactOptions,
   invalidateContactsList,
+  startContactExport,
 } from "../contact-api";
 import type { BulkAction } from "../contact-bits";
 import { useContactFilters } from "../contact-filters";
@@ -23,13 +28,12 @@ import {
   BULK_ACTIONS,
   type BulkActionDefinition,
   contactPaginationKey,
-  exportVisibleContacts,
   selectedSegmentFilter,
 } from "./model";
 import { useKeyedContactSelection } from "./selection";
 
 export function useContactsPageController(initialSearch: ContactSearch) {
-  const { formatLongDateTime, formatRelativeTime } = useWorkspaceFormatters();
+  const { formatRelativeTime } = useWorkspaceFormatters();
   const queryClient = useQueryClient();
   const paginationKey = contactPaginationKey(initialSearch);
   const {
@@ -53,6 +57,21 @@ export function useContactsPageController(initialSearch: ContactSearch) {
   const [showCreate, setShowCreate] = useState(false);
   const [showSegmentSave, setShowSegmentSave] = useState(false);
   const { busy, error, run, setError } = useFormSubmission("操作に失敗しました");
+  const [contactExport, setContactExport] = useState<{
+    phase: "idle" | "starting" | "polling" | "downloading" | "completed" | "error";
+    processed: number;
+    error: string;
+  }>({ phase: "idle", processed: 0, error: "" });
+  const exportRun = useRef(0);
+  const exportPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      exportRun.current += 1;
+      if (exportPollTimer.current) clearTimeout(exportPollTimer.current);
+    },
+    [],
+  );
 
   const refreshContacts = useCallback(async () => {
     await invalidateContactsList(queryClient);
@@ -120,6 +139,63 @@ export function useContactsPageController(initialSearch: ContactSearch) {
     });
   }
 
+  function exportContacts(): void {
+    exportRun.current += 1;
+    const runId = exportRun.current;
+    if (exportPollTimer.current) clearTimeout(exportPollTimer.current);
+    exportPollTimer.current = null;
+    setContactExport({ phase: "starting", processed: 0, error: "" });
+    const filter = buildContactExportFilter({
+      q: filters.query,
+      status: filters.status,
+      stage: filters.stage,
+      tagId: filters.tagId,
+      companyId: filters.companyId,
+      segmentId: filters.segmentId,
+      scoreMin: filters.scoreMin,
+      scoreMax: filters.scoreMax,
+      sort: filters.sort,
+      direction: filters.direction,
+    });
+    void startContactExport({ filter })
+      .then(({ jobId }) => pollContactExport(jobId, runId))
+      .catch((caught: unknown) => failContactExport(caught, runId));
+  }
+
+  async function pollContactExport(jobId: string, runId: number): Promise<void> {
+    try {
+      const job = await getContactDataJob(jobId);
+      if (exportRun.current !== runId) return;
+      if (job.status === "completed") {
+        setContactExport({ phase: "downloading", processed: job.processed, error: "" });
+        const file = await downloadContactExport(jobId);
+        if (exportRun.current !== runId) return;
+        saveFile(file);
+        setContactExport({ phase: "completed", processed: job.processed, error: "" });
+        return;
+      }
+      if (job.status !== "pending" && job.status !== "processing") {
+        failContactExport(new Error("連絡先のエクスポートに失敗しました"), runId);
+        return;
+      }
+      setContactExport({ phase: "polling", processed: job.processed, error: "" });
+      exportPollTimer.current = setTimeout(() => {
+        void pollContactExport(jobId, runId);
+      }, 1_000);
+    } catch (caught) {
+      failContactExport(caught, runId);
+    }
+  }
+
+  function failContactExport(caught: unknown, runId: number): void {
+    if (exportRun.current !== runId) return;
+    setContactExport({
+      phase: "error",
+      processed: 0,
+      error: getErrorMessage(caught, "連絡先のエクスポートに失敗しました"),
+    });
+  }
+
   const segmentFilter = selectedSegmentFilter(filters, options);
   const columns = contactColumns({
     contacts,
@@ -137,6 +213,17 @@ export function useContactsPageController(initialSearch: ContactSearch) {
     (contactsQuery.error || optionsQuery.error
       ? getErrorMessage(contactsQuery.error ?? optionsQuery.error, "連絡先を読み込めませんでした")
       : "");
+  const exportBusy = ["starting", "polling", "downloading"].includes(contactExport.phase);
+  const exportStatus =
+    contactExport.phase === "polling"
+      ? `エクスポート中（${contactExport.processed.toLocaleString()}件）`
+      : contactExport.phase === "starting"
+        ? "エクスポートを開始しています"
+        : contactExport.phase === "downloading"
+          ? "エクスポートをダウンロードしています"
+          : contactExport.phase === "completed"
+            ? `エクスポート完了（${contactExport.processed.toLocaleString()}件）`
+            : "";
 
   return {
     contacts,
@@ -159,6 +246,10 @@ export function useContactsPageController(initialSearch: ContactSearch) {
     setBulkResourceId,
     busy,
     loadError,
+    exportBusy,
+    exportError: contactExport.error,
+    exportStatus,
+    exportButtonLabel: contactExport.phase === "error" ? "再試行" : "エクスポート",
     segmentFilter,
     columns,
     pagination: {
@@ -171,7 +262,7 @@ export function useContactsPageController(initialSearch: ContactSearch) {
     chooseBulkAction,
     runSelectedBulkAction,
     refreshSegment: () => void refreshSegment(),
-    exportContacts: () => exportVisibleContacts(contacts, formatLongDateTime),
+    exportContacts,
     refreshContactData,
     refreshOptions,
   };

@@ -4,11 +4,8 @@ import {
   count,
   desc,
   eq,
-  exists,
   gt,
-  gte,
   lt,
-  lte,
   ne,
   or,
   sql,
@@ -27,12 +24,13 @@ import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared
 
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
-import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
+import { didChange, ensureLoaded, nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
 import type { CursorPage } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { contactEventProjectionRows } from "./event-repository";
+import { buildContactFilterPredicate } from "./filter-predicate";
 import {
   companies,
   companyContacts,
@@ -78,7 +76,10 @@ export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
     direction?: "asc" | "desc" | undefined;
   }): Promise<CursorPage<Contact>> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
-    const conditions: SQL[] = [this.inWorkspace(contacts)];
+    const filterPredicate = buildContactFilterPredicate(this.database, this.context.workspaceId, {
+      ...input,
+      status: input.status ?? "active",
+    });
     const ascending = input.direction === "asc";
     const sortColumn = {
       createdAt: contacts.createdAt,
@@ -88,84 +89,11 @@ export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
       name: sql<string>`coalesce(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}, '')`,
       email: sql<string>`coalesce(${contacts.email}, '')`,
     }[input.sort ?? "updatedAt"];
-    if (input.query) {
-      const query = input.query;
-      conditions.push(
-        or(
-          likeContains(contacts.email, query),
-          likeContains(contacts.firstName, query),
-          likeContains(contacts.lastName, query),
-          likeContains(contacts.phone, query),
-          likeContains(contacts.externalId, query),
-        )!,
-      );
-    }
-    const status = input.status ?? "active";
-    if (status !== "all") {
-      conditions.push(eq(contacts.status, status));
-    }
-    if (input.stage) {
-      conditions.push(eq(contacts.stage, input.stage));
-    }
-    if (input.scoreMin !== undefined) {
-      conditions.push(gte(contacts.score, input.scoreMin));
-    }
-    if (input.scoreMax !== undefined) {
-      conditions.push(lte(contacts.score, input.scoreMax));
-    }
-    if (input.tagId) {
-      conditions.push(
-        exists(
-          this.database.orm
-            .select({ value: sql`1` })
-            .from(contactTags)
-            .where(
-              and(
-                eq(contactTags.workspaceId, contacts.workspaceId),
-                eq(contactTags.contactId, contacts.id),
-                eq(contactTags.tagId, input.tagId),
-              ),
-            ),
-        ),
-      );
-    }
-    if (input.companyId) {
-      conditions.push(
-        exists(
-          this.database.orm
-            .select({ value: sql`1` })
-            .from(companyContacts)
-            .where(
-              and(
-                eq(companyContacts.workspaceId, contacts.workspaceId),
-                eq(companyContacts.contactId, contacts.id),
-                eq(companyContacts.companyId, input.companyId),
-              ),
-            ),
-        ),
-      );
-    }
-    if (input.segmentId) {
-      conditions.push(
-        exists(
-          this.database.orm
-            .select({ value: sql`1` })
-            .from(segmentMemberships)
-            .where(
-              and(
-                eq(segmentMemberships.workspaceId, contacts.workspaceId),
-                eq(segmentMemberships.contactId, contacts.id),
-                eq(segmentMemberships.segmentId, input.segmentId),
-              ),
-            ),
-        ),
-      );
-    }
     const [totalRow] = await this.database.orm
       .select({ count: count() })
       .from(contacts)
-      .where(and(...conditions));
-    const pageConditions: SQL[] = [...conditions];
+      .where(filterPredicate);
+    const pageConditions: SQL[] = [filterPredicate];
     if (input.cursor) {
       const [cursor] = await this.database.orm
         .select({ sortValue: sortColumn })

@@ -1,3 +1,4 @@
+import { contactExportFilterSchema } from "@openengage/core/contacts";
 import { createDatabase } from "@openengage/database/client";
 import {
   ContactImportPartExecutionRepository,
@@ -184,8 +185,14 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
   if (!job) return;
   const lastId = typeof job.cursor["lastId"] === "string" ? job.cursor["lastId"] : "";
   const partNumber = typeof job.cursor["partNumber"] === "number" ? job.cursor["partNumber"] : 0;
+  const filter = contactExportFilterSchema.parse(job.cursor["filter"] ?? {});
   const batchSize = 1_000;
-  const contacts = await repository.listContactsForExport(job.workspaceId, lastId, batchSize);
+  const contacts = await repository.listContactsForExport(
+    job.workspaceId,
+    filter,
+    lastId,
+    batchSize,
+  );
   if (contacts.length > 0) {
     const header =
       partNumber === 0
@@ -219,7 +226,7 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
     });
     const last = contacts.at(-1);
     await repository.recordExportProgress(jobId, {
-      cursor: { partNumber: partNumber + 1, lastId: last?.id ?? lastId },
+      cursor: { partNumber: partNumber + 1, lastId: last?.id ?? lastId, filter },
       count: contacts.length,
     });
   }

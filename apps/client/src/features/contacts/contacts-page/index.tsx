@@ -21,10 +21,20 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
       fill
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={controller.exportContacts}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={controller.exportBusy}
+            onClick={controller.exportContacts}
+          >
             <Download data-icon="inline-start" />
-            エクスポート
+            {controller.exportButtonLabel}
           </Button>
+          {controller.exportStatus ? (
+            <span className="self-center text-xs text-muted-foreground">
+              {controller.exportStatus}
+            </span>
+          ) : null}
           <Button size="sm" onClick={() => controller.setShowCreate(true)}>
             <Plus data-icon="inline-start" />
             連絡先を追加
@@ -43,7 +53,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
           canSaveSegment={Boolean(controller.segmentFilter) && !controller.filters.segmentId}
           onRefreshSegment={controller.refreshSegment}
           onExport={controller.exportContacts}
-          busy={controller.busy}
+          busy={controller.busy || controller.exportBusy}
         />
         {controller.advancedOpen ? (
           <AdvancedContactFilters filters={controller.filters} options={controller.options} />
@@ -59,9 +69,9 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
           onResourceChange={controller.setBulkResourceId}
           onApply={controller.runSelectedBulkAction}
         />
-        {controller.loadError ? (
+        {controller.loadError || controller.exportError ? (
           <div className="shrink-0 border-b p-3.5">
-            <ErrorNotice>{controller.loadError}</ErrorNotice>
+            <ErrorNotice>{controller.loadError || controller.exportError}</ErrorNotice>
           </div>
         ) : null}
         <ContactsTable

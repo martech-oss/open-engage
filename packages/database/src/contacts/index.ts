@@ -2,6 +2,7 @@ export * from "./company-repository";
 export * from "./contact-state-repository";
 export * from "./data-job-repository";
 export * from "./event-repository";
+export * from "./filter-predicate";
 export * from "./import-part-execution-repository";
 export * from "./import-reconciliation-repository";
 export * from "./import-recovery-repository";

@@ -1,11 +1,13 @@
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
+import type { ContactExportFilter } from "@openengage/core/contacts";
 import { jsonRecordSchema } from "@openengage/core/shared";
 
 import type { OpenEngageDatabase } from "../client";
 import { nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
+import { buildContactFilterPredicate } from "./filter-predicate";
 import { contactImportParts, contacts, importJobs } from "./schema";
 
 export type DataJobKind = "contact_import" | "contact_export";
@@ -136,7 +138,12 @@ export class DataJobWorkerRepository extends DatabaseRepository {
    * Pages contacts by id for export. Returns `customFields` as the raw stored
    * JSON text so the CSV reproduces the column byte for byte.
    */
-  public listContactsForExport(workspaceId: string, afterId: string, limit: number) {
+  public listContactsForExport(
+    workspaceId: string,
+    filter: ContactExportFilter,
+    afterId: string,
+    limit: number,
+  ) {
     return this.database.orm
       .select({
         id: contacts.id,
@@ -153,7 +160,12 @@ export class DataJobWorkerRepository extends DatabaseRepository {
         updatedAt: contacts.updatedAt,
       })
       .from(contacts)
-      .where(and(eq(contacts.workspaceId, workspaceId), gt(contacts.id, afterId)))
+      .where(
+        and(
+          buildContactFilterPredicate(this.database, workspaceId, filter),
+          gt(contacts.id, afterId),
+        ),
+      )
       .orderBy(asc(contacts.id))
       .limit(limit);
   }

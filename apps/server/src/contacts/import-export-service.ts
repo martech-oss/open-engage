@@ -1,4 +1,8 @@
-import type { ContactDataJob } from "@openengage/core/contacts";
+import {
+  contactExportFilterSchema,
+  type ContactDataJob,
+  type ContactExportFilter,
+} from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { DataJobRepository } from "@openengage/database/contacts";
@@ -79,14 +83,16 @@ export async function startContactExport(
   database: OpenEngageDatabase,
   queue: Queue,
   workspace: WorkspaceContext,
+  input?: { filter?: ContactExportFilter | undefined },
 ): Promise<{ jobId: string }> {
   const jobId = uuidv7();
   const key = `${workspace.workspaceId}/exports/contacts-${jobId}.csv`;
+  const filter = contactExportFilterSchema.parse(input?.filter ?? {});
   await new DataJobRepository(database, workspace).createJob({
     id: jobId,
     kind: "contact_export",
     r2Key: key,
-    cursor: { partNumber: 0, lastId: "" },
+    cursor: { partNumber: 0, lastId: "", filter },
   });
   await queue.send({ kind: "contact_export", exportJobId: jobId });
   return { jobId };
