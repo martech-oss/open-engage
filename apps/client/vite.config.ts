@@ -41,6 +41,7 @@ export default defineConfig({
     tailwindcss(),
     cloudflare({
       configPath: "./wrangler.jsonc",
+      remoteBindings: false,
       auxiliaryWorkers: [
         {
           configPath: "../server/wrangler.jsonc",
