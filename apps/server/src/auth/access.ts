@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import { z } from "zod";
 
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { createDatabase } from "@openengage/database/client";
@@ -14,6 +15,9 @@ import { createAuth } from "./service";
 interface BackgroundContext {
   waitUntil(promise: Promise<unknown>): void;
 }
+
+export type AccessResolutionEvent = "apiKey" | "session" | "membership";
+export type AccessResolutionObserver = (event: AccessResolutionEvent) => void;
 
 type WorkspaceAccessErrorCode =
   | "invalid_api_key"
@@ -41,6 +45,22 @@ export interface SessionAccess {
   session: SessionValue;
 }
 
+type SessionAccessResolver = () => Promise<SessionAccess>;
+
+const sessionValueSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    email: z.string(),
+    name: z.string(),
+    emailVerified: z.boolean(),
+  }),
+  session: z.object({
+    id: z.string(),
+    userId: z.string(),
+    activeOrganizationId: z.string().nullable().optional(),
+  }),
+});
+
 export const requestContext = createMiddleware<AppEnvironment>(async (context, next) => {
   const requestId = context.req.header("cf-ray") ?? crypto.randomUUID();
   context.set("database", createDatabase(context.env.DB));
@@ -64,15 +84,20 @@ export async function resolveWorkspaceAccess({
   headers,
   method,
   executionContext,
+  onResolution,
+  getSession,
 }: {
   database: OpenEngageDatabase;
   env: AppEnvironment["Bindings"];
   headers: Headers;
   method: string;
   executionContext: BackgroundContext;
+  onResolution?: AccessResolutionObserver | undefined;
+  getSession?: SessionAccessResolver | undefined;
 }): Promise<WorkspaceAccess> {
   const bearer = headers.get("authorization");
   if (bearer?.startsWith("Bearer ")) {
+    onResolution?.("apiKey");
     const apiContext = await resolveApiKey(database, bearer.slice(7));
     if (!apiContext) {
       throw new WorkspaceAccessError(
@@ -87,7 +112,14 @@ export async function resolveWorkspaceAccess({
     return { workspace: apiContext, session: null };
   }
 
-  return resolveSessionWorkspaceAccess({ database, env, headers, method });
+  return resolveSessionWorkspaceAccess({
+    database,
+    env,
+    headers,
+    method,
+    onResolution,
+    getSession,
+  });
 }
 
 export async function resolveSessionWorkspaceAccess({
@@ -95,16 +127,27 @@ export async function resolveSessionWorkspaceAccess({
   env,
   headers,
   method,
+  onResolution,
+  getSession,
 }: {
   database: OpenEngageDatabase;
   env: AppEnvironment["Bindings"];
   headers: Headers;
   method: string;
+  onResolution?: AccessResolutionObserver | undefined;
+  getSession?: SessionAccessResolver | undefined;
 }): Promise<WorkspaceAccess & { session: SessionValue }> {
-  const { session } = await resolveSessionAccess({ env, headers, method });
+  const { session } = await resolveSessionAccess({
+    env,
+    headers,
+    method,
+    onResolution,
+    getSession,
+  });
 
   const requestedOrganizationId =
     headers.get("x-openengage-workspace") ?? session.session.activeOrganizationId ?? null;
+  onResolution?.("membership");
   const workspace = await resolveMemberContext(database, session.user.id, requestedOrganizationId);
   if (!workspace) {
     throw new WorkspaceAccessError(
@@ -121,17 +164,18 @@ export async function resolveSessionAccess({
   headers,
   method,
   requireMutationOrigin = false,
+  onResolution,
+  getSession,
 }: {
   env: AppEnvironment["Bindings"];
   headers: Headers;
   method: string;
   requireMutationOrigin?: boolean;
+  onResolution?: AccessResolutionObserver | undefined;
+  getSession?: SessionAccessResolver | undefined;
 }): Promise<SessionAccess> {
-  const auth = createAuth(env);
-  const session = (await auth.api.getSession({ headers })) as SessionValue | null;
-  if (!session) {
-    throw new WorkspaceAccessError(401, "unauthorized", workspaceErrors.UNAUTHORIZED.message);
-  }
+  const access = await (getSession?.() ??
+    resolveAuthenticatedSession({ env, headers, onResolution }));
   if (isMutation(method)) {
     const origin = headers.get("origin");
     const expectedOrigin = new URL(env.APP_URL).origin;
@@ -146,7 +190,37 @@ export async function resolveSessionAccess({
       );
     }
   }
-  return { session };
+  return access;
+}
+
+export async function resolveAuthenticatedSession({
+  env,
+  headers,
+  onResolution,
+}: {
+  env: AppEnvironment["Bindings"];
+  headers: Headers;
+  onResolution?: AccessResolutionObserver | undefined;
+}): Promise<SessionAccess> {
+  const auth = createAuth(env);
+  onResolution?.("session");
+  const result = sessionValueSchema.safeParse(await auth.api.getSession({ headers }));
+  if (!result.success) {
+    throw new WorkspaceAccessError(401, "unauthorized", workspaceErrors.UNAUTHORIZED.message);
+  }
+  const { user, session } = result.data;
+  return {
+    session: {
+      user,
+      session: {
+        id: session.id,
+        userId: session.userId,
+        ...(session.activeOrganizationId === undefined
+          ? {}
+          : { activeOrganizationId: session.activeOrganizationId }),
+      },
+    },
+  };
 }
 
 export function apiError(

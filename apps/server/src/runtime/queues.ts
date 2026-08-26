@@ -27,6 +27,12 @@ export const contactExportQueueMessageSchema = z.object({
 });
 export type ContactExportQueueMessage = z.infer<typeof contactExportQueueMessageSchema>;
 
+export const contactEventQueueMessageSchema = z.object({
+  kind: z.literal("contact_event"),
+  eventId: z.string().min(1),
+});
+export type ContactEventQueueMessage = z.infer<typeof contactEventQueueMessageSchema>;
+
 export const segmentContactReconcileQueueMessageSchema = z.object({
   kind: z.literal("segment_contact_reconcile"),
   workspaceId: z.string().min(1),
@@ -47,15 +53,19 @@ export type SegmentFullRefreshQueueMessage = z.infer<typeof segmentFullRefreshQu
 /** Everything the jobs queue carries, dispatched on the kind discriminator. */
 export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
   automationJobQueueMessageSchema,
+  contactEventQueueMessageSchema,
   contactImportQueueMessageSchema,
   contactExportQueueMessageSchema,
   segmentContactReconcileQueueMessageSchema,
   segmentFullRefreshQueueMessageSchema,
 ]);
 
+export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
+
 export type QueueMessage =
   | AutomationJobQueueMessage
   | DeliveryQueueMessage
+  | ContactEventQueueMessage
   | ContactImportQueueMessage
   | ContactExportQueueMessage
   | SegmentContactReconcileQueueMessage

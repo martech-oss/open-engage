@@ -8,6 +8,7 @@ import {
   parseAssetSearch,
 } from "@/features/assets/asset-api";
 import { AssetsPage } from "@/features/assets/assets-page";
+import { ensureAppBootstrap } from "@/lib/app-bootstrap";
 
 export const Route = createFileRoute("/_app/website/assets")({
   validateSearch: (search: Partial<AssetSearch> & SearchSchemaInput): AssetSearch =>
@@ -17,8 +18,12 @@ export const Route = createFileRoute("/_app/website/assets")({
   },
   loaderDeps: ({ search }) => search,
   loader: async ({ deps, context }) => {
-    await context.queryClient.ensureQueryData(assetsQueryOptions(deps));
-    return { capabilities: context.workspace.capabilities };
+    const [, bootstrap] = await Promise.all([
+      context.queryClient.ensureQueryData(assetsQueryOptions(deps)),
+      ensureAppBootstrap(context.queryClient),
+    ]);
+    if (!bootstrap.workspace) throw new Error("Workspace bootstrap is required");
+    return { capabilities: bootstrap.workspace.capabilities };
   },
   ...routeStatusComponents,
   component: AssetsRoute,

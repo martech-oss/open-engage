@@ -1,4 +1,5 @@
 export * from "./agents/contract";
+export * from "./app/contract";
 export * from "./assets/contract";
 export * from "./automations/contract";
 export * from "./consent/contract";

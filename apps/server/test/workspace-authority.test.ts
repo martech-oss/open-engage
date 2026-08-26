@@ -3,17 +3,71 @@ import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { makeSignature } from "better-auth/crypto";
 import { env, exports } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { createDatabase, session, user, uuidv7 } from "@openengage/database/testing";
-import { contract } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
-import { randomIdentifier } from "../src/platform/crypto";
 import { seedWorkspaceClient } from "./factory";
 
 const emptyContent = { schemaVersion: 1 as const, blocks: [] };
+const rawSessionSentinels = {
+  token: "session-sentinel-token-",
+  ipAddress: "session-sentinel-ipAddress-203.0.113.77",
+  userAgent: "session-sentinel-userAgent-boundary-probe",
+} as const;
 
 describe("workspace authority", () => {
+  it("returns a session-safe app bootstrap without Better Auth session fields", async () => {
+    const fixture = await sessionOnlyClient("http://localhost:8787");
+
+    await expect(fixture.client.app.bootstrap()).resolves.toEqual({
+      viewer: {
+        id: fixture.userId,
+        name: "Session Owner",
+        email: `${fixture.userId}@example.com`,
+      },
+      workspace: null,
+      workspaces: [],
+    });
+
+    const created = await fixture.client.workspace.create({ name: "Bootstrap Workspace" });
+    const bootstrap = await fixture.client.app.bootstrap();
+    expect(bootstrap.workspace).toMatchObject({ id: created.id, name: "Bootstrap Workspace" });
+    expect(bootstrap.workspaces).toEqual([
+      { id: created.id, name: "Bootstrap Workspace", slug: created.slug },
+    ]);
+    const serialized = JSON.stringify(bootstrap);
+    for (const sentinel of Object.values(rawSessionSentinels)) {
+      expect(serialized).not.toContain(sentinel);
+    }
+    expect(serialized).not.toMatch(/"(?:token|ipAddress|userAgent)"/);
+  });
+
+  it("returns null instead of falling back when the active organization is invalid", async () => {
+    const fixture = await sessionOnlyClient("http://localhost:8787");
+    const created = await fixture.client.workspace.create({ name: "Valid Membership" });
+    await createDatabase(env.DB)
+      .orm.update(session)
+      .set({ activeOrganizationId: "missing-active-organization" })
+      .where(eq(session.id, fixture.sessionId));
+
+    await expect(fixture.client.app.bootstrap()).resolves.toMatchObject({
+      workspace: null,
+      workspaces: [{ id: created.id, name: "Valid Membership", slug: created.slug }],
+    });
+  });
+
+  it("does not allow API keys through app bootstrap", async () => {
+    const apiKey = await seedWorkspaceClient(env.DB);
+
+    await expect(apiKey.client.app.bootstrap()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      status: 401,
+    });
+  });
+
   it.each([
     ["owner", true, true, true, true],
     ["admin", true, true, true, true],
@@ -162,11 +216,12 @@ describe("resource slug authority", () => {
 
 async function sessionOnlyClient(origin: string | null): Promise<{
   sessionId: string;
+  userId: string;
   client: ContractRouterClient<typeof contract>;
 }> {
   const userId = uuidv7();
   const sessionId = uuidv7();
-  const token = randomIdentifier(48);
+  const token = `${rawSessionSentinels.token}${uuidv7()}`;
   const now = new Date();
   const orm = createDatabase(env.DB).orm;
   await orm.batch([
@@ -182,6 +237,8 @@ async function sessionOnlyClient(origin: string | null): Promise<{
       id: sessionId,
       token,
       userId,
+      ipAddress: rawSessionSentinels.ipAddress,
+      userAgent: rawSessionSentinels.userAgent,
       activeOrganizationId: null,
       createdAt: now,
       updatedAt: now,
@@ -197,5 +254,5 @@ async function sessionOnlyClient(origin: string | null): Promise<{
     },
     fetch: (request) => exports.default.fetch(request),
   });
-  return { sessionId, client: createORPCClient(link) };
+  return { sessionId, userId, client: createORPCClient(link) };
 }

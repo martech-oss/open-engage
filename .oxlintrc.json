@@ -30,6 +30,7 @@
     "node"
   ],
   "rules": {
+    "typescript/consistent-type-imports": "error",
     "vitest/require-to-throw-message": "off"
   },
   "overrides": [

@@ -6,7 +6,7 @@ import type { AutomationNode } from "@openengage/core/automations";
 import { createDatabase } from "@openengage/database/testing";
 
 import { processAutomationJob } from "../src/automations/worker";
-import { recordContactEvent } from "../src/contacts/event-service";
+import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { scheduled } from "../src/runtime/dispatch";
 import {
   decisionNode,

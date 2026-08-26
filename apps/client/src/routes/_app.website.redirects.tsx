@@ -8,11 +8,13 @@ import {
 } from "@/features/website/website-api";
 
 export const Route = createFileRoute("/_app/website/redirects")({
-  loader: ({ context }) =>
-    Promise.all([
+  loader: async ({ context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(customRedirectsQueryOptions()),
       context.queryClient.ensureQueryData(siteTrackingQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: CustomRedirectsPage,
 });

@@ -4,10 +4,10 @@ import { createDatabase } from "@openengage/database/client";
 import { MessagingWorkerRepository } from "@openengage/database/messaging";
 import { uuidv7 } from "@openengage/database/shared";
 
-import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { RuntimeEnv } from "../env";
 import { sha256Hex, verifySignedToken } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";
+import { processPendingPublicFormEvent } from "../runtime/contact-event-service";
 
 const maximumInboundSize = 5 * 1024 * 1024;
 

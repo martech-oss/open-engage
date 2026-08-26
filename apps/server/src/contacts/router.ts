@@ -1,23 +1,32 @@
-import { ContactRelationInvalidError, ContactRepository } from "@openengage/database/contacts";
-import { writeAuditLog } from "@openengage/database/platform";
-import { isUniqueConstraintError } from "@openengage/database/shared";
+import type { WorkspaceContext } from "@openengage/core/shared";
+import type { OpenEngageDatabase } from "@openengage/database/client";
 import { ack, CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import type { ContactCommandService } from "./command-service";
 import {
   getContactExportFile,
   getDataJob,
   startContactExport,
   startContactImport,
 } from "./import-export-service";
-import { createContact, getContactTimeline, listContacts, recordContactApiEvent } from "./service";
+import { getContact, getContactTimeline, listContacts } from "./service";
+import type { ContactApiEventInput, ContactEventOutcome } from "./service";
 
-const CONTACT_EMAIL_UNIQUE_COLUMNS = ["contacts.workspace_id", "contacts.email"] as const;
-const CONTACT_EXTERNAL_ID_UNIQUE_COLUMNS = [
-  "contacts.workspace_id",
-  "contacts.external_id",
-] as const;
+export interface ContactRouterDependencies {
+  createCommandService(input: {
+    database: OpenEngageDatabase;
+    workspace: WorkspaceContext;
+    queue: Queue;
+    defer(promise: Promise<unknown>): void;
+  }): ContactCommandService;
+  recordContactApiEvent(input: {
+    database: OpenEngageDatabase;
+    workspaceId: string;
+    event: ContactApiEventInput;
+    queue: Queue;
+  }): Promise<ContactEventOutcome>;
+}
 
 export const listContactsProcedure = authed.contacts.list.handler(async ({ context, input }) =>
   listContacts(context.database, context.workspace, input),
@@ -25,8 +34,7 @@ export const listContactsProcedure = authed.contacts.list.handler(async ({ conte
 
 export const getContactProcedure = authed.contacts.get.handler(
   async ({ context, input, errors }) => {
-    const repository = new ContactRepository(context.database, context.workspace);
-    const contact = await repository.getContact(input.id);
+    const contact = await getContact(context.database, context.workspace, input.id);
     if (!contact) throw errors.CONTACT_NOT_FOUND();
     return contact;
   },
@@ -44,95 +52,82 @@ export const contactTimelineProcedure = authed.contacts.timeline.handler(
   },
 );
 
-export const recordContactEventProcedure = authed.contacts.recordEvent.handler(
-  async ({ context, input, errors }) => {
+function createRecordContactEventProcedure(dependencies: ContactRouterDependencies) {
+  return authed.contacts.recordEvent.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const outcome = await recordContactApiEvent(
-      context.database,
-      context.workspace.workspaceId,
-      {
+    const outcome = await dependencies.recordContactApiEvent({
+      database: context.database,
+      workspaceId: context.workspace.workspaceId,
+      event: {
         contactId: input.id,
         eventName: input.eventName,
         source: input.source,
         properties: input.properties,
         ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
       },
-      context.env.JOBS_QUEUE,
-    );
+      queue: context.env.JOBS_QUEUE,
+    });
     if (outcome.kind === "contact_not_found") throw errors.CONTACT_NOT_FOUND();
     return { eventId: outcome.eventId, enrollmentCount: outcome.enrollmentCount };
-  },
-);
+  });
+}
 
-export const createContactProcedure = authed.contacts.create.handler(
-  async ({ context, input, errors }) => {
+function createCreateContactProcedure(dependencies: ContactRouterDependencies) {
+  return authed.contacts.create.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-
-    try {
-      const contact = await createContact(
-        context.database,
-        context.workspace,
-        input,
-        context.env.JOBS_QUEUE,
-      );
-      context.executionContext.waitUntil(
-        writeAuditLog(context.database, context.workspace, {
-          action: "contact.create",
-          resourceType: "contact",
-          resourceId: contact.id,
-        }),
-      );
-      return contact;
-    } catch (error) {
-      if (error instanceof ContactRelationInvalidError) {
-        throw errors.CONTACT_RELATION_INVALID({ data: { field: error.field }, cause: error });
-      }
-      if (
-        isUniqueConstraintError(error, CONTACT_EMAIL_UNIQUE_COLUMNS) ||
-        isUniqueConstraintError(error, CONTACT_EXTERNAL_ID_UNIQUE_COLUMNS)
-      ) {
-        throw errors.CONTACT_CONFLICT({ cause: error });
-      }
-      throw error;
+    const outcome = await dependencies
+      .createCommandService({
+        database: context.database,
+        workspace: context.workspace,
+        queue: context.env.JOBS_QUEUE,
+        defer: (promise) => context.executionContext.waitUntil(promise),
+      })
+      .create(input);
+    if (outcome.kind === "contact_relation_invalid") {
+      throw errors.CONTACT_RELATION_INVALID({
+        data: { field: outcome.field },
+        cause: outcome.cause,
+      });
     }
-  },
-);
+    if (outcome.kind === "contact_conflict") {
+      throw errors.CONTACT_CONFLICT({ cause: outcome.cause });
+    }
+    return outcome.contact;
+  });
+}
 
-export const updateContactProcedure = authed.contacts.update.handler(
-  async ({ context, input, errors }) => {
+function createUpdateContactProcedure(dependencies: ContactRouterDependencies) {
+  return authed.contacts.update.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const { id, ...changes } = input;
-    const repository = new ContactRepository(context.database, context.workspace);
-    const existing = await repository.getContact(id);
-    if (!existing) throw errors.CONTACT_NOT_FOUND();
-    if (existing.status === "archived") throw errors.CONTACT_ARCHIVED();
-    const contact = await repository.updateContact(id, changes);
-    if (!contact) throw errors.CONTACT_NOT_FOUND();
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [id],
-    );
-    return contact;
-  },
-);
+    const outcome = await dependencies
+      .createCommandService({
+        database: context.database,
+        workspace: context.workspace,
+        queue: context.env.JOBS_QUEUE,
+        defer: (promise) => context.executionContext.waitUntil(promise),
+      })
+      .update(input);
+    if (outcome.kind === "contact_not_found") throw errors.CONTACT_NOT_FOUND();
+    if (outcome.kind === "contact_archived") throw errors.CONTACT_ARCHIVED();
+    return outcome.contact;
+  });
+}
 
-export const archiveContactProcedure = authed.contacts.archive.handler(
-  async ({ context, input, errors }) => {
+function createArchiveContactProcedure(dependencies: ContactRouterDependencies) {
+  return authed.contacts.archive.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
-    const archived = await new ContactRepository(
-      context.database,
-      context.workspace,
-    ).archiveContact(input.id);
-    if (!archived) throw errors.CONTACT_NOT_FOUND();
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.id],
-    );
+    const outcome = await dependencies
+      .createCommandService({
+        database: context.database,
+        workspace: context.workspace,
+        queue: context.env.JOBS_QUEUE,
+        defer: (promise) => context.executionContext.waitUntil(promise),
+      })
+      .archive(input.id);
+    if (outcome.kind === "contact_not_found") throw errors.CONTACT_NOT_FOUND();
     return ack;
-  },
-);
+  });
+}
 
 export const importContactsProcedure = authed.contacts.startImport.handler(
   async ({ context, input, errors }) => {
@@ -181,16 +176,18 @@ export const downloadContactExportProcedure = authed.contacts.downloadExport.han
   },
 );
 
-export const contactProcedures = {
-  list: listContactsProcedure,
-  get: getContactProcedure,
-  timeline: contactTimelineProcedure,
-  recordEvent: recordContactEventProcedure,
-  create: createContactProcedure,
-  update: updateContactProcedure,
-  archive: archiveContactProcedure,
-  startImport: importContactsProcedure,
-  startExport: exportContactsProcedure,
-  getDataJob: getDataJobProcedure,
-  downloadExport: downloadContactExportProcedure,
-};
+export function createContactProcedures(dependencies: ContactRouterDependencies) {
+  return {
+    list: listContactsProcedure,
+    get: getContactProcedure,
+    timeline: contactTimelineProcedure,
+    recordEvent: createRecordContactEventProcedure(dependencies),
+    create: createCreateContactProcedure(dependencies),
+    update: createUpdateContactProcedure(dependencies),
+    archive: createArchiveContactProcedure(dependencies),
+    startImport: importContactsProcedure,
+    startExport: exportContactsProcedure,
+    getDataJob: getDataJobProcedure,
+    downloadExport: downloadContactExportProcedure,
+  };
+}

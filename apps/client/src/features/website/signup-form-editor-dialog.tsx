@@ -10,8 +10,8 @@ import { SignupFormFields, type OptionalSignupField } from "./signup-form-fields
 import {
   type SignupFormDefinition,
   type SignupFormRow,
-  useCreateSignupForm,
-  useUpdateSignupForm,
+  type useCreateSignupForm,
+  type useUpdateSignupForm,
 } from "./website-api";
 
 const OPTIONAL_FIELD_KEYS: OptionalSignupField[] = ["firstName", "lastName", "phone"];

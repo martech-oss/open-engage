@@ -215,6 +215,7 @@ export const contactEvents = sqliteTable(
       table.type,
       table.occurredAt,
     ),
+    index("contact_events_workspace_occurred_idx").on(table.workspaceId, table.occurredAt),
     index("contact_events_workspace_contact_idx").on(
       table.workspaceId,
       table.contactId,

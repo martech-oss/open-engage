@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { contactEvents, contacts, createDatabase } from "@openengage/database/testing";
-import { contract } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
 import { enrollInactiveContacts } from "../src/automations/enrollment";
 import { seedWorkspaceClient } from "./factory";

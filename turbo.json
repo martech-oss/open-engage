@@ -1,0 +1,126 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "concurrency": "4",
+  "tasks": {
+    "transit": {
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "!worker-configuration.d.ts"]
+    },
+    "build": {
+      "dependsOn": ["^build", "transit"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!worker-configuration.d.ts",
+        "$TURBO_ROOT$/tsconfig.base.json"
+      ],
+      "outputs": ["dist/**"],
+      "env": ["CI", "NODE_ENV", "CLOUDFLARE_ENV", "VITE_*"],
+      "outputLogs": "new-only"
+    },
+    "test": {
+      "dependsOn": ["transit"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/tsconfig.base.json"],
+      "outputs": [],
+      "env": ["CI", "TZ"],
+      "outputLogs": "new-only"
+    },
+    "typecheck": {
+      "dependsOn": ["transit"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!worker-configuration.d.ts",
+        "$TURBO_ROOT$/tsconfig.base.json"
+      ],
+      "outputs": [],
+      "outputLogs": "new-only"
+    },
+    "cf:types": {
+      "inputs": ["$TURBO_DEFAULT$", "!worker-configuration.d.ts"],
+      "outputs": ["worker-configuration.d.ts"],
+      "env": ["CLOUDFLARE_ENV"],
+      "outputLogs": "new-only"
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "preview": {
+      "cache": false,
+      "persistent": true
+    },
+    "email:dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "deploy": {
+      "cache": false
+    },
+    "deploy:bootstrap": {
+      "cache": false
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:migrate:local": {
+      "cache": false
+    },
+    "db:migrate:remote": {
+      "cache": false
+    },
+    "//#repo-code": {
+      "inputs": [
+        "$TURBO_ROOT$/apps/**",
+        "$TURBO_ROOT$/packages/**",
+        "$TURBO_ROOT$/scripts/**",
+        "$TURBO_ROOT$/*.json",
+        "$TURBO_ROOT$/*.jsonc",
+        "$TURBO_ROOT$/*.yaml",
+        "$TURBO_ROOT$/*.yml",
+        "!$TURBO_ROOT$/**/dist/**",
+        "!$TURBO_ROOT$/**/.turbo/**",
+        "!$TURBO_ROOT$/**/.wrangler/**",
+        "!$TURBO_ROOT$/**/node_modules/**"
+      ]
+    },
+    "//#repo-all": {
+      "dependsOn": ["//#repo-code"],
+      "inputs": [
+        "$TURBO_ROOT$/docs/**",
+        "$TURBO_ROOT$/migrations/**",
+        "$TURBO_ROOT$/.github/**",
+        "$TURBO_ROOT$/.claude/**",
+        "$TURBO_ROOT$/.vscode/**",
+        "$TURBO_ROOT$/*.md",
+        "$TURBO_ROOT$/.dev.vars.example",
+        "$TURBO_ROOT$/.gitignore",
+        "$TURBO_ROOT$/.npmrc",
+        "$TURBO_ROOT$/LICENSE",
+        "!$TURBO_ROOT$/**/.turbo/**"
+      ]
+    },
+    "//#format:check": {
+      "dependsOn": ["//#repo-all"],
+      "inputs": ["$TURBO_ROOT$/turbo.json"],
+      "outputs": [],
+      "outputLogs": "new-only"
+    },
+    "//#lint": {
+      "dependsOn": ["//#repo-all"],
+      "inputs": ["$TURBO_ROOT$/turbo.json"],
+      "outputs": [],
+      "outputLogs": "new-only"
+    },
+    "//#architecture:check": {
+      "dependsOn": ["//#repo-code"],
+      "inputs": ["$TURBO_ROOT$/turbo.json"],
+      "outputs": [],
+      "outputLogs": "new-only"
+    },
+    "//#quality:unused": {
+      "dependsOn": ["//#repo-code"],
+      "inputs": ["$TURBO_ROOT$/turbo.json"],
+      "outputs": [],
+      "outputLogs": "new-only"
+    }
+  }
+}

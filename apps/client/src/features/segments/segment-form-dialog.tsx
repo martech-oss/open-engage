@@ -9,7 +9,7 @@ import type {
   SegmentGenerationCatalog,
   SegmentRow,
 } from "@openengage/core/segments";
-import { workspaceDateTimeToUtc } from "@openengage/core/shared";
+import { workspaceDateTimeToUtc } from "@openengage/core/shared/time";
 
 import { useCreateSegment, usePreviewSegment, useUpdateSegment } from "./segment-api";
 import { audienceGroupLabel } from "./segment-bits";

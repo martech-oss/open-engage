@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SegmentRepository, uuidv7 } from "@openengage/database/testing";
-import { contract } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
 import { createFixtureClient, seedWorkspaceClient } from "./factory";
 

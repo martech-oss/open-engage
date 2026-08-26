@@ -153,6 +153,7 @@ export const deliveries = sqliteTable(
       table.contactId,
       table.createdAt,
     ),
+    index("deliveries_workspace_created_idx").on(table.workspaceId, table.createdAt),
     index("deliveries_workspace_status_next_idx").on(
       table.workspaceId,
       table.status,

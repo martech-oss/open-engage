@@ -5,7 +5,10 @@ import { ListsPage } from "@/features/segments/lists-page";
 import { segmentsQueryOptions } from "@/features/segments/segment-api";
 
 export const Route = createFileRoute("/_app/lists/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(segmentsQueryOptions("static")),
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(segmentsQueryOptions("static"));
+    return undefined;
+  },
   ...routeStatusComponents,
   component: ListsPage,
 });

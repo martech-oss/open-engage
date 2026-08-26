@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DealDetailData, DealOptions } from "../deal-api";
+import type * as DealApiModule from "../deal-api";
 import { DealDetailPage } from "./deal-detail-page";
 
 const mutations = vi.hoisted(() => ({
@@ -115,7 +116,7 @@ vi.mock("../deal-widgets", () => ({
 }));
 
 vi.mock("../deal-api", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../deal-api")>();
+  const original = await importOriginal<typeof DealApiModule>();
   return {
     ...original,
     dealDetailQueryOptions: () => ({ kind: "detail" }),

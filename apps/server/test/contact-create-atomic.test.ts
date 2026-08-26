@@ -15,7 +15,7 @@ import {
   tags,
   uuidv7,
 } from "@openengage/database/testing";
-import { contract } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 

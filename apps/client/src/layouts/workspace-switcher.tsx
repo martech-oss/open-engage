@@ -4,7 +4,6 @@ import { Blocks, Check, ChevronsUpDown, Plus } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { authClient } from "@/auth-client";
 import { FormInput } from "@/components/app-ui";
 import { FormDialog } from "@/components/app-ui/dialogs";
 import {
@@ -26,6 +25,7 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 import { cn } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
+import type { WorkspaceOption } from "@/lib/workspace-session";
 import {
   activateWorkspace,
   createAndActivateWorkspace,
@@ -33,16 +33,21 @@ import {
   reloadAfterWorkspaceChange,
 } from "@/lib/workspace-session";
 
-export function WorkspaceSwitcher({ workspace }: { workspace: Workspace }): ReactNode {
+export function WorkspaceSwitcher({
+  workspace,
+  workspaces,
+}: {
+  workspace: Workspace;
+  workspaces: readonly WorkspaceOption[];
+}): ReactNode {
   const { isMobile } = useSidebar();
   const navigate = useNavigate();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: organizations } = authClient.useListOrganizations();
   const { busy, error, run } = useFormSubmission("作成できませんでした");
   const [createOpen, setCreateOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
-  const options = listedWorkspaces(workspace, organizations);
+  const options = listedWorkspaces(workspace, workspaces);
 
   async function reload(): Promise<void> {
     await reloadAfterWorkspaceChange({ queryClient, router, navigate });

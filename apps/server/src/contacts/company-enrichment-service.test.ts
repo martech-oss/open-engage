@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RuntimeEnv } from "../env";
 import {
-  CompanyEnrichmentError,
+  type CompanyEnrichmentError,
   enrichCompany,
   isCompanyEnrichmentEnabled,
 } from "./company-enrichment-service";

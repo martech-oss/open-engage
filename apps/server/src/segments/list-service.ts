@@ -21,6 +21,15 @@ export async function listSegments(
   return rows.map(toSegmentRow);
 }
 
+export async function getSegment(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  id: string,
+): Promise<SegmentRow | null> {
+  const row = await new SegmentRepository(database, workspace).getSegment(id);
+  return row ? toSegmentRow(row) : null;
+}
+
 export function toSegmentRow(row: SegmentRecord): SegmentRow {
   return {
     id: row.id,

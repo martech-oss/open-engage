@@ -1,30 +1,25 @@
-import { ORPCError } from "@orpc/client";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
 import { WorkspaceSetupPage } from "@/features/auth/auth-pages";
-import { getCurrentSession } from "@/lib/auth-session";
-import { workspaceQueryOptions } from "@/lib/workspace";
+import { ensureAppBootstrap, isUnauthorizedBootstrapError } from "@/lib/app-bootstrap";
 
 export const Route = createFileRoute("/onboarding")({
   beforeLoad: async ({ context, location }) => {
-    const session = await getCurrentSession();
-    if (!session) {
-      throw redirect({
-        to: "/login",
-        search: { redirect: location.href },
-        replace: true,
-      });
-    }
     try {
-      await context.queryClient.ensureQueryData(workspaceQueryOptions());
-      throw redirect({ to: "/dashboard", replace: true });
+      const bootstrap = await ensureAppBootstrap(context.queryClient);
+      if (bootstrap.workspace) throw redirect({ to: "/dashboard", replace: true });
     } catch (error) {
-      if (error instanceof ORPCError && error.defined && error.code === "WORKSPACE_REQUIRED") {
-        return;
+      if (isUnauthorizedBootstrapError(error)) {
+        throw redirect({
+          to: "/login",
+          search: { redirect: location.href },
+          replace: true,
+        });
       }
       throw error;
     }
+    return undefined;
   },
   pendingComponent: () => <RoutePending label="ワークスペースを確認しています…" />,
   errorComponent: RouteError,

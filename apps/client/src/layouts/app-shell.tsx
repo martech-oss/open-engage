@@ -38,6 +38,7 @@ import {
 import { WorkspaceSwitcher } from "@/layouts/workspace-switcher";
 import { cn } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
+import type { WorkspaceOption } from "@/lib/workspace-session";
 
 /** 212px in the design doc — narrow enough that the 13px nav labels set the width. */
 const SIDEBAR_WIDTH = "13.25rem";
@@ -47,9 +48,11 @@ const NAV_ITEM_CLASS = "h-auto rounded-[7px] px-2.5 py-2 text-[13px] font-medium
 export function AppShell({
   user,
   workspace,
+  workspaces,
 }: {
   user: { name: string; email: string };
   workspace: Workspace;
+  workspaces: readonly WorkspaceOption[];
 }): ReactNode {
   const navigate = useNavigate();
   const router = useRouter();
@@ -81,7 +84,7 @@ export function AppShell({
       </a>
       <Sidebar collapsible="icon">
         <SidebarHeader className="border-b border-sidebar-border p-0">
-          <WorkspaceSwitcher workspace={workspace} />
+          <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
         </SidebarHeader>
         <SidebarContent className="gap-0 px-2 py-2.5">
           <SidebarMenu className="gap-0.5">

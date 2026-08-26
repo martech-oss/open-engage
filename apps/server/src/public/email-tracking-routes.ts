@@ -3,9 +3,9 @@ import type { Hono } from "hono";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { EmailTrackingEventRepository } from "@openengage/database/messaging";
 
-import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
 import { sha256Hex, verifySignedToken } from "../platform/crypto";
+import { recordContactEvent } from "../runtime/contact-event-service";
 
 const transparentGif = Uint8Array.from([
   71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 255, 255, 255, 33, 249, 4, 1, 0, 0, 0, 0,

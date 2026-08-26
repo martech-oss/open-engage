@@ -16,8 +16,8 @@ import {
 } from "@openengage/database/testing";
 
 import { processAutomationJob } from "../src/automations/worker";
-import { recordContactEvent } from "../src/contacts/event-service";
 import type { RuntimeEnv } from "../src/env";
+import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { seedWorkspace } from "./factory";
 
 afterEach(() => {

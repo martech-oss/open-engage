@@ -1,53 +1,33 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { dehydrate } from "@tanstack/react-query";
+import { describe, expect, it } from "vitest";
 
-const testState = vi.hoisted(() => ({
-  bindingFetch: vi.fn<(request: Request) => Promise<Response>>(),
-  browserSession: vi.fn<() => Promise<{ data: unknown }>>(),
-}));
+import { appBootstrapSchema } from "@openengage/orpc";
 
-vi.mock("cloudflare:workers", () => ({
-  env: {
-    SERVER: { fetch: testState.bindingFetch },
-  },
-}));
+import { createQueryClient } from "./query-client";
 
-vi.mock("@tanstack/react-start/server", () => ({
-  getRequestHeaders: () =>
-    new Headers({
-      cookie: "session=ssr-cookie",
-      "x-request-id": "request-123",
-    }),
-  getRequestUrl: () => new URL("https://client.example.test/login"),
-}));
+describe("SSR app bootstrap dehydration", () => {
+  it("never serializes Better Auth token, IP address, or user-agent sentinels", () => {
+    const bootstrap = appBootstrapSchema.parse({
+      viewer: {
+        id: "user-1",
+        name: "Person",
+        email: "person@example.test",
+        emailVerified: true,
+      },
+      workspace: null,
+      workspaces: [],
+      session: {
+        id: "session-1",
+        token: "ssr-sentinel-token",
+        ipAddress: "ssr-sentinel-ipAddress",
+        userAgent: "ssr-sentinel-userAgent",
+      },
+    });
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(["app", "bootstrap"], bootstrap);
 
-vi.mock("@/auth-client", () => ({
-  authClient: { getSession: testState.browserSession },
-}));
-
-describe("SSR auth session", () => {
-  beforeEach(() => {
-    testState.bindingFetch.mockReset();
-    testState.browserSession.mockReset();
-  });
-
-  it("reads Better Auth through SERVER.fetch with the inbound cookie", async () => {
-    const session = {
-      session: { id: "session-1", userId: "user-1" },
-      user: { id: "user-1", email: "person@example.test", name: "Person" },
-    };
-    testState.bindingFetch.mockResolvedValue(
-      Response.json(session, { headers: { "content-type": "application/json" } }),
-    );
-    testState.browserSession.mockResolvedValue({ data: null });
-
-    const { getCurrentSession } = await import("./auth-session");
-    await expect(getCurrentSession()).resolves.toEqual(session);
-
-    expect(testState.browserSession).not.toHaveBeenCalled();
-    expect(testState.bindingFetch).toHaveBeenCalledOnce();
-    const request = testState.bindingFetch.mock.calls[0]![0];
-    expect(new URL(request.url).pathname).toBe("/api/auth/get-session");
-    expect(request.headers.get("cookie")).toBe("session=ssr-cookie");
-    expect(request.headers.get("x-request-id")).toBe("request-123");
+    const serialized = JSON.stringify(dehydrate(queryClient));
+    expect(serialized).toContain("person@example.test");
+    expect(serialized).not.toMatch(/ssr-sentinel|token|ipAddress|userAgent/);
   });
 });

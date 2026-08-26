@@ -10,7 +10,7 @@ import {
   uuidv7,
 } from "@openengage/database/testing";
 
-import { processPendingPublicFormEvent } from "../src/contacts/event-service";
+import { processPendingPublicFormEvent } from "../src/runtime/contact-event-service";
 import { seedWorkspaceClient } from "./factory";
 
 describe("scoring archive races", () => {

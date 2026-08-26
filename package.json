@@ -6,8 +6,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "pnpm -r --if-present build",
-    "check": "pnpm format:check && pnpm lint && pnpm architecture:check && pnpm quality:unused && pnpm typecheck && pnpm test && pnpm build",
+    "build": "turbo run build",
+    "check": "turbo run //#format:check //#lint //#architecture:check //#quality:unused typecheck test build",
     "architecture:test": "node --test scripts/check-architecture.test.mjs",
     "architecture:check": "pnpm architecture:test && node scripts/check-architecture.mjs",
     "format": "oxfmt .",
@@ -15,15 +15,15 @@
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "quality:unused": "knip --no-progress --no-config-hints --no-tag-hints",
-    "dev": "pnpm db:migrate:local && pnpm --parallel --filter @openengage/client --filter @openengage/agent dev",
-    "dev:client": "pnpm --filter @openengage/client dev",
+    "dev": "turbo run dev --filter=@openengage/client --filter=@openengage/agent",
+    "dev:client": "turbo run dev --filter=@openengage/client",
     "deploy": "pnpm --filter @openengage/server deploy && pnpm --filter @openengage/agent deploy && pnpm --filter @openengage/client deploy",
-    "typecheck": "pnpm cf:types && pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test --passWithNoTests",
-    "cf:types": "pnpm --filter @openengage/server cf:types && pnpm --filter @openengage/agent cf:types && pnpm --filter @openengage/client cf:types",
-    "db:generate": "pnpm --filter @openengage/database db:generate",
-    "db:migrate:local": "pnpm --filter @openengage/server db:migrate:local",
-    "db:migrate:remote": "pnpm --filter @openengage/server db:migrate:remote"
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "cf:types": "turbo run cf:types",
+    "db:generate": "turbo run db:generate --filter=@openengage/database",
+    "db:migrate:local": "turbo run db:migrate:local --filter=@openengage/server",
+    "db:migrate:remote": "turbo run db:migrate:remote --filter=@openengage/server"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
@@ -31,6 +31,7 @@
     "oxfmt": "^0.61.0",
     "oxlint": "^1.76.0",
     "oxlint-tsgolint": "^7.0.2001",
+    "turbo": "2.10.11",
     "typescript": "catalog:"
   },
   "engines": {

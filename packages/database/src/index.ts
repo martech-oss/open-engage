@@ -38,4 +38,5 @@ export * from "./projects/repository";
 export * from "./scoring/repository";
 export * from "./web/repository";
 export * from "./workspaces/repository";
+export * from "./workspaces/bootstrap-query-repository";
 export * from "./workspaces/settings-repository";

@@ -1,4 +1,4 @@
-import { QueryClient, dehydrate, hydrate, queryOptions } from "@tanstack/react-query";
+import { dehydrate, hydrate, queryOptions, type QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRouteWithContext,

@@ -118,7 +118,10 @@ describe("Email sequence drafts", () => {
     await client.automations.applySequence(proposal);
     await client.emails.publishTemplate({ id: proposal.emails[0]!.templateId });
 
-    await expect(client.automations.applySequence(proposal)).rejects.toThrow();
+    await expect(client.automations.applySequence(proposal)).rejects.toMatchObject({
+      code: "SEQUENCE_CONFLICT",
+      status: 409,
+    });
   });
 
   it("rejects a cross-workspace source without leaving partial drafts", async () => {
@@ -135,7 +138,10 @@ describe("Email sequence drafts", () => {
       segmentId: segment.id,
     });
 
-    await expect(second.client.automations.applySequence(proposal)).rejects.toThrow();
+    await expect(second.client.automations.applySequence(proposal)).rejects.toMatchObject({
+      code: "INVALID_SEQUENCE",
+      status: 422,
+    });
     const counts = await env.DB.prepare(
       `SELECT
         (SELECT COUNT(*) FROM email_templates WHERE workspace_id = ? AND id IN (?, ?)) AS templates,

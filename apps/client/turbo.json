@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "cf:types": {
+      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/apps/server/wrangler.jsonc"]
+    },
+    "build": {
+      "dependsOn": ["$TURBO_EXTENDS$", "cf:types"],
+      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/scripts/check-client-bundles.mjs"]
+    },
+    "typecheck": {
+      "dependsOn": ["$TURBO_EXTENDS$", "cf:types"]
+    },
+    "dev": {
+      "dependsOn": ["@openengage/server#db:migrate:local"]
+    }
+  }
+}

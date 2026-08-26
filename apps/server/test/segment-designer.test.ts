@@ -8,6 +8,21 @@ import { reconcileContactSegmentMemberships } from "../src/segments/membership-s
 import { seedWorkspaceClient } from "./factory";
 
 describe("segment designer support", () => {
+  it("keeps a static segment ready when a manual recount is queued", async () => {
+    const { client } = await seedWorkspaceClient(env.DB);
+    const segment = await client.segments.create({
+      name: "Static refresh state",
+      slug: "static-refresh-state",
+      kind: "static",
+      membershipSource: "Manual selection",
+    });
+
+    await expect(client.segments.refresh({ id: segment.id })).resolves.toEqual({ ok: true });
+    await expect(client.segments.get({ id: segment.id })).resolves.toMatchObject({
+      evaluationStatus: "ready",
+    });
+  });
+
   it("validates workspace resources and previews an exact active count", async () => {
     const { client } = await seedWorkspaceClient(env.DB);
     const tag = await client.contacts.createTag({ name: "VIP", color: "#0f766e" });
@@ -100,6 +115,34 @@ describe("segment designer support", () => {
     expect((await client.segments.get({ id: segment.id })).memberCount).toBe(0);
   });
 
+  it("does not apply a contact match computed for a superseded filter version", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const contact = await client.contacts.create({
+      email: "contact-filter-race@example.com",
+      customFields: {},
+    });
+    await insertDynamicSegment("contact-filter-race", workspaceId, {
+      kind: "condition",
+      field: "email",
+      operator: "eq",
+      value: contact.email,
+    });
+    const raced = beforeDatabaseBatch(env.DB, 2, async () => {
+      await env.DB.prepare(
+        "UPDATE segments SET filter_version = filter_version + 1, evaluation_status = 'pending' WHERE id = ?",
+      )
+        .bind("contact-filter-race")
+        .run();
+    });
+
+    await reconcileContactSegmentMemberships(createDatabase(raced), workspaceId, contact.id);
+
+    expect(await membershipSummary(workspaceId, contact.id)).toEqual({
+      memberships: 0,
+      memberCount: 0,
+    });
+  });
+
   it("leaves memberships and evaluation state untouched for a stale filter version", async () => {
     const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB);
     const contact = await client.contacts.create({
@@ -149,6 +192,103 @@ describe("segment designer support", () => {
     });
   });
 
+  it("guards the full-refresh delete, insert, and exact count inside the batch", async () => {
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB);
+    const oldContact = await client.contacts.create({
+      email: "old-full-refresh@example.com",
+      customFields: {},
+    });
+    const newContact = await client.contacts.create({
+      email: "new-full-refresh@example.com",
+      customFields: {},
+    });
+    await insertDynamicSegment("full-refresh-race", workspaceId, {
+      kind: "condition",
+      field: "email",
+      operator: "eq",
+      value: oldContact.email,
+    });
+    const repository = new SegmentRepository(env.DB, {
+      workspaceId,
+      userId,
+      role: "owner",
+    });
+    await repository.replaceDynamicMemberships(
+      "full-refresh-race",
+      compileSegmentFilter(workspaceId, {
+        kind: "condition",
+        field: "email",
+        operator: "eq",
+        value: oldContact.email,
+      }),
+      1,
+    );
+    await env.DB.prepare("UPDATE segments SET member_count = 99 WHERE id = ?")
+      .bind("full-refresh-race")
+      .run();
+    const raced = beforeDatabaseBatch(env.DB, 1, async () => {
+      await env.DB.prepare(
+        "UPDATE segments SET filter_version = 2, evaluation_status = 'pending' WHERE id = ?",
+      )
+        .bind("full-refresh-race")
+        .run();
+    });
+
+    await new SegmentRepository(raced, {
+      workspaceId,
+      userId,
+      role: "owner",
+    }).replaceDynamicMemberships(
+      "full-refresh-race",
+      compileSegmentFilter(workspaceId, {
+        kind: "condition",
+        field: "email",
+        operator: "eq",
+        value: newContact.email,
+      }),
+      1,
+    );
+
+    const rows = await env.DB.prepare(
+      `SELECT sm.contact_id AS contactId, s.member_count AS memberCount,
+              s.filter_version AS filterVersion, s.evaluation_status AS evaluationStatus
+       FROM segments s
+       LEFT JOIN segment_memberships sm
+         ON sm.workspace_id = s.workspace_id AND sm.segment_id = s.id
+       WHERE s.workspace_id = ? AND s.id = ?`,
+    )
+      .bind(workspaceId, "full-refresh-race")
+      .all<{
+        contactId: string | null;
+        memberCount: number;
+        filterVersion: number;
+        evaluationStatus: string;
+      }>();
+    expect(rows.results).toEqual([
+      {
+        contactId: oldContact.id,
+        memberCount: 99,
+        filterVersion: 2,
+        evaluationStatus: "pending",
+      },
+    ]);
+
+    await repository.replaceDynamicMemberships(
+      "full-refresh-race",
+      compileSegmentFilter(workspaceId, {
+        kind: "condition",
+        field: "email",
+        operator: "eq",
+        value: oldContact.email,
+      }),
+      2,
+    );
+    expect(await membershipSummary(workspaceId, oldContact.id)).toEqual({
+      memberships: 1,
+      memberCount: 1,
+    });
+  });
+
   it("filters the segment list by static and dynamic kinds", async () => {
     const { client } = await seedWorkspaceClient(env.DB);
     const dynamic = await client.segments.create({
@@ -172,3 +312,67 @@ describe("segment designer support", () => {
     ]);
   });
 });
+
+type SegmentFilterInput = Parameters<typeof compileSegmentFilter>[1];
+
+async function insertDynamicSegment(
+  id: string,
+  workspaceId: string,
+  filter: SegmentFilterInput,
+): Promise<void> {
+  await dynamicSegmentInsert().bind(id, workspaceId, id, JSON.stringify(filter)).run();
+}
+
+function dynamicSegmentInsert(): D1PreparedStatement {
+  return env.DB.prepare(
+    `INSERT INTO segments (
+       id, workspace_id, name, slug, description, kind, filter_ast,
+       membership_source, filter_version, member_count, evaluated_at,
+       evaluation_status, evaluation_error, created_at, updated_at
+     ) VALUES (?, ?, 'Dynamic segment', ?, '', 'dynamic', ?, NULL, 1, 0, NULL, 'ready', NULL,
+       '2026-08-25T00:00:00.000Z', '2026-08-25T00:00:00.000Z')`,
+  );
+}
+
+async function membershipSummary(
+  workspaceId: string,
+  contactId: string,
+): Promise<{ memberships: number; memberCount: number }> {
+  const [memberships, memberCount] = await Promise.all([
+    env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM segment_memberships WHERE workspace_id = ? AND contact_id = ?",
+    )
+      .bind(workspaceId, contactId)
+      .first<{ count: number }>(),
+    env.DB.prepare(
+      "SELECT COALESCE(SUM(member_count), 0) AS memberCount FROM segments WHERE workspace_id = ?",
+    )
+      .bind(workspaceId)
+      .first<{ memberCount: number }>(),
+  ]);
+  return {
+    memberships: Number(memberships?.count ?? 0),
+    memberCount: Number(memberCount?.memberCount ?? 0),
+  };
+}
+
+function beforeDatabaseBatch(
+  source: D1Database,
+  batchNumber: number,
+  barrier: () => Promise<void>,
+): D1Database {
+  let batches = 0;
+  return new Proxy(source, {
+    get(target, property) {
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          batches += 1;
+          if (batches === batchNumber) await barrier();
+          return target.batch(statements);
+        };
+      }
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}

@@ -7,6 +7,7 @@ import { ContactTagsPage } from "@/features/contacts/contact-resource-pages";
 export const Route = createFileRoute("/_app/tags")({
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(contactResourcesQueryOptions());
+    return undefined;
   },
   ...routeStatusComponents,
   component: ContactTagsRoute,

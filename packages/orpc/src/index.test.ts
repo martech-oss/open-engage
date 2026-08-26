@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as z from "zod";
+import type * as z from "zod";
 
 import { contactListInputSchema, contactListResultSchema } from "@openengage/core/contacts";
 import { workspaceSchema } from "@openengage/core/workspaces";
@@ -7,6 +7,33 @@ import { workspaceSchema } from "@openengage/core/workspaces";
 import { contract } from "./contract";
 
 describe("oRPC contract schemas", () => {
+  it("projects app bootstrap output to the session-safe client shape", () => {
+    const output = contract.app.bootstrap["~orpc"].outputSchema as z.ZodType;
+
+    expect(
+      output.parse({
+        viewer: {
+          id: "user-1",
+          name: "Person",
+          email: "person@example.test",
+          emailVerified: true,
+        },
+        workspace: null,
+        workspaces: [{ id: "workspace-1", name: "Acme", slug: "acme", role: "owner" }],
+        session: {
+          id: "session-1",
+          token: "must-not-escape",
+          ipAddress: "203.0.113.1",
+          userAgent: "sentinel-agent",
+        },
+      }),
+    ).toEqual({
+      viewer: { id: "user-1", name: "Person", email: "person@example.test" },
+      workspace: null,
+      workspaces: [{ id: "workspace-1", name: "Acme", slug: "acme" }],
+    });
+  });
+
   it.each(["deals", "campaigns"] as const)(
     "keeps the shared report range refinements on %s input",
     (endpoint) => {
@@ -127,7 +154,7 @@ describe("oRPC contract schemas", () => {
 describe("v0.1 API contract", () => {
   it("exposes domain namespaces without legacy aliases", () => {
     expect(Object.keys(contract)).toEqual(
-      expect.arrayContaining(["agents", "contacts", "dashboard", "platform", "workspace"]),
+      expect.arrayContaining(["agents", "app", "contacts", "dashboard", "platform", "workspace"]),
     );
     expect("operations" in contract).toBe(false);
     expect("contactResources" in contract).toBe(false);
@@ -135,7 +162,8 @@ describe("v0.1 API contract", () => {
   });
 
   it("uses domain-prefixed REST paths", () => {
-    expect.assertions(29);
+    expect.assertions(30);
+    expectRoute(contract.app.bootstrap, "GET", "/app/bootstrap");
     expectRoute(contract.dashboard.get, "GET", "/dashboard");
     expectRoute(contract.workspace.createApiKey, "POST", "/workspace/api-keys");
     expectRoute(contract.workspace.listWebhookEndpoints, "GET", "/workspace/webhooks");

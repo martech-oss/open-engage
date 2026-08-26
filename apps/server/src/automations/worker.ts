@@ -15,11 +15,82 @@ import {
 import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
 
 import { PermanentChannelError } from "../channels";
-import { recordContactEvent } from "../contacts/event-service";
 import { type RuntimeEnv } from "../env";
 import { createEmailDelivery, createWebhookDelivery } from "../messaging/delivery-worker";
 import { primitiveString } from "../platform/values";
+import { recordContactEvent } from "../runtime/contact-event-service";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import { dispatchAutomationAction, type AutomationActionExecutorRegistry } from "./action-dispatch";
+
+interface AutomationActionExecutionContext {
+  actionRepository: AutomationActionRepository;
+  database: OpenEngageDatabase;
+  engine: AutomationEngineRepository;
+  env: RuntimeEnv;
+  job: AutomationJobRow;
+  leaseId: string;
+  now: string;
+}
+
+const automationActionExecutors = {
+  send_email: async (action, context) => {
+    await createEmailDelivery(action, context.job, context.leaseId, context.env, context.database);
+  },
+  send_webhook: async (action, context) => {
+    await createWebhookDelivery(
+      action.endpointId,
+      context.job,
+      context.leaseId,
+      context.env,
+      context.database,
+    );
+  },
+  add_tag: async (action, context) => {
+    await context.engine.addContactTag(context.job, context.leaseId, action.tagId, context.now);
+  },
+  remove_tag: async (action, context) => {
+    await context.engine.removeContactTag(context.job, context.leaseId, action.tagId);
+  },
+  add_segment: async (action, context) => {
+    if (
+      await context.engine.addAutomationSegmentMembership(
+        context.job,
+        context.leaseId,
+        action.segmentId,
+        context.now,
+      )
+    ) {
+      await recordContactEvent(context.database, {
+        workspaceId: context.job.workspaceId,
+        contactId: context.job.contactId,
+        type: "segment_joined",
+        resourceType: "segment",
+        resourceId: action.segmentId,
+        queue: context.env.JOBS_QUEUE,
+      });
+    }
+  },
+  remove_segment: async (action, context) => {
+    await context.engine.removeSegmentMembership(context.job, context.leaseId, action.segmentId);
+  },
+  change_score: async (action, context) => {
+    await context.actionRepository.adjustContactScoreForJob(
+      context.job,
+      context.leaseId,
+      action.amount,
+      context.now,
+    );
+  },
+  update_field: async (action, context) => {
+    await updateContactField(
+      context.job,
+      context.leaseId,
+      action.field,
+      action.value,
+      context.engine,
+    );
+  },
+} satisfies AutomationActionExecutorRegistry<AutomationActionExecutionContext>;
 
 export async function processAutomationJob(
   jobId: string,
@@ -132,41 +203,15 @@ export async function executeNode(
   const action = node.config;
   const now = new Date().toISOString();
   const actionRepository = new AutomationActionRepository(database);
-  switch (action.action) {
-    case "send_email":
-      await createEmailDelivery(action, job, leaseId, env, database);
-      break;
-    case "send_webhook":
-      await createWebhookDelivery(action.endpointId, job, leaseId, env, database);
-      break;
-    case "add_tag":
-      await engine.addContactTag(job, leaseId, action.tagId, now);
-      break;
-    case "remove_tag":
-      await engine.removeContactTag(job, leaseId, action.tagId);
-      break;
-    case "add_segment":
-      if (await engine.addAutomationSegmentMembership(job, leaseId, action.segmentId, now)) {
-        await recordContactEvent(database, {
-          workspaceId: job.workspaceId,
-          contactId: job.contactId,
-          type: "segment_joined",
-          resourceType: "segment",
-          resourceId: action.segmentId,
-          queue: env.JOBS_QUEUE,
-        });
-      }
-      break;
-    case "remove_segment":
-      await engine.removeSegmentMembership(job, leaseId, action.segmentId);
-      break;
-    case "change_score":
-      await actionRepository.adjustContactScoreForJob(job, leaseId, action.amount, now);
-      break;
-    case "update_field":
-      await updateContactField(job, leaseId, action.field, action.value, engine);
-      break;
-  }
+  await dispatchAutomationAction(automationActionExecutors, action, {
+    actionRepository,
+    database,
+    engine,
+    env,
+    job,
+    leaseId,
+    now,
+  });
   if (await actionRepository.hasRunningLease(job, leaseId)) {
     await enqueueSegmentContactReconciliation(env.JOBS_QUEUE, job.workspaceId, [job.contactId]);
   }

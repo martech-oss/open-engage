@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { WorkspaceDateTimeError, workspaceDateTimeToUtc, workspaceReportDateRange } from "./time";
+import {
+  type WorkspaceDateTimeError,
+  workspaceDateTimeToUtc,
+  workspaceReportDateRange,
+} from "./time";
 
 describe("workspaceDateTimeToUtc", () => {
   it.each([

@@ -12,7 +12,6 @@ import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
 import { isConstraintError, uuidv7 } from "@openengage/database/shared";
 
-import { recordContactEvent } from "../contacts/event-service";
 import { resourceSlug } from "../platform/values";
 import { updateSegmentMemberCount } from "../segments/membership-service";
 
@@ -149,26 +148,22 @@ export function removeContactTag(
   );
 }
 
+export interface AddContactSegmentPorts {
+  addMembership(contactId: string, segmentId: string): Promise<boolean>;
+  updateMemberCount(segmentId: string): Promise<void>;
+  recordJoined(input: { contactId: string; segmentId: string }): Promise<void>;
+}
+
 export async function addContactSegment(
-  database: OpenEngageDatabase,
-  workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
-  queue?: Queue,
+  ports: AddContactSegmentPorts,
 ): Promise<boolean> {
-  const workspaceId = workspace.workspaceId;
-  const added = await new ContactResourceRepository(database, workspace).addContactSegment(
-    input.contactId,
-    input.resourceId,
-  );
+  const added = await ports.addMembership(input.contactId, input.resourceId);
   if (!added) return false;
-  await updateSegmentMemberCount(database, workspaceId, input.resourceId);
-  await recordContactEvent(database, {
-    workspaceId,
+  await ports.updateMemberCount(input.resourceId);
+  await ports.recordJoined({
     contactId: input.contactId,
-    type: "segment_joined",
-    resourceType: "segment",
-    resourceId: input.resourceId,
-    ...(queue ? { queue } : {}),
+    segmentId: input.resourceId,
   });
   return true;
 }

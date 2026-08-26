@@ -14,7 +14,6 @@ import { DeliveryRecoveryRepository } from "@openengage/database/messaging";
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";
 import { PermanentChannelError } from "../channels";
-import { retryPendingPublicFormEvents } from "../contacts/event-service";
 import {
   processContactExport,
   processContactImport,
@@ -31,10 +30,52 @@ import {
   refreshSegmentMemberships,
 } from "../segments/membership-service";
 import {
+  processPendingPublicFormEvent,
+  retryPendingPublicFormEvents,
+} from "./contact-event-service";
+import {
   deliveryQueueMessageSchema,
   jobsQueueMessageSchema,
+  type JobsQueueMessage,
   type QueueMessage as OpenEngageQueueMessage,
 } from "./queues";
+
+type JobsQueueHandlerMap = {
+  [Kind in JobsQueueMessage["kind"]]: (
+    message: Extract<JobsQueueMessage, { kind: Kind }>,
+    env: RuntimeEnv,
+  ) => Promise<void>;
+};
+
+export const jobsQueueHandlers = {
+  automation_job: async (message, env) => {
+    await processAutomationJob(message.jobId, message.leaseId, env);
+  },
+  contact_event: async (message, env) => {
+    await processPendingPublicFormEvent(createDatabase(env.DB), message.eventId, env.JOBS_QUEUE);
+  },
+  contact_import: async (message, env) => {
+    await processContactImport(message.importJobId, message.part, message.totalParts, env);
+  },
+  contact_export: async (message, env) => {
+    await processContactExport(message.exportJobId, env);
+  },
+  segment_contact_reconcile: async (message, env) => {
+    await reconcileContactSegmentMemberships(
+      createDatabase(env.DB),
+      message.workspaceId,
+      message.contactId,
+    );
+  },
+  segment_full_refresh: async (message, env) => {
+    await refreshSegmentMemberships(
+      createDatabase(env.DB),
+      message.workspaceId,
+      message.segmentId,
+      message.filterVersion,
+    );
+  },
+} satisfies JobsQueueHandlerMap;
 
 export async function scheduled(
   controller: ScheduledController,
@@ -104,47 +145,17 @@ export async function scheduled(
 }
 
 export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Promise<void> {
-  for (const message of batch.messages) {
+  await runBounded(batch.messages, 5, async (message) => {
     if (isQueue(batch.queue, "dead-letter")) {
       await persistDeadLetter(batch.queue, message.body, message.attempts, env);
       message.ack();
-      continue;
+      return;
     }
     try {
       if (isQueue(batch.queue, "jobs")) {
         const parsed = jobsQueueMessageSchema.safeParse(message.body);
         if (!parsed.success) throw new PermanentChannelError("Invalid jobs queue message");
-        switch (parsed.data.kind) {
-          case "automation_job":
-            await processAutomationJob(parsed.data.jobId, parsed.data.leaseId, env);
-            break;
-          case "contact_import":
-            await processContactImport(
-              parsed.data.importJobId,
-              parsed.data.part,
-              parsed.data.totalParts,
-              env,
-            );
-            break;
-          case "contact_export":
-            await processContactExport(parsed.data.exportJobId, env);
-            break;
-          case "segment_contact_reconcile":
-            await reconcileContactSegmentMemberships(
-              createDatabase(env.DB),
-              parsed.data.workspaceId,
-              parsed.data.contactId,
-            );
-            break;
-          case "segment_full_refresh":
-            await refreshSegmentMemberships(
-              createDatabase(env.DB),
-              parsed.data.workspaceId,
-              parsed.data.segmentId,
-              parsed.data.filterVersion,
-            );
-            break;
-        }
+        await dispatchJobsQueueMessage(parsed.data, env);
       } else if (isQueue(batch.queue, "delivery")) {
         const parsed = deliveryQueueMessageSchema.safeParse(message.body);
         if (!parsed.success) throw new PermanentChannelError("Invalid delivery queue message");
@@ -168,7 +179,29 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
         message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
       }
     }
-  }
+  });
+}
+
+async function dispatchJobsQueueMessage(message: JobsQueueMessage, env: RuntimeEnv): Promise<void> {
+  await jobsQueueHandlers[message.kind](message as never, env);
+}
+
+async function runBounded<T>(
+  items: readonly T[],
+  maximumConcurrency: number,
+  process: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      if (item !== undefined) await process(item);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(maximumConcurrency, items.length) }, async () => worker()),
+  );
 }
 
 async function enqueueSegmentCorrections(env: RuntimeEnv): Promise<void> {

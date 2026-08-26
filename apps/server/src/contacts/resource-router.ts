@@ -1,9 +1,10 @@
+import type { WorkspaceContext } from "@openengage/core/shared";
+import type { OpenEngageDatabase } from "@openengage/database/client";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 import {
-  addContactSegment,
   addContactTag,
   adjustContactScore,
   applyContactBulkAction,
@@ -16,6 +17,15 @@ import {
   restoreContact,
   updateTag,
 } from "./resource-service";
+
+export interface ContactResourceRouterDependencies {
+  addContactSegment(input: {
+    database: OpenEngageDatabase;
+    workspace: WorkspaceContext;
+    relation: { contactId: string; resourceId: string };
+    queue: Queue;
+  }): Promise<boolean>;
+}
 
 export const contactOptionsProcedure = authed.contacts.options.handler(({ context }) =>
   getContactOptions(context.database, context.workspace),
@@ -85,17 +95,22 @@ export const removeTagProcedure = authed.contacts.removeTag.handler(
   },
 );
 
-export const addSegmentProcedure = authed.contacts.addToSegment.handler(
-  async ({ context, input, errors }) => {
+function createAddSegmentProcedure(dependencies: ContactResourceRouterDependencies) {
+  return authed.contacts.addToSegment.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (
-      !(await addContactSegment(context.database, context.workspace, input, context.env.JOBS_QUEUE))
+      !(await dependencies.addContactSegment({
+        database: context.database,
+        workspace: context.workspace,
+        relation: input,
+        queue: context.env.JOBS_QUEUE,
+      }))
     ) {
       throw errors.RELATION_REJECTED();
     }
     return ack;
-  },
-);
+  });
+}
 
 // Mirrors the REST route, which reports success even when nothing matched.
 export const removeSegmentProcedure = authed.contacts.removeFromSegment.handler(
@@ -161,16 +176,18 @@ export const bulkActionProcedure = authed.contacts.bulkUpdate.handler(
   },
 );
 
-export const contactResourceProcedures = {
-  options: contactOptionsProcedure,
-  profile: contactProfileProcedure,
-  createTag: createTagProcedure,
-  updateTag: updateTagProcedure,
-  assignTag: addTagProcedure,
-  removeTag: removeTagProcedure,
-  addToSegment: addSegmentProcedure,
-  removeFromSegment: removeSegmentProcedure,
-  adjustScore: adjustScoreProcedure,
-  restore: restoreContactProcedure,
-  bulkUpdate: bulkActionProcedure,
-};
+export function createContactResourceProcedures(dependencies: ContactResourceRouterDependencies) {
+  return {
+    options: contactOptionsProcedure,
+    profile: contactProfileProcedure,
+    createTag: createTagProcedure,
+    updateTag: updateTagProcedure,
+    assignTag: addTagProcedure,
+    removeTag: removeTagProcedure,
+    addToSegment: createAddSegmentProcedure(dependencies),
+    removeFromSegment: removeSegmentProcedure,
+    adjustScore: adjustScoreProcedure,
+    restore: restoreContactProcedure,
+    bulkUpdate: bulkActionProcedure,
+  };
+}

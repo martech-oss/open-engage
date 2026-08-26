@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_app/segments/$id")({
         }),
       ),
     ]);
+    return undefined;
   },
   ...routeStatusComponents,
   component: SegmentDetailRoute,

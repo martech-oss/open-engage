@@ -7,12 +7,16 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
-import { WorkspaceDateTimeError } from "@openengage/core/shared";
+import { WorkspaceDateTimeError } from "@openengage/core/shared/time";
 import type { SiteMessageWrite } from "@openengage/core/web";
 
 import { normalizeSiteMessageSchedule } from "./site-message-schedule";
 import { SiteMessageScheduleFields } from "./site-message-schedule-fields";
-import { type SiteMessageRow, useCreateSiteMessage, useUpdateSiteMessage } from "./website-api";
+import {
+  type SiteMessageRow,
+  type useCreateSiteMessage,
+  type useUpdateSiteMessage,
+} from "./website-api";
 
 export function SiteMessageEditorDialog({
   item,

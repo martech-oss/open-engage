@@ -104,7 +104,7 @@ describe("public form atomic idempotency", () => {
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
     await env.DB.prepare(
-      `UPDATE contact_event_outbox SET processed_at = ?
+      `UPDATE contact_event_outbox SET status = 'processed', processed_at = ?
        WHERE event_id IN (
          SELECT id FROM contact_events WHERE workspace_id = ? AND type = 'contact_created'
        )`,
@@ -112,7 +112,7 @@ describe("public form atomic idempotency", () => {
       .bind(eightDaysAgo, form.workspaceId)
       .run();
     await env.DB.prepare(
-      `UPDATE contact_event_outbox SET processed_at = ?
+      `UPDATE contact_event_outbox SET status = 'processed', processed_at = ?
        WHERE event_id IN (
          SELECT id FROM contact_events WHERE workspace_id = ? AND type = 'form_submitted'
        )`,
@@ -221,7 +221,7 @@ describe("public form atomic idempotency", () => {
     )
       .bind(form.workspaceId)
       .first<{ eventId: string; attemptCount: number }>();
-    expect(work).toMatchObject({ attemptCount: 1 });
+    expect(work).toMatchObject({ attemptCount: 0 });
     if (!work) throw new Error("form submission work was not created");
     await env.DB.prepare(
       "UPDATE contact_event_outbox SET status = 'pending', processed_at = NULL WHERE event_id = ?",
@@ -239,7 +239,7 @@ describe("public form atomic idempotency", () => {
     )
       .bind(form.workspaceId)
       .first<{ score: number; status: string; attemptCount: number }>();
-    expect(afterConcurrentScan).toEqual({ score: 5, status: "processed", attemptCount: 2 });
+    expect(afterConcurrentScan).toEqual({ score: 5, status: "processed", attemptCount: 1 });
 
     await scheduled(controller, env, createExecutionContext());
     const afterProcessedScan = await env.DB.prepare(
@@ -247,7 +247,7 @@ describe("public form atomic idempotency", () => {
     )
       .bind(form.workspaceId)
       .first<{ score: number; attemptCount: number }>();
-    expect(afterProcessedScan).toEqual({ score: 5, attemptCount: 2 });
+    expect(afterProcessedScan).toEqual({ score: 5, attemptCount: 1 });
   });
 
   it("catches post-commit event failure losing durable retryable work", async () => {
@@ -275,6 +275,12 @@ describe("public form atomic idempotency", () => {
     });
     expect(response.status).toBe(202);
     expect(await response.json()).toEqual({ data: { accepted: true, message: "Accepted" } });
+
+    await scheduled(
+      createScheduledController({ cron: "* * * * *" }),
+      env,
+      createExecutionContext(),
+    );
 
     const counts = await env.DB.prepare(
       "SELECT (SELECT COUNT(*) FROM contacts WHERE workspace_id = ? AND email = 'pending@example.com') AS contacts, (SELECT COUNT(*) FROM form_submissions WHERE workspace_id = ?) AS submissions, (SELECT COUNT(*) FROM contact_events WHERE workspace_id = ?) AS events, (SELECT COUNT(*) FROM contact_event_outbox WHERE workspace_id = ? AND status = 'pending') AS pending_work, (SELECT COUNT(*) FROM contact_event_outbox WHERE workspace_id = ? AND status = 'processed') AS processed_work, (SELECT COUNT(*) FROM contact_event_projections WHERE workspace_id = ?) AS projections",

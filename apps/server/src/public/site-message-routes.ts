@@ -3,8 +3,8 @@ import * as z from "zod";
 
 import { WebRepository } from "@openengage/database/web";
 
-import { processPendingPublicFormEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
+import { processPendingPublicFormEvent } from "../runtime/contact-event-service";
 import { originAllowed, pagePatternMatches } from "../web/domain";
 import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";

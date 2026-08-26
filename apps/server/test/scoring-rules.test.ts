@@ -9,7 +9,7 @@ import {
   uuidv7,
 } from "@openengage/database/testing";
 
-import { recordContactEvent } from "../src/contacts/event-service";
+import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
 
 interface Fixture {

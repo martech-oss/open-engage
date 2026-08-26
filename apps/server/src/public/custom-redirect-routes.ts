@@ -3,8 +3,8 @@ import type { Hono } from "hono";
 import { PublicCustomRedirectRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
-import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
+import { recordContactEvent } from "../runtime/contact-event-service";
 
 /**
  * The public side of a Custom Redirect. The URL is stable and shareable, so

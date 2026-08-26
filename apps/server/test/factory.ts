@@ -13,7 +13,7 @@ import {
   user,
   uuidv7,
 } from "@openengage/database/testing";
-import { contract, type WorkspaceContext, type WorkspaceRole } from "@openengage/orpc";
+import type { contract, WorkspaceContext, WorkspaceRole } from "@openengage/orpc";
 
 import { randomIdentifier, sha256Hex } from "../src/platform/crypto";
 

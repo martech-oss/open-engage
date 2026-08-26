@@ -18,6 +18,7 @@
     "./scoring": "./src/scoring/index.ts",
     "./segments": "./src/segments/index.ts",
     "./shared": "./src/shared/schema.ts",
+    "./shared/time": "./src/shared/time.ts",
     "./web": "./src/web/index.ts",
     "./workspaces": "./src/workspaces/schema.ts"
   },

@@ -9,12 +9,14 @@ import {
 } from "@/features/companies/company-api";
 
 export const Route = createFileRoute("/_app/companies/$id")({
-  loader: ({ params, context }) =>
-    Promise.all([
+  loader: async ({ params, context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(companyQueryOptions(params.id)),
       context.queryClient.ensureQueryData(companyContactOptionsQueryOptions()),
       context.queryClient.ensureQueryData(companyEnrichmentCapabilityQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: CompanyDetailRoute,
 });

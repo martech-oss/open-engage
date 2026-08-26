@@ -1,0 +1,15 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["$TURBO_EXTENDS$", "cf:types"]
+    },
+    "typecheck": {
+      "dependsOn": ["$TURBO_EXTENDS$", "cf:types"]
+    },
+    "dev": {
+      "dependsOn": ["@openengage/server#db:migrate:local"]
+    }
+  }
+}

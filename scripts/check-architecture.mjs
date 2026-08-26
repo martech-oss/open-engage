@@ -108,6 +108,11 @@ const sharedErrorMessages = [
 // never grow it for a new raw-drizzle call site.
 const drizzleImportAllowlist = [];
 const routeSsrFalseAllowlist = new Set([]);
+const migratedCommandRouters = new Set([
+  "apps/server/src/automations/router.ts",
+  "apps/server/src/contacts/router.ts",
+  "apps/server/src/segments/router.ts",
+]);
 
 const rootFlag = process.argv.indexOf("--root");
 const root =
@@ -216,6 +221,34 @@ for (const file of files) {
   if (!workspacePath.startsWith("packages/database/src/") && importsRawOwnerSchema) {
     violations.push(
       `${workspacePath}: database raw owner schema internals must not be imported outside the database package`,
+    );
+  }
+  if (
+    migratedCommandRouters.has(workspacePath) &&
+    edges.some(
+      (edge) =>
+        edge.runtime &&
+        (edge.kind === "import" || edge.kind === "export" || edge.kind === "dynamic-import") &&
+        (edge.specifier === "@openengage/database" ||
+          edge.specifier.startsWith("@openengage/database/")),
+    )
+  ) {
+    violations.push(
+      `${workspacePath}: migrated command router must not runtime import @openengage/database; ` +
+        `delegate persistence to its application service`,
+    );
+  }
+  if (
+    workspacePath.startsWith("apps/server/src/contacts/") &&
+    !isTest &&
+    edges.some((edge) => {
+      const target = resolveModuleSpecifier(file, edge.specifier);
+      return target && relative(root, target).startsWith("apps/server/src/runtime/");
+    })
+  ) {
+    violations.push(
+      `${workspacePath}: contacts domain must not depend on runtime composition; ` +
+        `wire cross-domain event orchestration from apps/server/src/runtime instead`,
     );
   }
   if (
@@ -532,10 +565,13 @@ function extractAstFacts(sourceFile) {
       functionLikeSpans.push({ lineCount: end - start + 1, startLine: start + 1 });
     }
     if (isImportDeclaration(node)) {
-      addEdge("import", node.moduleSpecifier);
+      addEdge("import", node.moduleSpecifier, { runtime: importDeclarationIsRuntime(node) });
     } else if (isExportDeclaration(node)) {
       if (node.moduleSpecifier) {
-        addEdge("export", node.moduleSpecifier, { exportsAll: !node.exportClause });
+        addEdge("export", node.moduleSpecifier, {
+          exportsAll: !node.exportClause,
+          runtime: exportDeclarationIsRuntime(node),
+        });
       }
     } else if (isImportTypeNode(node)) {
       addEdge(
@@ -545,7 +581,7 @@ function extractAstFacts(sourceFile) {
     } else if (isCallExpression(node) && node.expression.kind === SyntaxKind.ImportKeyword) {
       // Computed dynamic imports cannot form a canonical static dependency edge and are
       // intentionally ignored. String literals and no-substitution templates are retained.
-      addEdge("dynamic-import", node.arguments[0]);
+      addEdge("dynamic-import", node.arguments[0], { runtime: true });
     }
 
     if (
@@ -617,6 +653,26 @@ function extractAstFacts(sourceFile) {
     hasStaticOrmAccess,
     source: sourceFile.text,
   };
+}
+
+function importDeclarationIsRuntime(node) {
+  const clause = node.importClause;
+  if (!clause) return true;
+  if (clause.isTypeOnly) return false;
+  if (clause.name) return true;
+  const bindings = clause.namedBindings;
+  if (!bindings || isNamespaceImport(bindings)) return Boolean(bindings);
+  return (
+    isNamedImports(bindings) &&
+    (bindings.elements.length === 0 || bindings.elements.some((element) => !element.isTypeOnly))
+  );
+}
+
+function exportDeclarationIsRuntime(node) {
+  if (node.isTypeOnly) return false;
+  const exports = node.exportClause;
+  if (!exports || !isNamedExports(exports)) return true;
+  return exports.elements.length === 0 || exports.elements.some((element) => !element.isTypeOnly);
 }
 
 function collectRuntimeImportBindings(sourceFile, lexicalModel) {

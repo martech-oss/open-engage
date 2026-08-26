@@ -5,8 +5,10 @@ import { emailArchivedTemplatesQueryOptions } from "@/features/emails/email-api"
 import { EmailArchivePage } from "@/features/emails/email-pages";
 
 export const Route = createFileRoute("/_app/emails/archive")({
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData(emailArchivedTemplatesQueryOptions()),
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(emailArchivedTemplatesQueryOptions());
+    return undefined;
+  },
   ...routeStatusComponents,
   component: EmailArchivePage,
 });

@@ -17,11 +17,13 @@ export const Route = createFileRoute("/_app/companies/")({
     middlewares: [stripSearchParams(companySearchDefaults)],
   },
   loaderDeps: ({ search }) => ({ q: search.q }),
-  loader: ({ deps, context }) =>
-    Promise.all([
+  loader: async ({ deps, context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(companiesQueryOptions(deps.q)),
       context.queryClient.ensureQueryData(companyEnrichmentCapabilityQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: CompaniesRoute,
 });

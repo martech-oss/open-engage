@@ -1,15 +1,15 @@
 import { agentProcedures } from "../agents/router";
+import { appProcedures } from "../app-bootstrap/router";
 import { assetProcedures } from "../assets/router";
 import { automationProcedures } from "../automations/router";
 import { consentProcedures } from "../consent/router";
 import { companyProcedures } from "../contacts/company-router";
-import { contactResourceProcedures } from "../contacts/resource-router";
-import { contactProcedures } from "../contacts/router";
 import { dealProcedures } from "../deals/router";
 import { messagingProcedures } from "../messaging/router";
 import { platformProcedures } from "../platform/router";
 import { projectProcedures } from "../projects/router";
 import { dashboardProcedures, reportProcedures } from "../reports/router";
+import { contactProcedures, contactResourceProcedures } from "../runtime/contact-composition";
 import { scoringProcedures } from "../scoring/router";
 import { segmentProcedures } from "../segments/router";
 import { websiteProcedures } from "../web/router";
@@ -18,6 +18,7 @@ import { os } from "./base";
 
 export const orpcRouter = os.router({
   agents: agentProcedures,
+  app: appProcedures,
   assets: assetProcedures,
   automations: automationProcedures,
   companies: companyProcedures,

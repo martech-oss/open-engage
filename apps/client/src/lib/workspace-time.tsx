@@ -9,7 +9,7 @@ import {
   formatShortDate,
   toDateTimeLocal,
 } from "@/lib/format";
-import { workspaceDateTimeToUtc } from "@openengage/core/shared";
+import { workspaceDateTimeToUtc } from "@openengage/core/shared/time";
 
 export interface WorkspaceTime {
   timeZone: string;

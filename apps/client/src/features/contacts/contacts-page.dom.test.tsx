@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContactSummary } from "@openengage/core/contacts";
 
 import { type ContactSearch, contactSearchDefaults } from "./contact-api";
+import type * as ContactApiModule from "./contact-api";
 import { ContactsPage } from "./contacts-page";
 
 const doubles = vi.hoisted(() => ({
@@ -131,7 +132,7 @@ vi.mock("@/components/data-table", () => ({
 }));
 
 vi.mock("./contact-api", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./contact-api")>();
+  const original = await importOriginal<typeof ContactApiModule>();
   return {
     ...original,
     bulkUpdateContacts: doubles.bulkUpdateContacts,

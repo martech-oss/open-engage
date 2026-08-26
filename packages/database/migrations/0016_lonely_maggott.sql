@@ -1,0 +1,2 @@
+CREATE INDEX `contact_events_workspace_occurred_idx` ON `contact_events` (`workspace_id`,`occurred_at`);--> statement-breakpoint
+CREATE INDEX `deliveries_workspace_created_idx` ON `deliveries` (`workspace_id`,`created_at`);

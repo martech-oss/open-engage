@@ -5,7 +5,7 @@ import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { contract } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
 import { app } from "../src/app";
 import type { RuntimeEnv } from "../src/env";

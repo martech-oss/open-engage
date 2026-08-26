@@ -235,37 +235,8 @@ export class DealRecordRepository extends WorkspaceRepository {
     return didChange(result);
   }
 
-  /**
-   * The deal+pipeline+stage+owner+contact+company join, with the two
-   * per-deal task counters. `openTaskCount`/`nextTaskAt` are correlated
-   * scalar subqueries built with the query builder (not raw `${column}`
-   * interpolation in a select field) — that form renders the correlation
-   * columns unqualified in this drizzle version, silently comparing a table
-   * to itself. Verified via `.toSQL()`: the emitted WHERE clauses read
-   * `"deal_tasks"."workspaceId" = "deals"."workspaceId"` and
-   * `"deal_tasks"."dealId" = "deals"."id"`, fully qualified both sides.
-   */
-  private dealSelection() {
-    const openTaskCount = this.database.orm
-      .select({ value: count().as("value") })
-      .from(dealTasks)
-      .where(
-        and(
-          eq(dealTasks.workspaceId, deals.workspaceId),
-          eq(dealTasks.dealId, deals.id),
-          eq(dealTasks.status, "open"),
-        ),
-      );
-    const nextTaskAt = this.database.orm
-      .select({ value: min(dealTasks.dueAt).as("value") })
-      .from(dealTasks)
-      .where(
-        and(
-          eq(dealTasks.workspaceId, deals.workspaceId),
-          eq(dealTasks.dealId, deals.id),
-          eq(dealTasks.status, "open"),
-        ),
-      );
+  /** The deal join plus one grouped open-task summary row per deal. */
+  private dealSelection(openTaskSummary: ReturnType<DealRecordRepository["openTaskSummary"]>) {
     return {
       id: deals.id,
       workspaceId: deals.workspaceId,
@@ -296,14 +267,29 @@ export class DealRecordRepository extends WorkspaceRepository {
       archivedAt: deals.archivedAt,
       createdAt: deals.createdAt,
       updatedAt: deals.updatedAt,
-      openTaskCount: sql<number>`${openTaskCount}`.mapWith(Number).as("openTaskCount"),
-      nextTaskAt: sql<string | null>`${nextTaskAt}`.as("nextTaskAt"),
+      openTaskCount: sql<number>`coalesce(${openTaskSummary.openTaskCount}, 0)`.mapWith(Number),
+      nextTaskAt: openTaskSummary.nextTaskAt,
     };
   }
 
-  private dealQuery() {
+  private openTaskSummary() {
     return this.database.orm
-      .select(this.dealSelection())
+      .select({
+        workspaceId: dealTasks.workspaceId,
+        dealId: dealTasks.dealId,
+        openTaskCount: count().as("open_task_count"),
+        nextTaskAt: min(dealTasks.dueAt).as("next_task_at"),
+      })
+      .from(dealTasks)
+      .where(and(eq(dealTasks.workspaceId, this.context.workspaceId), eq(dealTasks.status, "open")))
+      .groupBy(dealTasks.workspaceId, dealTasks.dealId)
+      .as("open_task_summary");
+  }
+
+  private dealQuery() {
+    const openTaskSummary = this.openTaskSummary();
+    return this.database.orm
+      .select(this.dealSelection(openTaskSummary))
       .from(deals)
       .innerJoin(
         dealPipelines,
@@ -324,6 +310,13 @@ export class DealRecordRepository extends WorkspaceRepository {
       .leftJoin(
         companies,
         and(eq(companies.workspaceId, deals.workspaceId), eq(companies.id, deals.companyId)),
+      )
+      .leftJoin(
+        openTaskSummary,
+        and(
+          eq(openTaskSummary.workspaceId, deals.workspaceId),
+          eq(openTaskSummary.dealId, deals.id),
+        ),
       );
   }
 }

@@ -16,7 +16,10 @@ export const Route = createFileRoute("/_app/tasks")({
     middlewares: [stripSearchParams(taskSearchDefaults)],
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps, context }) => context.queryClient.ensureQueryData(tasksQueryOptions(deps)),
+  loader: async ({ deps, context }) => {
+    await context.queryClient.ensureQueryData(tasksQueryOptions(deps));
+    return undefined;
+  },
   ...routeStatusComponents,
   component: TasksRoute,
 });

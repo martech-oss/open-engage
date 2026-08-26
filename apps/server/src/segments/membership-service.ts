@@ -28,16 +28,25 @@ export async function refreshSegmentMemberships(
     return true;
   }
   if (segment.kind === "static") {
-    await repository.updateMemberCount(segmentId);
+    await repository.updateMemberCount(segmentId, {
+      kind: "static",
+      filterVersion: segment.filterVersion,
+    });
     return true;
   }
   if (!segment.filterAst) return false;
   const compiled = compileSegmentFilter(workspaceId, segment.filterAst);
-  await repository.setEvaluationState(segmentId, "running");
+  const definition = { kind: "dynamic" as const, filterVersion: segment.filterVersion };
+  await repository.setEvaluationState(segmentId, "running", null, definition);
   try {
-    await repository.replaceDynamicMemberships(segmentId, compiled, expectedFilterVersion);
+    await repository.replaceDynamicMemberships(segmentId, compiled, segment.filterVersion);
   } catch (error) {
-    await repository.setEvaluationState(segmentId, "failed", safeEvaluationError(error));
+    await repository.setEvaluationState(
+      segmentId,
+      "failed",
+      safeEvaluationError(error),
+      definition,
+    );
     throw error;
   }
   return true;
@@ -50,10 +59,34 @@ export async function reconcileContactSegmentMemberships(
 ): Promise<void> {
   const repository = segmentRepository(database, workspaceId);
   const definitions = await repository.listDynamicDefinitions();
-  for (const definition of definitions) {
-    const compiled = compileSegmentFilter(workspaceId, definition.filterAst);
-    const matched = await repository.contactMatches(compiled, contactId);
-    await repository.setDynamicMembership(definition.id, contactId, matched);
+  // Compile the complete definition set before issuing a match query. A bad
+  // stored definition must not leave earlier segments partially reconciled.
+  const evaluations = definitions.map((definition) => ({
+    ...definition,
+    compiled: compileSegmentFilter(workspaceId, definition.filterAst),
+  }));
+  const updates: Array<{
+    segmentId: string;
+    filterVersion: number;
+    contactId: string;
+    matched: boolean;
+  }> = [];
+  for (const chunk of chunksOf(evaluations, 50)) {
+    const matches = await repository.contactMatchesBatch(
+      chunk.map((evaluation) => evaluation.compiled),
+      contactId,
+    );
+    for (const [index, evaluation] of chunk.entries()) {
+      updates.push({
+        segmentId: evaluation.id,
+        filterVersion: evaluation.filterVersion,
+        contactId,
+        matched: matches[index] ?? false,
+      });
+    }
+  }
+  for (const chunk of chunksOf(updates, 50)) {
+    await repository.setDynamicMemberships(chunk);
   }
 }
 
@@ -65,4 +98,12 @@ export async function listDynamicSegmentsForCorrection(
 
 function safeEvaluationError(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 1_000) : "Segment evaluation failed";
+}
+
+function chunksOf<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
 }

@@ -113,6 +113,13 @@
       "when": 1787207360722,
       "tag": "0015_quarantine_legacy_automation_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1787670626512,
+      "tag": "0016_lonely_maggott",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_app/contacts/")({
       context.queryClient.ensureQueryData(contactsQueryOptions(deps)),
       context.queryClient.ensureQueryData(contactOptionsQueryOptions()),
     ]);
+    return undefined;
   },
   ...routeStatusComponents,
   component: ContactsRoute,

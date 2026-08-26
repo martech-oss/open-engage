@@ -1,6 +1,5 @@
 import type {
   Contact,
-  ContactCreate,
   ContactListInput,
   ContactListResult,
   ContactSummary,
@@ -9,14 +8,6 @@ import type {
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
-
-import { processPendingPublicFormEvent, recordContactEvent } from "../contacts/event-service";
-
-export interface CreateContactCommand extends ContactCreate {
-  tagId?: string | undefined;
-  segmentId?: string | undefined;
-  companyId?: string | undefined;
-}
 
 export async function listContacts(
   database: OpenEngageDatabase,
@@ -34,21 +25,12 @@ export async function listContacts(
   };
 }
 
-export async function createContact(
+export async function getContact(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  input: CreateContactCommand,
-  queue?: Queue,
-): Promise<Contact> {
-  const repository = new ContactRepository(database, workspace);
-  const { tagId, segmentId, companyId, ...contactInput } = input;
-  const created = await repository.createContactWithInitialRelations(contactInput, {
-    ...(tagId ? { tagId } : {}),
-    ...(segmentId ? { segmentId } : {}),
-    ...(companyId ? { companyId } : {}),
-  });
-  await processPendingPublicFormEvent(database, created.eventId, queue);
-  return created.contact;
+  id: string,
+): Promise<Contact | null> {
+  return new ContactRepository(database, workspace).getContact(id);
 }
 
 export async function getContactTimeline(
@@ -65,23 +47,37 @@ export type ContactEventOutcome =
   | { kind: "contact_not_found" }
   | { kind: "recorded"; eventId: string; enrollmentCount: number };
 
+export interface ContactApiEventInput {
+  contactId: string;
+  eventName: string;
+  source: "api" | "webhook";
+  properties: Record<string, unknown>;
+  occurredAt?: string;
+}
+
+export interface ContactApiEventRecord {
+  workspaceId: string;
+  contactId: string;
+  type: "custom_event" | "webhook_event";
+  resourceType: "api" | "webhook";
+  resourceId: string;
+  properties: Record<string, unknown>;
+  occurredAt?: string;
+}
+
+export interface ContactApiEventPorts {
+  findActiveContactId(contactId: string): Promise<string | null>;
+  recordEvent(input: ContactApiEventRecord): Promise<{ eventId: string; enrollmentCount: number }>;
+}
+
 export async function recordContactApiEvent(
-  database: OpenEngageDatabase,
   workspaceId: string,
-  input: {
-    contactId: string;
-    eventName: string;
-    source: "api" | "webhook";
-    properties: Record<string, unknown>;
-    occurredAt?: string;
-  },
-  queue?: Queue,
+  input: ContactApiEventInput,
+  ports: ContactApiEventPorts,
 ): Promise<ContactEventOutcome> {
-  const contactId = await new ContactResourceRepository(database, {
-    workspaceId,
-  }).findActiveContactId(input.contactId);
+  const contactId = await ports.findActiveContactId(input.contactId);
   if (!contactId) return { kind: "contact_not_found" };
-  const result = await recordContactEvent(database, {
+  const result = await ports.recordEvent({
     workspaceId,
     contactId,
     type: input.source === "webhook" ? "webhook_event" : "custom_event",
@@ -89,7 +85,6 @@ export async function recordContactApiEvent(
     resourceId: input.eventName,
     properties: input.properties,
     ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
-    ...(queue ? { queue } : {}),
   });
   return { kind: "recorded", ...result };
 }

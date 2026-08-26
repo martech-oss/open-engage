@@ -64,12 +64,14 @@ export class SegmentRepository extends WorkspaceRepository {
   ) {
     return this.catalog.listDynamicDefinitions(...args);
   }
-  public contactMatches(...args: Parameters<SegmentEvaluationRepository["contactMatches"]>) {
-    return this.evaluation.contactMatches(...args);
-  }
-  public setDynamicMembership(
-    ...args: Parameters<SegmentEvaluationRepository["setDynamicMembership"]>
+  public contactMatchesBatch(
+    ...args: Parameters<SegmentEvaluationRepository["contactMatchesBatch"]>
   ) {
-    return this.evaluation.setDynamicMembership(...args);
+    return this.evaluation.contactMatchesBatch(...args);
+  }
+  public setDynamicMemberships(
+    ...args: Parameters<SegmentEvaluationRepository["setDynamicMemberships"]>
+  ) {
+    return this.evaluation.setDynamicMemberships(...args);
   }
 }

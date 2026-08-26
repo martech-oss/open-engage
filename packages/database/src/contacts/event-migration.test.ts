@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { processPendingPublicFormEvent } from "../../../../apps/server/src/contacts/event-service";
+import { processPendingPublicFormEvent } from "../../../../apps/server/src/runtime/contact-event-service";
 import { OpenEngageDatabase } from "../client";
 
 const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");

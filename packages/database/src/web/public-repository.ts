@@ -1,4 +1,4 @@
-import { and, asc, eq, notExists, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { stringArraySchema } from "@openengage/core/shared";
 import {
@@ -9,17 +9,11 @@ import {
 } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import {
-  contactEventOutbox,
-  contactEventProjections,
-  contactEvents,
-  contacts,
-} from "../contacts/schema";
-import { isConstraintError, nowIso } from "../shared/database-utils";
+import { contacts } from "../contacts/schema";
+import { isConstraintError } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
-import { uuidv7 } from "../shared/uuid";
-import { dueContactEventWork, isContactEmailConstraintError } from "./public-form-persistence";
+import { isContactEmailConstraintError } from "./public-form-persistence";
 import {
   persistPublicFormSubmissionBatch,
   type PersistPublicFormSubmissionInput,
@@ -51,17 +45,6 @@ export interface PublicFormRecord {
   allowedDomains: string[];
   turnstileEnabled: boolean;
   successMessage: string;
-}
-
-export interface PublicFormContactEvent {
-  id: string;
-  workspaceId: string;
-  contactId: string | null;
-  type: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  properties: Record<string, unknown>;
-  occurredAt: string;
 }
 
 export type { PersistPublicFormSubmissionInput } from "./public-form-submission-writer";
@@ -111,7 +94,7 @@ export class PublicFormRepository extends DatabaseRepository {
     };
   }
 
-  public async findContactIdByEmail(workspaceId: string, email: string): Promise<string | null> {
+  private async findContactIdByEmail(workspaceId: string, email: string): Promise<string | null> {
     const row = await this.database.orm
       .select({ id: contacts.id })
       .from(contacts)
@@ -153,144 +136,6 @@ export class PublicFormRepository extends DatabaseRepository {
     }
   }
 
-  public async listDueContactEventIds(now: string, limit = 50): Promise<string[]> {
-    const rows = await this.database.orm
-      .select({ eventId: contactEventOutbox.eventId })
-      .from(contactEventOutbox)
-      .where(dueContactEventWork(now))
-      .orderBy(asc(contactEventOutbox.createdAt))
-      .limit(limit);
-    return rows.map((row) => row.eventId);
-  }
-
-  public async claimContactEvent(
-    eventId: string,
-    now: string,
-    leaseId: string,
-    leaseExpiresAt: string,
-  ): Promise<PublicFormContactEvent | null> {
-    const claimed = await this.database.orm
-      .update(contactEventOutbox)
-      .set({
-        status: "processing",
-        attemptCount: sql`${contactEventOutbox.attemptCount} + 1`,
-        leaseId,
-        leaseExpiresAt,
-      })
-      .where(and(eq(contactEventOutbox.eventId, eventId), dueContactEventWork(now)))
-      .returning({ eventId: contactEventOutbox.eventId })
-      .get();
-    if (!claimed) return null;
-    const row = await this.database.orm
-      .select({
-        id: contactEvents.id,
-        workspaceId: contactEvents.workspaceId,
-        contactId: contactEvents.contactId,
-        type: contactEvents.type,
-        resourceType: contactEvents.resourceType,
-        resourceId: contactEvents.resourceId,
-        properties: contactEvents.properties,
-        occurredAt: contactEvents.occurredAt,
-      })
-      .from(contactEventOutbox)
-      .innerJoin(contactEvents, eq(contactEvents.id, contactEventOutbox.eventId))
-      .where(and(eq(contactEventOutbox.eventId, eventId), eq(contactEventOutbox.leaseId, leaseId)))
-      .get();
-    if (!row) return null;
-    const properties: unknown = JSON.parse(row.properties);
-    return {
-      ...row,
-      properties:
-        properties && typeof properties === "object" && !Array.isArray(properties)
-          ? (properties as Record<string, unknown>)
-          : {},
-    };
-  }
-
-  public async markContactEventProcessed(eventId: string, leaseId: string): Promise<void> {
-    await this.database.orm
-      .update(contactEventOutbox)
-      .set({
-        status: "processed",
-        leaseId: null,
-        leaseExpiresAt: null,
-        nextAttemptAt: null,
-        lastError: null,
-        processedAt: nowIso(),
-      })
-      .where(
-        and(
-          eq(contactEventOutbox.eventId, eventId),
-          eq(contactEventOutbox.status, "processing"),
-          eq(contactEventOutbox.leaseId, leaseId),
-          notExists(
-            this.database.orm
-              .select({ eventId: contactEventProjections.eventId })
-              .from(contactEventProjections)
-              .where(
-                and(
-                  eq(contactEventProjections.eventId, eventId),
-                  eq(contactEventProjections.status, "pending"),
-                ),
-              ),
-          ),
-        ),
-      );
-  }
-
-  public async markContactEventFailed(
-    eventId: string,
-    leaseId: string,
-    error: unknown,
-    nextAttemptAt: string,
-  ): Promise<void> {
-    await this.database.orm
-      .update(contactEventOutbox)
-      .set({
-        status: "pending",
-        leaseId: null,
-        leaseExpiresAt: null,
-        nextAttemptAt,
-        lastError: (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
-      })
-      .where(
-        and(
-          eq(contactEventOutbox.eventId, eventId),
-          eq(contactEventOutbox.status, "processing"),
-          eq(contactEventOutbox.leaseId, leaseId),
-        ),
-      );
-  }
-
-  public async updateContactFromFormSubmission(
-    workspaceId: string,
-    contactId: string,
-    input: {
-      firstName: string | null;
-      lastName: string | null;
-      phone: string | null;
-      customFields?: Record<string, unknown>;
-    },
-  ): Promise<void> {
-    const custom = input.customFields ?? {};
-    await this.database.orm
-      .update(contacts)
-      .set({
-        firstName: sql`coalesce(${input.firstName}, ${contacts.firstName})`,
-        lastName: sql`coalesce(${input.lastName}, ${contacts.lastName})`,
-        phone: sql`coalesce(${input.phone}, ${contacts.phone})`,
-        // json_patch merges the submitted keys over the stored object, so a
-        // form that asks for two fields never wipes the other twenty.
-        ...(Object.keys(custom).length > 0
-          ? {
-              customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), ${JSON.stringify(custom)})`,
-            }
-          : {}),
-        updatedAt: nowIso(),
-      })
-      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)));
-  }
-
   /**
    * Progressive Profiling needs to know which fields this visitor has already
    * answered. Returns the keys that currently hold a value, standard columns
@@ -328,55 +173,6 @@ export class PublicFormRepository extends DatabaseRepository {
       }
     }
     return answered;
-  }
-
-  public async createContactFromFormSubmission(
-    workspaceId: string,
-    contactId: string,
-    email: string,
-    input: {
-      firstName: string | null;
-      lastName: string | null;
-      phone: string | null;
-      customFields?: Record<string, unknown>;
-    },
-  ): Promise<void> {
-    const now = nowIso();
-    await this.database.orm.insert(contacts).values({
-      id: contactId,
-      workspaceId,
-      email,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      phone: input.phone,
-      stage: "lead",
-      score: 0,
-      status: "active",
-      customFields: JSON.stringify(input.customFields ?? {}),
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
-  /** Unique-key violations (duplicate idempotency key) bubble up to the caller. */
-  public async insertFormSubmission(input: {
-    workspaceId: string;
-    formId: string;
-    contactId: string | null;
-    idempotencyKey: string;
-    payload: Record<string, unknown>;
-    ipHash: string | null;
-  }): Promise<void> {
-    await this.database.orm.insert(formSubmissions).values({
-      id: uuidv7(),
-      workspaceId: input.workspaceId,
-      formId: input.formId,
-      contactId: input.contactId,
-      idempotencyKey: input.idempotencyKey,
-      payload: JSON.stringify(input.payload),
-      ipHash: input.ipHash,
-      createdAt: nowIso(),
-    });
   }
 
   public async submissionExists(

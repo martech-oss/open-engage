@@ -103,9 +103,9 @@ export class SegmentCatalogRepository extends WorkspaceRepository {
     };
   }
 
-  public async listDynamicDefinitions(
-    limit = 1_000,
-  ): Promise<Array<{ id: string; filterAst: SegmentFilter; filterVersion: number }>> {
+  public async listDynamicDefinitions(): Promise<
+    Array<{ id: string; filterAst: SegmentFilter; filterVersion: number }>
+  > {
     const rows = await this.database.orm
       .select({
         id: segments.id,
@@ -114,8 +114,7 @@ export class SegmentCatalogRepository extends WorkspaceRepository {
       })
       .from(segments)
       .where(and(this.inWorkspace(segments), eq(segments.kind, "dynamic")))
-      .orderBy(asc(segments.id))
-      .limit(limit);
+      .orderBy(asc(segments.id));
     return rows.flatMap((row) => {
       const filterAst = filterAstCodec.decodeNullable(row.filterAst);
       return filterAst ? [{ id: row.id, filterAst, filterVersion: row.filterVersion }] : [];

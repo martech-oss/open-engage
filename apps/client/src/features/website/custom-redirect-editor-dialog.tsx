@@ -8,8 +8,8 @@ import { getFormString } from "@/lib/form-data";
 
 import {
   type CustomRedirectRow,
-  useCreateCustomRedirect,
-  useUpdateCustomRedirect,
+  type useCreateCustomRedirect,
+  type useUpdateCustomRedirect,
 } from "./website-api";
 
 export function CustomRedirectEditorDialog({

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 
 import {
   automationDefinitionSchema,
@@ -72,31 +72,66 @@ export class AutomationQueryRepository extends WorkspaceRepository {
       updatedAt: string;
     }>
   > {
-    // Correlated subqueries are embedded as builders: interpolating a plain
-    // `${table.column}` into a select field renders it unqualified, which
-    // would silently self-compare inside the subquery.
-    const triggerSourceQuery = this.database.orm
-      .select({ source: automationTriggers.source })
+    const workspaceId = this.context.workspaceId;
+    const triggerSummary = this.database.orm
+      .select({
+        workspaceId: automationTriggers.workspaceId,
+        automationVersionId: automationTriggers.automationVersionId,
+        source: max(automationTriggers.source).as("source"),
+      })
       .from(automationTriggers)
-      .where(
-        and(
-          eq(automationTriggers.workspaceId, automations.workspaceId),
-          eq(automationTriggers.automationVersionId, automations.publishedVersionId),
-        ),
-      );
+      .where(eq(automationTriggers.workspaceId, workspaceId))
+      .groupBy(automationTriggers.workspaceId, automationTriggers.automationVersionId)
+      .as("published_trigger_summary");
+    const enrollmentSummary = this.database.orm
+      .select({
+        workspaceId: automationEnrollments.workspaceId,
+        automationId: automationEnrollments.automationId,
+        enrollmentCount: count().as("enrollment_count"),
+        activeCount:
+          sql<number>`sum(case when ${automationEnrollments.status} = 'active' then 1 else 0 end)`.as(
+            "active_count",
+          ),
+        completedCount:
+          sql<number>`sum(case when ${automationEnrollments.status} = 'completed' then 1 else 0 end)`.as(
+            "completed_count",
+          ),
+      })
+      .from(automationEnrollments)
+      .where(eq(automationEnrollments.workspaceId, workspaceId))
+      .groupBy(automationEnrollments.workspaceId, automationEnrollments.automationId)
+      .as("enrollment_summary");
     return await this.database.orm
       .select({
         id: automations.id,
         name: automations.name,
         description: automations.description,
         status: automations.status,
-        triggerSource: sql<string | null>`${triggerSourceQuery}`.as("trigger_source"),
-        enrollmentCount: this.enrollmentCountExpression().as("enrollment_count"),
-        activeCount: this.enrollmentCountExpression("active").as("active_count"),
-        completedCount: this.enrollmentCountExpression("completed").as("completed_count"),
+        triggerSource: triggerSummary.source,
+        enrollmentCount: sql<number>`coalesce(${enrollmentSummary.enrollmentCount}, 0)`.mapWith(
+          Number,
+        ),
+        activeCount: sql<number>`coalesce(${enrollmentSummary.activeCount}, 0)`.mapWith(Number),
+        completedCount: sql<number>`coalesce(${enrollmentSummary.completedCount}, 0)`.mapWith(
+          Number,
+        ),
         updatedAt: automations.updatedAt,
       })
       .from(automations)
+      .leftJoin(
+        triggerSummary,
+        and(
+          eq(triggerSummary.workspaceId, automations.workspaceId),
+          eq(triggerSummary.automationVersionId, automations.publishedVersionId),
+        ),
+      )
+      .leftJoin(
+        enrollmentSummary,
+        and(
+          eq(enrollmentSummary.workspaceId, automations.workspaceId),
+          eq(enrollmentSummary.automationId, automations.id),
+        ),
+      )
       .where(this.inWorkspace(automations))
       .orderBy(desc(automations.updatedAt))
       .limit(UNPAGINATED_LIST_LIMIT);
@@ -175,17 +210,5 @@ export class AutomationQueryRepository extends WorkspaceRepository {
         ),
       );
     return rows.map((row) => row.id);
-  }
-
-  /** COUNT of this automation's enrollments, optionally narrowed to one status. */
-  private enrollmentCountExpression(status?: "active" | "completed") {
-    const conditions = [
-      eq(automationEnrollments.workspaceId, automations.workspaceId),
-      eq(automationEnrollments.automationId, automations.id),
-    ];
-    if (status) conditions.push(eq(automationEnrollments.status, status));
-    return sql<number>`${this.database.orm.$count(automationEnrollments, and(...conditions))}`.mapWith(
-      Number,
-    );
   }
 }

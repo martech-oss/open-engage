@@ -18,6 +18,7 @@ import {
   IdempotencyRepository,
   member,
   organization,
+  WorkspaceBootstrapQueryRepository,
   resolveMemberContext,
   segmentMemberships,
   segments,
@@ -180,6 +181,50 @@ describe("contact and account repositories", () => {
 });
 
 describe("cross-cutting repositories", () => {
+  it("lists bootstrap workspaces in membership order with only presentation fields", async () => {
+    const first = await seedWorkspaceContext(env.DB, "bootstrap-first", "admin");
+    const secondOrganizationId = uuidv7();
+    const now = new Date();
+    await database().orm.batch([
+      database()
+        .orm.insert(organization)
+        .values({
+          id: secondOrganizationId,
+          name: "Second Membership",
+          slug: `bootstrap-second-${secondOrganizationId}`,
+          logo: "https://example.test/logo.png",
+          createdAt: now,
+          timezone: "Asia/Tokyo",
+        }),
+      database()
+        .orm.insert(member)
+        .values({
+          id: uuidv7(),
+          organizationId: secondOrganizationId,
+          userId: first.userId,
+          role: "viewer",
+          createdAt: new Date(now.getTime() + 1_000),
+        }),
+    ]);
+
+    await expect(
+      new WorkspaceBootstrapQueryRepository(database()).listForUser(first.userId),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: first.workspaceId,
+        name: "bootstrap-first Workspace",
+        role: "admin",
+        timezone: "UTC",
+      }),
+      expect.objectContaining({
+        id: secondOrganizationId,
+        name: "Second Membership",
+        role: "viewer",
+        timezone: "Asia/Tokyo",
+      }),
+    ]);
+  });
+
   it("resolves the requested membership without crossing organizations", async () => {
     const first = await seedWorkspaceContext(env.DB, "membership-first", "admin");
     const secondOrganizationId = uuidv7();

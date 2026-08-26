@@ -1,5 +1,6 @@
 import { AutomationEngineRepository, AutomationRepository } from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
+import { uuidv7 } from "@openengage/database/shared";
 
 export interface ContactEvent {
   id: string;
@@ -75,7 +76,7 @@ export async function enrollContactManually(
     workspaceId: string;
     automationId: string;
     contactId: string;
-    sourceEventId: string;
+    sourceEventId?: string | undefined;
   },
 ): Promise<ManualEnrollOutcome> {
   const repository = new AutomationRepository(database, { workspaceId: input.workspaceId });
@@ -89,7 +90,7 @@ export async function enrollContactManually(
     automationVersionId: automation.publishedVersionId,
     contactId: input.contactId,
     sourceNodeId: source.id,
-    sourceEventId: input.sourceEventId,
+    sourceEventId: input.sourceEventId ?? uuidv7(),
   });
   if (!result) return { kind: "already_enrolled" };
   return { kind: "enrolled", result };

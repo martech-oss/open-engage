@@ -1,25 +1,13 @@
-import { validateAutomation } from "@openengage/core/automations";
-import type { AutomationDefinition } from "@openengage/core/automations";
-import { AutomationRepository } from "@openengage/database/automations";
-import { writeAuditLog } from "@openengage/database/platform";
-import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
-import { uuidv7 } from "@openengage/database/shared";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
 import { getAutomationAnalytics } from "./analytics-service";
-import {
-  applyEmailSequence,
-  EmailSequenceError,
-  generateEmailSequence,
-} from "./email-sequence-service";
+import { createAutomationCommandService } from "./command-service";
+import { EmailSequenceError, generateEmailSequence } from "./email-sequence-service";
 import { enrollContactManually } from "./enrollment";
 import { AutomationGenerationError, generateAutomation } from "./generation-service";
-import { listAutomations, normalizeAutomationStatus } from "./list-service";
-import { getAutomationPublishability } from "./publishability-service";
-import { loadAutomationResourceContext, validateAutomationResources } from "./resource-validation";
-import { automationTrigger } from "./triggers";
+import { getAutomationDraft, listAutomations } from "./list-service";
 
 export const listAutomationsProcedure = authed.automations.list.handler(async ({ context }) => {
   return listAutomations(context.database, context.workspace.workspaceId);
@@ -28,38 +16,23 @@ export const listAutomationsProcedure = authed.automations.list.handler(async ({
 export const createAutomationProcedure = authed.automations.create.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const trustedBrief = await resolveApprovedProjectBriefContext(
-      context.database,
-      context.workspace,
-      input,
-      errors,
-    );
-    const { projectId: _projectId, briefRevision: _briefRevision, ...definition } = input;
-    const repository = new AutomationRepository(context.database, context.workspace);
-    let created: Awaited<ReturnType<typeof repository.createAutomation>>;
-    try {
-      created = await repository.createAutomation({
-        name: definition.name,
-        description: definition.description,
-        timezone: definition.timezone,
-        graph: definition,
-        ...(trustedBrief
-          ? {
-              projectLink: {
-                projectId: trustedBrief.projectId,
-                briefRevision: trustedBrief.revision,
-                addedByUserId: context.workspace.userId,
-              },
-            }
-          : {}),
-      });
-    } catch (error) {
-      if (error instanceof ProjectBriefLinkConflictError) {
+    const outcome = await createAutomationCommandService({
+      database: context.database,
+      workspace: context.workspace,
+      defer: (promise) => context.executionContext.waitUntil(promise),
+    }).create(input);
+    switch (outcome.kind) {
+      case "ok":
+        return outcome.automation;
+      case "brief_not_found":
+        throw errors.BRIEF_NOT_FOUND();
+      case "brief_not_approved":
+        throw errors.BRIEF_NOT_APPROVED();
+      case "brief_revision_conflict":
         throw errors.BRIEF_REVISION_CONFLICT();
-      }
-      throw error;
+      case "forbidden":
+        throw errors.FORBIDDEN();
     }
-    return { id: created.id, draftVersionId: created.draftVersionId };
   },
 );
 
@@ -129,76 +102,47 @@ export const generateEmailSequenceProcedure = authed.automations.generateSequenc
 export const applyEmailSequenceProcedure = authed.automations.applySequence.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    try {
-      const trustedBrief = await resolveApprovedProjectBriefContext(
-        context.database,
-        context.workspace,
-        input,
-        errors,
-      );
-      const { projectId: _projectId, briefRevision: _briefRevision, ...proposal } = input;
-      const application = await applyEmailSequence(
-        context.database,
-        context.workspace,
-        proposal,
-        trustedBrief
-          ? {
-              projectId: trustedBrief.projectId,
-              briefRevision: trustedBrief.revision,
-              addedByUserId: context.workspace.userId,
-            }
-          : undefined,
-      );
-      if (!trustedBrief && application.created) {
-        context.executionContext.waitUntil(
-          writeAuditLog(context.database, context.workspace, {
-            action: "email_sequence.create",
-            resourceType: "automation",
-            resourceId: application.result.automationId,
-          }),
-        );
-      }
-      return application.result;
-    } catch (error) {
-      if (error instanceof ProjectBriefLinkConflictError) {
+    const outcome = await createAutomationCommandService({
+      database: context.database,
+      workspace: context.workspace,
+      defer: (promise) => context.executionContext.waitUntil(promise),
+    }).applyEmailSequence(input);
+    switch (outcome.kind) {
+      case "ok":
+        return outcome.sequence;
+      case "sequence_conflict":
+        throw errors.SEQUENCE_CONFLICT();
+      case "invalid_sequence":
+        throw errors.INVALID_SEQUENCE();
+      case "brief_not_found":
+        throw errors.BRIEF_NOT_FOUND();
+      case "brief_not_approved":
+        throw errors.BRIEF_NOT_APPROVED();
+      case "brief_revision_conflict":
         throw errors.BRIEF_REVISION_CONFLICT();
-      }
-      if (!(error instanceof EmailSequenceError)) throw error;
-      if (error.kind === "conflict") throw errors.SEQUENCE_CONFLICT();
-      throw errors.INVALID_SEQUENCE();
+      case "forbidden":
+        throw errors.FORBIDDEN();
     }
   },
 );
 
 export const getAutomationDraftProcedure = authed.automations.getDraft.handler(
   async ({ context, input, errors }) => {
-    const repository = new AutomationRepository(context.database, context.workspace);
-    const row = await repository.getDraft(input.id);
-    if (!row) throw errors.AUTOMATION_NOT_FOUND();
-    return {
-      graph: row.graph,
-      status: normalizeAutomationStatus(row.status),
-      publishability: await getAutomationPublishability(
-        context.database,
-        context.workspace,
-        row.graph,
-      ),
-    };
+    const draft = await getAutomationDraft(context.database, context.workspace, input.id);
+    if (!draft) throw errors.AUTOMATION_NOT_FOUND();
+    return draft;
   },
 );
 
 export const saveAutomationDraftProcedure = authed.automations.saveDraft.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const { id, ...definition } = input;
-    const repository = new AutomationRepository(context.database, context.workspace);
-    const updated = await repository.saveDraft(id, {
-      name: definition.name,
-      description: definition.description,
-      timezone: definition.timezone,
-      graph: definition,
-    });
-    if (!updated) throw errors.DRAFT_NOT_EDITABLE();
+    const outcome = await createAutomationCommandService({
+      database: context.database,
+      workspace: context.workspace,
+      defer: (promise) => context.executionContext.waitUntil(promise),
+    }).saveDraft(input);
+    if (outcome.kind === "draft_not_editable") throw errors.DRAFT_NOT_EDITABLE();
     return ack;
   },
 );
@@ -206,54 +150,35 @@ export const saveAutomationDraftProcedure = authed.automations.saveDraft.handler
 export const publishAutomationProcedure = authed.automations.publish.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const repository = new AutomationRepository(context.database, context.workspace);
-    const row = await repository.findPublishableDraft(input.id);
-    if (!row) throw errors.DRAFT_NOT_FOUND();
-
-    const definition: AutomationDefinition = row.graph;
-    const validation = validateAutomation(definition);
-    if (validation.length > 0) {
-      throw errors.INVALID_GRAPH({ data: { issues: validation } });
+    const outcome = await createAutomationCommandService({
+      database: context.database,
+      workspace: context.workspace,
+      defer: (promise) => context.executionContext.waitUntil(promise),
+    }).publish(input.id);
+    switch (outcome.kind) {
+      case "ok":
+        return outcome.automation;
+      case "draft_not_found":
+        throw errors.DRAFT_NOT_FOUND();
+      case "invalid_graph":
+        throw errors.INVALID_GRAPH({
+          ...(outcome.message ? { message: outcome.message } : {}),
+          data: { issues: outcome.issues },
+        });
     }
-
-    const resources = await loadAutomationResourceContext(context.database, context.workspace);
-    const resourceIssues = validateAutomationResources(definition, resources);
-    if (resourceIssues.length > 0) {
-      throw errors.INVALID_GRAPH({
-        message: "利用できないワークスペースリソースを参照しているノードがあります",
-        data: { issues: resourceIssues },
-      });
-    }
-
-    const source = definition.nodes.find((node) => node.type === "source");
-    if (!source) throw errors.INVALID_GRAPH({ message: "開始条件がありません" });
-    const trigger = automationTrigger(source.config);
-    const published = await repository.publishDraft({
-      automationId: input.id,
-      draftVersionId: row.draftVersionId,
-      currentVersion: row.version,
-      timezone: definition.timezone,
-      graph: row.graph,
-      trigger: {
-        sourceNodeId: source.id,
-        source: source.config.source,
-        eventType: trigger.eventType,
-        resourceId: trigger.resourceId,
-        reentry: source.config.reentry,
-        inactivityDays: trigger.inactivityDays,
-      },
-    });
-    return { publishedVersionId: row.draftVersionId, draftVersionId: published.draftVersionId };
   },
 );
 
 export const setAutomationStatusProcedure = authed.automations.setStatus.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const repository = new AutomationRepository(context.database, context.workspace);
-    const changed = await repository.setAutomationStatus(input.id, input.status);
-    if (!changed) throw errors.NOT_CHANGEABLE();
-    return { status: input.status };
+    const outcome = await createAutomationCommandService({
+      database: context.database,
+      workspace: context.workspace,
+      defer: (promise) => context.executionContext.waitUntil(promise),
+    }).setStatus(input.id, input.status);
+    if (outcome.kind === "not_changeable") throw errors.NOT_CHANGEABLE();
+    return { status: outcome.status };
   },
 );
 
@@ -264,7 +189,7 @@ export const enrollAutomationProcedure = authed.automations.enroll.handler(
       workspaceId: context.workspace.workspaceId,
       automationId: input.id,
       contactId: input.contactId,
-      sourceEventId: input.sourceEventId ?? uuidv7(),
+      sourceEventId: input.sourceEventId,
     });
     switch (outcome.kind) {
       case "not_active":

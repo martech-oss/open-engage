@@ -4,7 +4,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { contract } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
 import { seedWorkspace } from "./factory";
 

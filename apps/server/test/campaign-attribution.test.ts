@@ -7,9 +7,9 @@ import {
   CustomRedirectRepository,
 } from "@openengage/database/testing";
 
-import { recordContactEvent } from "../src/contacts/event-service";
 import { campaignReport } from "../src/reports/campaigns-report";
 import { toReportRange } from "../src/reports/shared";
+import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { seedWorkspaceClient } from "./factory";
 
 const RANGE = toReportRange("2026-01-01", "2026-12-31");

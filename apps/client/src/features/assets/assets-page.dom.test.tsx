@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
 import type { AssetSummary, AssetSearch } from "./asset-api";
+import type * as AssetApiModule from "./asset-api";
 import { AssetsPage } from "./assets-page";
 
 const asset: AssetSummary = {
@@ -142,7 +143,7 @@ vi.mock("./asset-forms", () => ({
 }));
 
 vi.mock("./asset-api", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./asset-api")>();
+  const original = await importOriginal<typeof AssetApiModule>();
   const mutation = () => ({ mutateAsync: vi.fn<(input: unknown) => Promise<void>>() });
   return {
     ...original,

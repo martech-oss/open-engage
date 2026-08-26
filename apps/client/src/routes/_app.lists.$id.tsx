@@ -24,6 +24,7 @@ export const Route = createFileRoute("/_app/lists/$id")({
         }),
       ),
     ]);
+    return undefined;
   },
   ...routeStatusComponents,
   component: ListDetailRoute,

@@ -18,11 +18,13 @@ export const Route = createFileRoute("/_app/automations/briefs/")({
   search: {
     middlewares: [stripSearchParams(projectBriefSearchDefaults)],
   },
-  loader: ({ context }) =>
-    Promise.all([
+  loader: async ({ context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(projectBriefsQueryOptions()),
       context.queryClient.ensureQueryData(projectBriefOptionsQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: BriefsRoute,
 });

@@ -11,13 +11,15 @@ import { AutomationBuilder } from "@/features/automations/automation-editor-page
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 
 export const Route = createFileRoute("/_app/automations/$id")({
-  loader: ({ params, context }) =>
-    Promise.all([
+  loader: async ({ params, context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(automationDraftQueryOptions(params.id)),
       context.queryClient.ensureQueryData(emailTemplateOptionsQueryOptions()),
       context.queryClient.ensureQueryData(formOptionsQueryOptions()),
       context.queryClient.ensureQueryData(segmentOptionsQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: AutomationRoute,
 });

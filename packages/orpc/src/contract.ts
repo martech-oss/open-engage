@@ -1,4 +1,5 @@
 import { agentConversationsContract } from "./agents/contract";
+import { appContract } from "./app/contract";
 import { assetsContract } from "./assets/contract";
 import { automationsContract } from "./automations/contract";
 import { consentContract } from "./consent/contract";
@@ -17,6 +18,7 @@ import { workspaceContract } from "./workspaces/contract";
 
 export const contract = {
   agents: { conversations: agentConversationsContract },
+  app: appContract,
   companies: companiesContract,
   assets: assetsContract,
   workspace: workspaceContract,

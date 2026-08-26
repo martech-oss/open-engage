@@ -1,4 +1,4 @@
-import { workspaceDateTimeToUtc } from "@openengage/core/shared";
+import { workspaceDateTimeToUtc } from "@openengage/core/shared/time";
 
 export interface SiteMessageScheduleInput {
   startsAt: string | null;

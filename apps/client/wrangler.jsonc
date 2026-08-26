@@ -11,6 +11,9 @@
       "service": "openengage-server",
     },
   ],
+  "vars": {
+    "APP_URL": "http://localhost:5173",
+  },
   "observability": {
     "enabled": true,
     "logs": {

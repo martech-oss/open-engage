@@ -33,13 +33,10 @@ export class SegmentQueryRepository extends WorkspaceRepository {
     }));
   }
 
-  /**
-   * Loads the fields a membership refresh needs. `kind` intentionally stays a
-   * plain string: callers treat anything that is not "static" as dynamic.
-   */
+  /** Loads and validates the fields a membership refresh needs. */
   public async findSegmentDefinition(id: string): Promise<{
     id: string;
-    kind: string;
+    kind: "static" | "dynamic";
     filterAst: SegmentFilter | null;
     filterVersion: number;
   } | null> {
@@ -53,7 +50,8 @@ export class SegmentQueryRepository extends WorkspaceRepository {
       .from(segments)
       .where(and(this.inWorkspace(segments), eq(segments.id, id)))
       .limit(1);
-    return row ? { ...row, filterAst: filterAstCodec.decodeNullable(row.filterAst) } : null;
+    if (!row || (row.kind !== "static" && row.kind !== "dynamic")) return null;
+    return { ...row, kind: row.kind, filterAst: filterAstCodec.decodeNullable(row.filterAst) };
   }
 
   public async getSegment(id: string): Promise<SegmentRecord | null> {

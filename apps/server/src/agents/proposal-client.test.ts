@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   type AgentProposalEnv,
-  AgentProposalError,
+  type AgentProposalError,
   type AgentProposalTransport,
   extractLatestProposal,
   requestAgentProposal,

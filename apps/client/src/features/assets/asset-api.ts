@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
-import { type Asset, type AssetListInput, type AssetSummary } from "@openengage/core/assets";
+import type { Asset, AssetListInput, AssetSummary } from "@openengage/core/assets";
 import type { AssetKind, AssetVisibility } from "@openengage/core/shared";
 
 export type { Asset, AssetKind, AssetSummary, AssetVisibility };

@@ -5,11 +5,13 @@ import { segmentOptionsQueryOptions, segmentsQueryOptions } from "@/features/seg
 import { SegmentsPage } from "@/features/segments/segments-page";
 
 export const Route = createFileRoute("/_app/segments/")({
-  loader: ({ context }) =>
-    Promise.all([
+  loader: async ({ context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(segmentsQueryOptions("dynamic")),
       context.queryClient.ensureQueryData(segmentOptionsQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: SegmentsPage,
 });

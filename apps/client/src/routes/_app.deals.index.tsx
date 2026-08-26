@@ -17,11 +17,13 @@ export const Route = createFileRoute("/_app/deals/")({
     middlewares: [stripSearchParams(dealSearchDefaults)],
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps, context }) =>
-    Promise.all([
+  loader: async ({ deps, context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(dealOptionsQueryOptions()),
       context.queryClient.ensureQueryData(dealsQueryOptions(deps)),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: DealsRoute,
 });

@@ -17,7 +17,7 @@ vi.mock("@/features/projects/project-brief-pages", () => ({
   },
 }));
 
-import { ProjectBriefRouteContent } from "./_app.automations.briefs.$id";
+import { ProjectBriefRouteContent } from "@/features/projects/project-brief-route-content";
 
 afterEach(cleanup);
 

@@ -8,11 +8,13 @@ import {
 import { EmailTemplatesPage } from "@/features/emails/email-pages";
 
 export const Route = createFileRoute("/_app/emails/templates")({
-  loader: ({ context }) =>
-    Promise.all([
+  loader: async ({ context }) => {
+    await Promise.all([
       context.queryClient.ensureQueryData(emailTemplateOptionsQueryOptions()),
       context.queryClient.ensureQueryData(emailVariablesListQueryOptions()),
-    ]),
+    ]);
+    return undefined;
+  },
   ...routeStatusComponents,
   component: EmailTemplatesPage,
 });
