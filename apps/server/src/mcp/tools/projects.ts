@@ -74,10 +74,18 @@ export function registerProjectTools(server: McpServer, context: McpToolContext)
   registerRpcTool(
     server,
     "import_project_members",
-    "Import existing contacts from CSV using an idempotencyKey; unknown contacts return row errors.",
+    "Accept a resumable CSV import (max 1000 rows) using an idempotencyKey. Returns jobId and progress; poll get_project_member_import for row errors. Changed CSV with the same key conflicts.",
     contract.memberImport["~orpc"].inputSchema,
     api.memberImport,
     { idempotent: true },
+  );
+  registerRpcTool(
+    server,
+    "get_project_member_import",
+    "Read CSV import progress and ordered row results using the accepted jobId.",
+    contract.memberImportGet["~orpc"].inputSchema,
+    api.memberImportGet,
+    read,
   );
   registerRpcTool(
     server,

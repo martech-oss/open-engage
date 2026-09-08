@@ -1,12 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ErrorAlert, FormInput, FormTextarea, LoadingButton } from "@/components/app-ui";
 import { contactSearchDefaults, contactsQueryOptions } from "@/features/contacts/contact-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import type { ProjectProgram } from "@openengage/core/projects";
 
-import { useImportProjectMembers, useMutateProjectMember } from "./program-api";
+import {
+  useProgramInvalidator,
+  programMemberImportQueryOptions,
+  useImportProjectMembers,
+  useMutateProjectMember,
+} from "./program-api";
 import { ProgramSelect } from "./program-fields";
 export function ProgramMemberRegistration({
   id,
@@ -19,9 +24,17 @@ export function ProgramMemberRegistration({
   const [contactId, setContactId] = useState("");
   const [statusId, setStatusId] = useState(program.publishedDefinition?.initialStatusId ?? "");
   const [csv, setCsv] = useState("");
-  const [rows, setRows] = useState<Array<{ row: number; ok: boolean; error?: string | undefined }>>(
-    [],
-  );
+  const [jobId, setJobId] = useState<string | null>(null);
+  const invalidate = useProgramInvalidator();
+  const job = useQuery({
+    ...programMemberImportQueryOptions(id, jobId ?? ""),
+    enabled: Boolean(jobId),
+    refetchInterval: (query) => (query.state.data?.status === "completed" ? false : 1000),
+  });
+  const rows = job.data?.rows ?? [];
+  useEffect(() => {
+    if (job.data?.status === "completed") void invalidate();
+  }, [job.data?.status, invalidate]);
   const [error, setError] = useState("");
   const [importKey, setImportKey] = useState<string | null>(null);
   const contacts = useQuery({
@@ -51,7 +64,7 @@ export function ProgramMemberRegistration({
     setError("");
     try {
       const result = await importing.mutateAsync({ id, csv, idempotencyKey: key });
-      setRows(result.rows);
+      setJobId(result.jobId);
     } catch (cause) {
       setError(getErrorMessage(cause, "CSVを取り込めませんでした"));
     }
@@ -115,7 +128,7 @@ export function ProgramMemberRegistration({
                     void file.text().then((text) => {
                       setCsv(text);
                       setImportKey(null);
-                      setRows([]);
+                      setJobId(null);
                     });
                 }}
               />
@@ -128,7 +141,7 @@ export function ProgramMemberRegistration({
               onChange={(e) => {
                 setCsv(e.target.value);
                 setImportKey(null);
-                setRows([]);
+                setJobId(null);
               }}
               rows={5}
             />
@@ -139,6 +152,15 @@ export function ProgramMemberRegistration({
             >
               CSVを取り込む
             </LoadingButton>
+            {jobId && (
+              <output>
+                CSV受付済み: {jobId} — {job.data?.status === "completed" ? "完了" : "処理中"} (
+                {job.data?.processed ?? 0} / {job.data?.total ?? "…"}行)
+              </output>
+            )}
+            {job.error && (
+              <ErrorAlert>{getErrorMessage(job.error, "進捗を取得できませんでした")}</ErrorAlert>
+            )}
             {rows.length > 0 && (
               <output className="max-h-52 overflow-y-auto text-sm">
                 <p>

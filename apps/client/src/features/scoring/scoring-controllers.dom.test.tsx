@@ -38,14 +38,17 @@ vi.mock("@/features/contacts/contact-api", () => ({
   contactOptionsQueryOptions: () => ({ queryKey: ["contacts", "options"], queryFn: () => null }),
 }));
 vi.mock("./scoring-api", () => ({
-  scoringRulesQueryOptions: () => ({ queryKey: ["scoring", "rules"], queryFn: () => [] }),
+  scoringRulesQueryOptions: (input?: { cursor?: string }) => ({
+    queryKey: input?.cursor ? ["scoring", "rules", input.cursor] : ["scoring", "rules"],
+    queryFn: () => ({ items: [], total: 0, summary: { enabled: 0, pageActions: 0 } }),
+  }),
   scoringCategoriesQueryOptions: () => ({
     queryKey: ["scoring", "categories"],
     queryFn: () => [],
   }),
-  gradingCriteriaQueryOptions: () => ({
-    queryKey: ["scoring", "criteria"],
-    queryFn: () => [],
+  gradingCriteriaQueryOptions: (input?: { cursor?: string }) => ({
+    queryKey: input?.cursor ? ["scoring", "criteria", input.cursor] : ["scoring", "criteria"],
+    queryFn: () => ({ items: [], total: 0, summary: { enabled: 0, totalSteps: 0 } }),
   }),
   useArchiveScoringRule: () => doubles.archiveRule,
   useCreateScoringRule: () => doubles.createRule,
@@ -62,6 +65,44 @@ beforeEach(() => {
 });
 
 describe("scoring page controllers", () => {
+  it.each(["rules", "criteria"] as const)(
+    "navigates %s pages without changing the global summary",
+    (kind) => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+      });
+      const wrapper = queryWrapper(client);
+      const item = kind === "rules" ? rule : criterion;
+      const summary =
+        kind === "rules" ? { enabled: 201, pageActions: 10 } : { enabled: 201, totalSteps: 500 };
+      client.setQueryData(["scoring", kind], {
+        items: [item({ id: "first" })],
+        total: 201,
+        summary,
+        nextCursor: "next",
+      });
+      client.setQueryData(["scoring", kind, "next"], {
+        items: [item({ id: "second" })],
+        total: 201,
+        summary,
+      });
+      const useController =
+        kind === "rules" ? useScoringRulesController : useScoringGradingController;
+      const { result } = renderHook(() => useController(), { wrapper });
+      const currentId = () =>
+        ("rules" in result.current ? result.current.rules : result.current.criteria)[0]?.id;
+      expect(currentId()).toBe("first");
+      expect(result.current.pagination.hasPreviousPage).toBe(false);
+      act(() => result.current.pagination.onNext());
+      expect(currentId()).toBe("second");
+      expect(result.current.pagination.hasNextPage).toBe(false);
+      expect(result.current.pagination.hasPreviousPage).toBe(true);
+      expect(result.current.summary.enabled).toBe(201);
+      act(() => result.current.pagination.onPrevious());
+      expect(currentId()).toBe("first");
+      expect(result.current.pagination.rangeLabel).toBe("全 201 件");
+    },
+  );
   it("reports rule archive success without an error toast", async () => {
     doubles.archiveRule.mutateAsync.mockResolvedValue({});
     const { result } = renderHook(() => useScoringRulesController(), { wrapper: queryWrapper() });
@@ -192,11 +233,20 @@ const criterionValues = {
   enabled: true,
 } as const;
 
-function queryWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(["scoring", "rules"], []);
+function queryWrapper(
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
+  queryClient.setQueryData(["scoring", "rules"], {
+    items: [],
+    total: 0,
+    summary: { enabled: 0, pageActions: 0 },
+  });
   queryClient.setQueryData(["scoring", "categories"], []);
-  queryClient.setQueryData(["scoring", "criteria"], []);
+  queryClient.setQueryData(["scoring", "criteria"], {
+    items: [],
+    total: 0,
+    summary: { enabled: 0, totalSteps: 0 },
+  });
   queryClient.setQueryData(["contacts", "options"], {
     tags: [],
     segments: [],

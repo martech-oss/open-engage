@@ -1,7 +1,10 @@
-import { and, asc, eq, exists, isNull, sql } from "drizzle-orm";
+import { gt, count, and, asc, eq, exists, isNull, sql } from "drizzle-orm";
 
 import type {
   GradingCriterion,
+  ScoringPageInput,
+  ScoringRulePage,
+  GradingCriterionPage,
   GradingCriterionWrite,
   ScoringCategory,
   ScoringCategoryWrite,
@@ -63,7 +66,8 @@ export class ScoringRepository extends WorkspaceRepository {
     return changedExactlyOne(result);
   }
 
-  public async listRules(): Promise<ScoringRule[]> {
+  public async listRules(input: ScoringPageInput = {}): Promise<ScoringRulePage> {
+    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
     const rows = await this.database.orm
       .select({
         id: scoringRules.id,
@@ -93,10 +97,37 @@ export class ScoringRepository extends WorkspaceRepository {
         tags,
         and(eq(tags.workspaceId, scoringRules.workspaceId), eq(tags.id, scoringRules.tagId)),
       )
+      .where(
+        and(
+          this.inWorkspace(scoringRules),
+          isNull(scoringRules.archivedAt),
+          input.cursor ? gt(scoringRules.id, input.cursor) : undefined,
+        ),
+      )
+      .orderBy(asc(scoringRules.id))
+      .limit(limit + 1);
+    const summary = await this.database.orm
+      .select({
+        total: count(),
+        enabled:
+          sql<number>`coalesce(sum(case when ${scoringRules.enabled} then 1 else 0 end),0)`.mapWith(
+            Number,
+          ),
+        pageActions:
+          sql<number>`coalesce(sum(case when ${scoringRules.eventType}='page_viewed' then 1 else 0 end),0)`.mapWith(
+            Number,
+          ),
+      })
+      .from(scoringRules)
       .where(and(this.inWorkspace(scoringRules), isNull(scoringRules.archivedAt)))
-      .orderBy(asc(scoringRules.eventType), asc(scoringRules.name))
-      .limit(UNPAGINATED_LIST_LIMIT);
-    return rows as ScoringRule[];
+      .get();
+    const items = rows.slice(0, limit) as ScoringRule[];
+    return {
+      items,
+      total: summary?.total ?? 0,
+      ...(rows.length > limit ? { nextCursor: items.at(-1)!.id } : {}),
+      summary: { enabled: summary?.enabled ?? 0, pageActions: summary?.pageActions ?? 0 },
+    };
   }
 
   public async createRule(input: ScoringRuleWrite): Promise<{ id: string } | null> {
@@ -144,13 +175,42 @@ export class ScoringRepository extends WorkspaceRepository {
     return changedExactlyOne(result);
   }
 
-  public listCriteria(): Promise<GradingCriterion[]> {
-    return this.database.orm
+  public async listCriteria(input: ScoringPageInput = {}): Promise<GradingCriterionPage> {
+    const limit = Math.max(1, Math.min(input.limit ?? 50, 100));
+    const rows = (await this.database.orm
       .select(criterionSelection)
       .from(gradingCriteria)
+      .where(
+        and(
+          this.inWorkspace(gradingCriteria),
+          isNull(gradingCriteria.archivedAt),
+          input.cursor ? gt(gradingCriteria.id, input.cursor) : undefined,
+        ),
+      )
+      .orderBy(asc(gradingCriteria.id))
+      .limit(limit + 1)) as GradingCriterion[];
+    const summary = await this.database.orm
+      .select({
+        total: count(),
+        enabled:
+          sql<number>`coalesce(sum(case when ${gradingCriteria.enabled} then 1 else 0 end),0)`.mapWith(
+            Number,
+          ),
+        totalSteps:
+          sql<number>`coalesce(sum(case when ${gradingCriteria.enabled} then ${gradingCriteria.steps} else 0 end),0)`.mapWith(
+            Number,
+          ),
+      })
+      .from(gradingCriteria)
       .where(and(this.inWorkspace(gradingCriteria), isNull(gradingCriteria.archivedAt)))
-      .orderBy(asc(gradingCriteria.name))
-      .limit(UNPAGINATED_LIST_LIMIT) as Promise<GradingCriterion[]>;
+      .get();
+    const items = rows.slice(0, limit);
+    return {
+      items,
+      total: summary?.total ?? 0,
+      ...(rows.length > limit ? { nextCursor: items.at(-1)!.id } : {}),
+      summary: { enabled: summary?.enabled ?? 0, totalSteps: summary?.totalSteps ?? 0 },
+    };
   }
 
   public async createCriterion(input: GradingCriterionWrite): Promise<{ id: string }> {

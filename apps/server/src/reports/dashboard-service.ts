@@ -1,19 +1,14 @@
 import type { Dashboard } from "@openengage/core/reports";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { ReportsRepository } from "@openengage/database/reports";
+import { DashboardReportsRepository } from "@openengage/database/reports";
 import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
-import { listAutomations } from "../automations/list-service";
 import { toFiniteNumber, parseJsonRecord, primitiveString } from "../platform/values";
-import { contactReport } from "./contacts-report";
-import { dealReport } from "./deals-report";
-import { emailReport } from "./emails-report";
 import { toReportRange } from "./shared";
 
 const TREND_DAYS = 14;
 const TREND_WINDOW = 7;
 const TOTAL_DAYS = 30;
-const TOP_AUTOMATIONS = 6;
 
 export interface DashboardClock {
   now?: string;
@@ -32,27 +27,28 @@ export async function getDashboard(
   const totalsRange = lastDaysRange(asOf, workspace.timezone, TOTAL_DAYS);
   const trendReportRange = toReportRange(trendRange.from, trendRange.to, workspace.timezone);
   const totalsReportRange = toReportRange(totalsRange.from, totalsRange.to, workspace.timezone);
-  const [summary, contacts, emails, deals, automations] = await Promise.all([
-    new ReportsRepository(database).dashboardSummary(workspaceId, {
-      fromTimestamp: totalsReportRange.fromTimestamp,
-      toExclusiveTimestamp: totalsReportRange.toExclusiveTimestamp,
-      asOf,
-    }),
-    contactReport(database, workspaceId, trendReportRange),
-    emailReport(database, workspaceId, trendReportRange),
-    dealReport(database, workspaceId, totalsReportRange),
-    listAutomations(database, workspaceId),
-  ]);
+  const summary = await new DashboardReportsRepository(database).dashboardSummary(workspaceId, {
+    totals: totalsReportRange,
+    trend: trendReportRange,
+    asOf,
+  });
 
   const contactPoints = fillDailySeries(
     trendRange,
-    contacts.trend,
+    summary.contactTrend.map((row) => ({
+      day: primitiveString(row["day"]),
+      added: toFiniteNumber(row["added"]),
+    })),
     (point) => point.added,
     (day, added) => ({ day, added }),
   );
   const deliveryPoints = fillDailySeries(
     trendRange,
-    emails.trend,
+    summary.deliveryTrend.map((row) => ({
+      day: primitiveString(row["day"]),
+      sends: toFiniteNumber(row["sends"]),
+      delivered: toFiniteNumber(row["delivered"]),
+    })),
     (point) => ({ sends: point.sends, delivered: point.delivered }),
     (day, value) => ({
       day,
@@ -62,14 +58,8 @@ export async function getDashboard(
     }),
     { sends: 0, delivered: 0 },
   );
-  const rankedAutomations = automations
-    .filter((automation) => automation.status === "active")
-    .sort(
-      (left, right) =>
-        right.activeCount - left.activeCount || right.updatedAt.localeCompare(left.updatedAt),
-    )
-    .slice(0, TOP_AUTOMATIONS);
-  const openCount = deals.summary.openCount;
+  const openCount = toFiniteNumber(summary.deals["open_count"]);
+  const openValue = toFiniteNumber(summary.deals["open_value"]);
   const sent = toFiniteNumber(summary.deliveries["sent"]);
   const delivered = toFiniteNumber(summary.deliveries["delivered"]);
   const recentEvents = summary.events.map((row) => ({
@@ -89,14 +79,14 @@ export async function getDashboard(
     },
     automations: {
       count: toFiniteNumber(summary.automations["count"]),
-      draftCount: automations.filter((automation) => automation.status === "draft").length,
-      enrolledCount: automations.reduce((total, automation) => total + automation.activeCount, 0),
-      top: rankedAutomations.map((automation) => ({
-        id: automation.id,
-        name: automation.name,
-        active: automation.activeCount,
-        completed: automation.completedCount,
-        updatedAt: automation.updatedAt,
+      draftCount: toFiniteNumber(summary.automations["draft_count"]),
+      enrolledCount: toFiniteNumber(summary.automations["enrolled_count"]),
+      top: summary.topAutomations.map((row) => ({
+        id: primitiveString(row["id"]),
+        name: primitiveString(row["name"]),
+        active: toFiniteNumber(row["active"]),
+        completed: toFiniteNumber(row["completed"]),
+        updatedAt: primitiveString(row["updated_at"]),
       })),
     },
     briefs: { overdueReviews: toFiniteNumber(summary.briefs["overdue_reviews"]) },
@@ -112,14 +102,14 @@ export async function getDashboard(
     },
     deals: {
       range: totalsRange,
-      currency: deals.currency,
-      created: deals.summary.created,
+      currency: primitiveString(summary.deals["currency"]),
+      created: toFiniteNumber(summary.deals["created"]),
       openCount,
-      openValue: deals.summary.openValue,
-      averageOpenValue: openCount > 0 ? deals.summary.openValue / openCount : 0,
-      openTasks: deals.summary.openTasks,
-      overdueTasks: deals.summary.overdueTasks,
-      completedTasks: deals.summary.completedTasks,
+      openValue,
+      averageOpenValue: openCount > 0 ? openValue / openCount : 0,
+      openTasks: toFiniteNumber(summary.tasks["open_tasks"]),
+      overdueTasks: toFiniteNumber(summary.tasks["overdue_tasks"]),
+      completedTasks: toFiniteNumber(summary.tasks["completed_tasks"]),
     },
     recentEvents,
     recentActivity: recentEvents.slice(0, 12),

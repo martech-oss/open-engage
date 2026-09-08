@@ -2,6 +2,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { useResourceEditor } from "@/hooks/use-resource-editor";
 
@@ -11,10 +12,13 @@ import {
   type ScoringRuleRow,
   useArchiveScoringRule,
 } from "./scoring-api";
-import { summarizeScoringRules } from "./scoring-model";
 
 export function useScoringRulesController() {
-  const { data: rules } = useSuspenseQuery(scoringRulesQueryOptions());
+  const pagination = useCursorPagination("scoring-rules");
+  const { data: page } = useSuspenseQuery(
+    scoringRulesQueryOptions(pagination.cursor ? { cursor: pagination.cursor } : {}),
+  );
+  const rules = page.items;
   const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
   const resourceEditor = useResourceEditor<ScoringRuleRow>();
   const [sessionId, setSessionId] = useState(0);
@@ -41,8 +45,15 @@ export function useScoringRulesController() {
 
   return {
     rules,
+    pagination: {
+      hasNextPage: Boolean(page.nextCursor),
+      hasPreviousPage: pagination.hasPreviousPage,
+      onNext: () => pagination.goToNextPage(page.nextCursor),
+      onPrevious: pagination.goToPreviousPage,
+      rangeLabel: `全 ${page.total} 件`,
+    },
     categories,
-    summary: summarizeScoringRules(rules, categories.length),
+    summary: { total: page.total, ...page.summary, categories: categories.length },
     editor: { ...resourceEditor, sessionId, openCreate, openEdit },
     archive,
   };

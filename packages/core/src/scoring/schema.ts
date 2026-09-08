@@ -158,3 +158,24 @@ export const contactCategoryScoreSchema = z.object({
   score: z.number().int(),
 });
 export type ContactCategoryScore = z.infer<typeof contactCategoryScoreSchema>;
+
+/** Administrative pages are separate from the complete runtime configuration. */
+export const scoringPageInputSchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+export type ScoringPageInput = z.input<typeof scoringPageInputSchema>;
+export const scoringRulePageSchema = z.object({
+  items: z.array(scoringRuleSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().optional(),
+  summary: z.object({ enabled: z.number(), pageActions: z.number() }),
+});
+export type ScoringRulePage = z.infer<typeof scoringRulePageSchema>;
+export const gradingCriterionPageSchema = z.object({
+  items: z.array(gradingCriterionSchema),
+  total: z.number().int().nonnegative(),
+  nextCursor: z.string().optional(),
+  summary: z.object({ enabled: z.number(), totalSteps: z.number() }),
+});
+export type GradingCriterionPage = z.infer<typeof gradingCriterionPageSchema>;

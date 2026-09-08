@@ -45,6 +45,11 @@ export interface SiteSummaryData {
 }
 
 export interface DashboardSummaryData {
+  contactTrend: ReportRow[];
+  deliveryTrend: ReportRow[];
+  topAutomations: ReportRow[];
+  deals: ReportRow;
+  tasks: ReportRow;
   contacts: ReportRow;
   automations: ReportRow;
   briefs: ReportRow;

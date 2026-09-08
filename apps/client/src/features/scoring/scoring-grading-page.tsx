@@ -43,6 +43,7 @@ export function ScoringGradingPage(): ReactNode {
         <CardContent className="px-0">
           <DataTable
             columns={columns}
+            pagination={controller.pagination}
             rows={controller.criteria}
             rowKey={(item) => item.id}
             caption="グレード条件一覧"

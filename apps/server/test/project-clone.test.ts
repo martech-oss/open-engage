@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import { PROJECT_PROGRAM_TEMPLATES } from "@openengage/core/projects";
 import { emptyLandingPageDocument } from "@openengage/core/web";
-import { ProjectCloneRepository } from "@openengage/database/projects";
+import {
+  ProjectCloneJobRepository,
+  ProjectCloneQueryRepository,
+} from "@openengage/database/projects";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -14,7 +17,7 @@ const options = (name: string) => ({
   reviewAt: null,
   variables: {},
 });
-async function finish(repository: ProjectCloneRepository, jobId: string) {
+async function finish(repository: ProjectCloneJobRepository, jobId: string) {
   for (let step = 0; step < 30; step++) {
     const outcome = await repository.process(jobId, 2);
     if (outcome === "completed") return;
@@ -116,7 +119,7 @@ describe("project clone", () => {
         })
       ).targetProjectId,
     ).toBe(started.targetProjectId);
-    const repository = new ProjectCloneRepository(env.DB, { workspaceId });
+    const repository = new ProjectCloneJobRepository(env.DB, { workspaceId });
     await repository.process(preview.id, 1);
     expect((await client.projects.list()).some((item) => item.id === preview.targetProjectId)).toBe(
       false,
@@ -187,9 +190,11 @@ describe("project clone", () => {
       requestKey: "retry-copy",
     });
     await env.DB.prepare("DELETE FROM projects WHERE id=?").bind(shared.id).run();
-    const repository = new ProjectCloneRepository(env.DB, { workspaceId });
+    const repository = new ProjectCloneJobRepository(env.DB, { workspaceId });
     await expect(finish(repository, preview.id)).rejects.toThrow();
-    expect((await repository.get(preview.id))?.status).toBe("failed");
+    expect(
+      (await new ProjectCloneQueryRepository(env.DB, { workspaceId }).get(preview.id))?.status,
+    ).toBe("failed");
     expect((await client.projects.list()).some((item) => item.id === preview.targetProjectId)).toBe(
       false,
     );
@@ -201,7 +206,10 @@ describe("project clone", () => {
       .run();
     await client.projects.cloneRetry({ id: source.id, jobId: preview.id });
     await finish(repository, preview.id);
-    expect((await repository.get(preview.id))?.targetProjectId).toBe(preview.targetProjectId);
+    expect(
+      (await new ProjectCloneQueryRepository(env.DB, { workspaceId }).get(preview.id))
+        ?.targetProjectId,
+    ).toBe(preview.targetProjectId);
     expect(
       (await client.projects.list()).filter((item) => item.id === preview.targetProjectId),
     ).toHaveLength(1);
@@ -258,7 +266,7 @@ describe("project clone", () => {
       jobId: preview.id,
       requestKey: "link-clone",
     });
-    await finish(new ProjectCloneRepository(env.DB, { workspaceId }), preview.id);
+    await finish(new ProjectCloneJobRepository(env.DB, { workspaceId }), preview.id);
     const link = preview.resources.find((item) => item.kind === "redirect")!;
     const url = `http://localhost:8787/r/${slug}/${link.targetSlug}`;
     expect((await exports.default.fetch(new Request(url, { redirect: "manual" }))).status).toBe(

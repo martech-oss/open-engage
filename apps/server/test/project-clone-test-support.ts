@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 
-import { ProjectCloneRepository } from "@openengage/database/projects";
+import { ProjectCloneJobRepository } from "@openengage/database/projects";
 
 import type { seedWorkspaceClient } from "./factory";
 
@@ -15,7 +15,7 @@ export const cloneOptions = {
 
 export async function finishClone(fixture: CloneFixture, id: string, jobId: string) {
   await fixture.client.projects.cloneStart({ id, jobId, requestKey: jobId });
-  const repository = new ProjectCloneRepository(env.DB, fixture);
+  const repository = new ProjectCloneJobRepository(env.DB, fixture);
   for (let step = 0; step < 30; step++) {
     if ((await repository.process(jobId, 20)) === "completed") return;
   }

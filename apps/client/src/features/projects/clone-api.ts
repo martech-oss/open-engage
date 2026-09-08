@@ -1,12 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpcQuery } from "@/lib/orpc";
+import type { ProjectCloneCursor } from "@openengage/core/projects";
 
-export function projectCloneListQueryOptions(id: string) {
-  return orpcQuery.projects.cloneList.queryOptions({ input: { id } });
+export function projectCloneListQueryOptions(id: string, cursor?: ProjectCloneCursor) {
+  return orpcQuery.projects.cloneList.queryOptions({
+    input: { id, ...(cursor ? { cursor } : {}) },
+  });
 }
-export function projectCloneQueryOptions(id: string, jobId: string) {
-  return orpcQuery.projects.cloneGet.queryOptions({ input: { id, jobId } });
+export function projectCloneProgressQueryOptions(id: string, jobId: string) {
+  return orpcQuery.projects.cloneProgress.queryOptions({ input: { id, jobId } });
 }
 function useInvalidateClones() {
   const client = useQueryClient();

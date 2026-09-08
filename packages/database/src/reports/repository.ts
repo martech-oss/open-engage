@@ -1,7 +1,6 @@
 import { DatabaseRepository } from "../shared/repository-base";
 import { AutomationsReportsRepository } from "./automations-repository";
 import { ContactsReportsRepository } from "./contacts-repository";
-import { DashboardReportsRepository } from "./dashboard-repository";
 import { DealsReportsRepository } from "./deals-repository";
 import { EmailsReportsRepository } from "./emails-repository";
 import { SiteReportsRepository } from "./site-repository";
@@ -15,7 +14,6 @@ export class ReportsRepository extends DatabaseRepository {
   private readonly automations = new AutomationsReportsRepository(this.database);
   private readonly emails = new EmailsReportsRepository(this.database);
   private readonly site = new SiteReportsRepository(this.database);
-  private readonly dashboard = new DashboardReportsRepository(this.database);
 
   public listDealCurrencies(...args: Parameters<DealsReportsRepository["listDealCurrencies"]>) {
     return this.deals.listDealCurrencies(...args);
@@ -36,8 +34,5 @@ export class ReportsRepository extends DatabaseRepository {
   }
   public siteSummary(...args: Parameters<SiteReportsRepository["siteSummary"]>) {
     return this.site.siteSummary(...args);
-  }
-  public dashboardSummary(...args: Parameters<DashboardReportsRepository["dashboardSummary"]>) {
-    return this.dashboard.dashboardSummary(...args);
   }
 }

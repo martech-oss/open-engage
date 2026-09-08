@@ -31,9 +31,15 @@ vi.mock("@/features/contacts/contact-api", () => ({
   contactOptionsQueryOptions: () => ({ queryKey: ["contacts", "options"], queryFn: () => null }),
 }));
 vi.mock("./scoring-api", () => ({
-  scoringRulesQueryOptions: () => ({ queryKey: ["scoring", "rules"], queryFn: () => [] }),
+  scoringRulesQueryOptions: () => ({
+    queryKey: ["scoring", "rules"],
+    queryFn: () => ({ items: [], total: 0, summary: { enabled: 0, pageActions: 0 } }),
+  }),
   scoringCategoriesQueryOptions: () => ({ queryKey: ["scoring", "categories"], queryFn: () => [] }),
-  gradingCriteriaQueryOptions: () => ({ queryKey: ["scoring", "criteria"], queryFn: () => [] }),
+  gradingCriteriaQueryOptions: () => ({
+    queryKey: ["scoring", "criteria"],
+    queryFn: () => ({ items: [], total: 0, summary: { enabled: 0, totalSteps: 0 } }),
+  }),
   useCreateScoringRule: () => doubles.createRule,
   useUpdateScoringRule: () => doubles.updateRule,
   useCreateGradingCriterion: () => doubles.createCriterion,
@@ -161,9 +167,17 @@ function GradingSessionHarness({ item }: { item: GradingCriterionRow }): ReactNo
 
 function queryWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(["scoring", "rules"], []);
+  queryClient.setQueryData(["scoring", "rules"], {
+    items: [],
+    total: 0,
+    summary: { enabled: 0, pageActions: 0 },
+  });
   queryClient.setQueryData(["scoring", "categories"], []);
-  queryClient.setQueryData(["scoring", "criteria"], []);
+  queryClient.setQueryData(["scoring", "criteria"], {
+    items: [],
+    total: 0,
+    summary: { enabled: 0, totalSteps: 0 },
+  });
   queryClient.setQueryData(["contacts", "options"], {
     tags: [],
     segments: [],

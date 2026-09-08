@@ -1,11 +1,9 @@
 import {
   programMemberMutationSchema,
-  parseProgramMemberCsv,
   type ProgramMemberMutationResult,
 } from "@openengage/core/projects";
 import { hasWorkspaceRole, type WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
-import { writeAuditLog } from "@openengage/database/platform";
 import {
   FormProgramRepository,
   ProjectMemberRepository,
@@ -57,58 +55,4 @@ export async function getProgramDetail(
     formBindings: await new FormProgramRepository(database, workspace).list(projectId),
   };
 }
-export async function importProgramMembers(
-  database: OpenEngageDatabase,
-  workspace: WorkspaceContext,
-  input: { projectId: string; csv: string; idempotencyKey: string },
-) {
-  const repository = new ProjectMemberRepository(database, workspace);
-  await new ProjectProgramRepository(database, workspace).project(input.projectId);
-  const rows: Array<{ row: number; ok: boolean; contactId?: string; error?: string }> = [];
-  let parsedRows;
-  try {
-    parsedRows = parseProgramMemberCsv(input.csv);
-  } catch (error) {
-    throw new ProgramError("invalid", error instanceof Error ? error.message : "Invalid CSV");
-  }
-  for (const row of parsedRows) {
-    if ("error" in row) {
-      rows.push({ row: row.row, ok: false, error: row.error });
-      continue;
-    }
-    const contactId = await repository.findContact(row);
-    if (!contactId) {
-      rows.push({
-        row: row.row,
-        ok: false,
-        error:
-          "Contact ID/email was not found or does not identify the same contact in this workspace",
-      });
-      continue;
-    }
-    try {
-      await mutateProjectMember(database, workspace, {
-        projectId: input.projectId,
-        contactId,
-        ...(row.statusId ? { statusId: row.statusId } : {}),
-        source: "csv",
-        idempotencyKey: `${input.idempotencyKey}:${row.row}`,
-        actorUserId: workspace.userId,
-      });
-      rows.push({ row: row.row, ok: true, contactId });
-    } catch (error) {
-      if (!(error instanceof ProgramError)) throw error;
-      rows.push({ row: row.row, ok: false, error: error.message });
-    }
-  }
-  await writeAuditLog(database, workspace, {
-    action: "project.members.import",
-    resourceType: "project",
-    resourceId: input.projectId,
-    metadata: {
-      succeeded: rows.filter((r) => r.ok).length,
-      failed: rows.filter((r) => !r.ok).length,
-    },
-  });
-  return { rows };
-}
+export { importProgramMembers } from "./program-import-service";

@@ -39,6 +39,7 @@ export function ScoringRulesPage(): ReactNode {
         <CardContent className="px-0">
           <DataTable
             columns={columns}
+            pagination={controller.pagination}
             rows={controller.rules}
             rowKey={(item) => item.id}
             caption="スコアリングルール一覧"

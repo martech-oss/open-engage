@@ -1,24 +1,29 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { orpcQuery } from "@/lib/orpc";
-import type { GradingCriterion, ScoringCategory, ScoringRule } from "@openengage/core/scoring";
+import type {
+  GradingCriterion,
+  ScoringCategory,
+  ScoringRule,
+  ScoringPageInput,
+} from "@openengage/core/scoring";
 
-export type { GradingCriterion, ScoringCategory, ScoringRule };
+export type { GradingCriterion, ScoringCategory, ScoringRule, ScoringPageInput };
 
 export type ScoringRuleRow = ScoringRule;
 export type ScoringCategoryRow = ScoringCategory;
 export type GradingCriterionRow = GradingCriterion;
 
-export function scoringRulesQueryOptions() {
-  return orpcQuery.scoring.listRules.queryOptions();
+export function scoringRulesQueryOptions(input: ScoringPageInput = {}) {
+  return orpcQuery.scoring.listRules.queryOptions({ input });
 }
 
 export function scoringCategoriesQueryOptions() {
   return orpcQuery.scoring.listCategories.queryOptions();
 }
 
-export function gradingCriteriaQueryOptions() {
-  return orpcQuery.scoring.listCriteria.queryOptions();
+export function gradingCriteriaQueryOptions(input: ScoringPageInput = {}) {
+  return orpcQuery.scoring.listCriteria.queryOptions({ input });
 }
 
 type QueryClient = ReturnType<typeof useQueryClient>;

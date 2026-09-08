@@ -2,6 +2,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { useResourceEditor } from "@/hooks/use-resource-editor";
 
@@ -13,10 +14,13 @@ import {
   useArchiveGradingCriterion,
   useArchiveScoringCategory,
 } from "./scoring-api";
-import { summarizeGradingCriteria } from "./scoring-model";
 
 export function useScoringGradingController() {
-  const { data: criteria } = useSuspenseQuery(gradingCriteriaQueryOptions());
+  const pagination = useCursorPagination("scoring-criteria");
+  const { data: page } = useSuspenseQuery(
+    gradingCriteriaQueryOptions(pagination.cursor ? { cursor: pagination.cursor } : {}),
+  );
+  const criteria = page.items;
   const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
   const resourceEditor = useResourceEditor<GradingCriterionRow>();
   const [criterionSessionId, setCriterionSessionId] = useState(0);
@@ -60,8 +64,15 @@ export function useScoringGradingController() {
 
   return {
     criteria,
+    pagination: {
+      hasNextPage: Boolean(page.nextCursor),
+      hasPreviousPage: pagination.hasPreviousPage,
+      onNext: () => pagination.goToNextPage(page.nextCursor),
+      onPrevious: pagination.goToPreviousPage,
+      rangeLabel: `全 ${page.total} 件`,
+    },
     categories,
-    summary: summarizeGradingCriteria(criteria),
+    summary: page.summary,
     criterionEditor: {
       ...resourceEditor,
       sessionId: criterionSessionId,

@@ -11,7 +11,6 @@ export const deliveryQueueMessageSchema = z.object({
   kind: z.literal("delivery"),
   deliveryId: z.string(),
 });
-export type DeliveryQueueMessage = z.infer<typeof deliveryQueueMessageSchema>;
 
 export const contactImportQueueMessageSchema = z.object({
   kind: z.literal("contact_import"),
@@ -19,28 +18,28 @@ export const contactImportQueueMessageSchema = z.object({
   part: z.number().int().nonnegative(),
   totalParts: z.number().int().positive(),
 });
-export type ContactImportQueueMessage = z.infer<typeof contactImportQueueMessageSchema>;
+
+export const programMemberImportQueueMessageSchema = z.object({
+  kind: z.literal("program_member_import"),
+  workspaceId: z.string().min(1),
+  jobId: z.string().min(1),
+});
 
 export const contactExportQueueMessageSchema = z.object({
   kind: z.literal("contact_export"),
   exportJobId: z.string(),
 });
-export type ContactExportQueueMessage = z.infer<typeof contactExportQueueMessageSchema>;
 
 export const contactEventQueueMessageSchema = z.object({
   kind: z.literal("contact_event"),
   eventId: z.string().min(1),
 });
-export type ContactEventQueueMessage = z.infer<typeof contactEventQueueMessageSchema>;
 
 export const segmentContactReconcileQueueMessageSchema = z.object({
   kind: z.literal("segment_contact_reconcile"),
   workspaceId: z.string().min(1),
   contactId: z.string().min(1),
 });
-export type SegmentContactReconcileQueueMessage = z.infer<
-  typeof segmentContactReconcileQueueMessageSchema
->;
 
 export const segmentFullRefreshQueueMessageSchema = z.object({
   kind: z.literal("segment_full_refresh"),
@@ -48,7 +47,6 @@ export const segmentFullRefreshQueueMessageSchema = z.object({
   segmentId: z.string().min(1),
   filterVersion: z.number().int().positive(),
 });
-export type SegmentFullRefreshQueueMessage = z.infer<typeof segmentFullRefreshQueueMessageSchema>;
 
 export const landingGenerationQueueMessageSchema = z.object({
   kind: z.literal("landing_generation"),
@@ -93,17 +91,3 @@ export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
-
-export type QueueMessage =
-  | z.infer<typeof projectCloneQueueMessageSchema>
-  | z.infer<typeof automationRunQueueMessageSchema>
-  | z.infer<typeof automationScheduleQueueMessageSchema>
-  | z.infer<typeof landingGenerationQueueMessageSchema>
-  | z.infer<typeof visitorHistoryQueueMessageSchema>
-  | AutomationJobQueueMessage
-  | DeliveryQueueMessage
-  | ContactEventQueueMessage
-  | ContactImportQueueMessage
-  | ContactExportQueueMessage
-  | SegmentContactReconcileQueueMessage
-  | SegmentFullRefreshQueueMessage;

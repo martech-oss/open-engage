@@ -2,11 +2,12 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import {
-  gradingCriterionSchema,
+  gradingCriterionPageSchema,
+  scoringPageInputSchema,
   gradingCriterionWriteSchema,
   scoringCategorySchema,
   scoringCategoryWriteSchema,
-  scoringRuleSchema,
+  scoringRulePageSchema,
   scoringRuleWriteSchema,
 } from "@openengage/core/scoring";
 
@@ -48,7 +49,8 @@ export const scoringContract = {
   listRules: oc
     .route({ method: "GET", path: "/scoring/rules" })
     .errors(workspaceErrors)
-    .output(z.array(scoringRuleSchema)),
+    .input(scoringPageInputSchema)
+    .output(scoringRulePageSchema),
   createRule: oc
     .route({ method: "POST", path: "/scoring/rules", successStatus: 201 })
     .errors(ruleNotFound)
@@ -68,7 +70,8 @@ export const scoringContract = {
   listCriteria: oc
     .route({ method: "GET", path: "/scoring/grading-criteria" })
     .errors(workspaceErrors)
-    .output(z.array(gradingCriterionSchema)),
+    .input(scoringPageInputSchema)
+    .output(gradingCriterionPageSchema),
   createCriterion: oc
     .route({ method: "POST", path: "/scoring/grading-criteria", successStatus: 201 })
     .errors(authedErrors)

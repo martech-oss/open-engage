@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { automationEnrollments, automations } from "../automations/schema";
 import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema";
 import { reportDaysCte, ReportsBatchRepository } from "./batch-repository";
+import { emailDeliveredPredicate, emailSendPredicate } from "./email-metrics";
 import type { EmailsSummaryData, ReportDateRange } from "./types";
 
 export class EmailsReportsRepository extends ReportsBatchRepository {
@@ -17,7 +18,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
         SELECT
           COUNT(DISTINCT ${deliveries.id}) AS sends,
           COUNT(DISTINCT CASE
-            WHEN ${deliveries.status} = 'delivered' OR ${deliveryEvents.type} = 'delivered' THEN ${deliveries.id}
+            WHEN ${emailDeliveredPredicate()} THEN ${deliveries.id}
           END) AS delivered,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'opened' THEN ${deliveries.id} END) AS opens,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'clicked' THEN ${deliveries.id} END) AS clicks,
@@ -27,8 +28,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
         FROM ${deliveries}
         LEFT JOIN ${deliveryEvents}
           ON ${deliveryEvents.workspaceId} = ${deliveries.workspaceId} AND ${deliveryEvents.deliveryId} = ${deliveries.id}
-        WHERE ${deliveries.workspaceId} = ${workspaceId} AND ${deliveries.channel} = 'email'
-          AND ${deliveries.status} IN ('accepted', 'delivered', 'failed')
+        WHERE ${emailSendPredicate(workspaceId)}
           AND ${deliveries.createdAt} >= ${range.fromTimestamp} AND ${deliveries.createdAt} < ${range.toExclusiveTimestamp}
       `,
       sql`
@@ -37,7 +37,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
           report_days.day AS day,
           COUNT(DISTINCT ${deliveries.id}) AS sends,
           COUNT(DISTINCT CASE
-            WHEN ${deliveries.status} = 'delivered' OR ${deliveryEvents.type} = 'delivered' THEN ${deliveries.id}
+            WHEN ${emailDeliveredPredicate()} THEN ${deliveries.id}
           END) AS delivered,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'opened' THEN ${deliveries.id} END) AS opens,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'clicked' THEN ${deliveries.id} END) AS clicks
@@ -47,8 +47,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
             AND ${deliveries.createdAt} < report_days.to_exclusive_timestamp
         LEFT JOIN ${deliveryEvents}
           ON ${deliveryEvents.workspaceId} = ${deliveries.workspaceId} AND ${deliveryEvents.deliveryId} = ${deliveries.id}
-        WHERE ${deliveries.workspaceId} = ${workspaceId} AND ${deliveries.channel} = 'email'
-          AND ${deliveries.status} IN ('accepted', 'delivered', 'failed')
+        WHERE ${emailSendPredicate(workspaceId)}
         GROUP BY report_days.day
         ORDER BY day
       `,
@@ -62,7 +61,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
           END AS source_type,
           COUNT(DISTINCT ${deliveries.id}) AS sends,
           COUNT(DISTINCT CASE
-            WHEN ${deliveries.status} = 'delivered' OR ${deliveryEvents.type} = 'delivered' THEN ${deliveries.id}
+            WHEN ${emailDeliveredPredicate()} THEN ${deliveries.id}
           END) AS delivered,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'opened' THEN ${deliveries.id} END) AS opens,
           COUNT(DISTINCT CASE WHEN ${deliveryEvents.type} = 'clicked' THEN ${deliveries.id} END) AS clicks,
@@ -77,8 +76,7 @@ export class EmailsReportsRepository extends ReportsBatchRepository {
           ON ${automations.workspaceId} = ${automationEnrollments.workspaceId} AND ${automations.id} = ${automationEnrollments.automationId}
         LEFT JOIN ${emailTemplates}
           ON ${emailTemplates.workspaceId} = ${deliveries.workspaceId} AND ${emailTemplates.id} = ${deliveries.templateId}
-        WHERE ${deliveries.workspaceId} = ${workspaceId} AND ${deliveries.channel} = 'email'
-          AND ${deliveries.status} IN ('accepted', 'delivered', 'failed')
+        WHERE ${emailSendPredicate(workspaceId)}
           AND ${deliveries.createdAt} >= ${range.fromTimestamp} AND ${deliveries.createdAt} < ${range.toExclusiveTimestamp}
         GROUP BY source_id, source_name, source_type
         ORDER BY sends DESC, source_name ASC

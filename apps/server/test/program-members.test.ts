@@ -116,7 +116,13 @@ describe("program membership persistence and API", () => {
       csv: `contactId,statusId\n${f.contactId},qualified\n${f.contactId},bad status!\nunknown,received\n${other.contactId},received`,
       idempotencyKey: crypto.randomUUID(),
     });
-    expect(imported.rows.map((r) => r.ok)).toEqual([true, false, false, false]);
+    const { processProgramMemberImport } = await import("../src/projects/program-import-service");
+    await processProgramMemberImport(env, f.workspaceId, imported.jobId);
+    const completed = await f.client.projects.memberImportGet({
+      id: f.projectId,
+      jobId: imported.jobId,
+    });
+    expect(completed.rows.map((r) => r.ok)).toEqual([true, false, false, false]);
     await expect(
       f.client.projects.memberImport({
         id: f.projectId,

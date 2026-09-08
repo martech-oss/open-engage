@@ -5,6 +5,8 @@ import {
   type ProjectCloneResource,
 } from "@openengage/core/projects";
 
+import { projectCloneTransforms } from "./clone-transforms";
+
 const jsonColumns = new Set([
   "definition",
   "sourceDefinition",
@@ -67,85 +69,6 @@ export function prepareProjectCloneRow(
   if ("variableSnapshot" in row) row.variableSnapshot = null;
   if ("resolvedVariables" in row) row.resolvedVariables = null;
   if ("resolvedGraph" in row) row.resolvedGraph = null;
-  switch (resource.kind) {
-    case "project":
-      row.name = options.name;
-      break;
-    case "brief":
-      Object.assign(row, {
-        status: "draft",
-        revision: 1,
-        rowVersion: 1,
-        ownerUserId: options.ownerUserId,
-        approverUserId: options.approverUserId,
-        reviewAt: options.reviewAt,
-        submittedAt: null,
-        approvedAt: null,
-        approvedByUserId: null,
-        completedAt: null,
-      });
-      break;
-    case "automation":
-      row.status = "draft";
-      break;
-    case "automation_version":
-      Object.assign(row, { status: "draft", version: 1 });
-      if ("dependencies" in row) row.dependencies = "{}";
-      if ("pinnedDependencies" in row) row.pinnedDependencies = "{}";
-      break;
-    case "form":
-    case "landing_page":
-      row.status = "draft";
-      break;
-    case "experiment":
-      Object.assign(row, {
-        status: "draft",
-        winnerVariantId: null,
-        startedAt: null,
-        endedAt: null,
-      });
-      break;
-    case "segment":
-      Object.assign(row, {
-        memberCount: 0,
-        evaluatedAt: null,
-        evaluationStatus: row.kind === "dynamic" ? "pending" : "ready",
-        evaluationError: null,
-        filterVersion: 1,
-      });
-      break;
-    case "redirect":
-      Object.assign(row, { clickCount: 0, status: "draft" });
-      break;
-    case "email_sequence":
-      Object.assign(row, {
-        draftRevision: 1,
-        publishedSubject: null,
-        publishedContent: null,
-        publishedRevision: null,
-        publishedAt: null,
-      });
-      break;
-    case "variable": {
-      row.revision = 1;
-      row.deletedAt = null;
-      const key = String(row.key);
-      if (Object.prototype.hasOwnProperty.call(options.variables, key))
-        row.value = JSON.stringify(options.variables[key]);
-      break;
-    }
-    case "program":
-      Object.assign(row, { rowVersion: 1, publishedVersion: null });
-      break;
-    case "form_version":
-      row.programBinding = null;
-      break;
-    case "form_binding":
-      if (map.ids[String(source.projectId)]) row.definitionVersion = null;
-      break;
-    case "landing_page_version":
-    case "dynamic_content":
-      break;
-  }
+  projectCloneTransforms[resource.kind](row, source, map, options);
   return row;
 }

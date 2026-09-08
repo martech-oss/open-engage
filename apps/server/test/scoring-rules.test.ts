@@ -174,7 +174,7 @@ describe("scoring rules", () => {
     await expect(
       local.client.scoring.updateRule({ id: created.id, ...foreignInput }),
     ).rejects.toMatchObject({ code: "SCORING_RULE_NOT_FOUND", status: 404 });
-    await expect(localScoring.listRules()).resolves.toEqual([
+    await expect(localScoring.listRules().then((page) => page.items)).resolves.toEqual([
       expect.objectContaining({ id: created.id, name: "Local API rule", categoryId: null }),
     ]);
   });
@@ -223,7 +223,7 @@ describe("scoring rules", () => {
     await expect(
       local.scoring.createRule({ ...base, categoryId: null, tagId: "missing-tag" }),
     ).resolves.toBeNull();
-    await expect(local.scoring.listRules()).resolves.toEqual([]);
+    await expect(local.scoring.listRules().then((page) => page.items)).resolves.toEqual([]);
   });
 
   it("rejects foreign or archived references on update and preserves the existing rule", async () => {
@@ -284,7 +284,7 @@ describe("scoring rules", () => {
         tagId: foreignTagId,
       }),
     ).resolves.toBe(false);
-    await expect(local.scoring.listRules()).resolves.toEqual([
+    await expect(local.scoring.listRules().then((page) => page.items)).resolves.toEqual([
       expect.objectContaining({
         id: created.id,
         name: "Original rule",
@@ -317,7 +317,7 @@ describe("scoring rules", () => {
       points: 10,
     });
 
-    await expect(local.scoring.listRules()).resolves.toEqual([
+    await expect(local.scoring.listRules().then((page) => page.items)).resolves.toEqual([
       expect.objectContaining({
         categoryId: null,
         categoryName: null,
@@ -393,7 +393,7 @@ describe("scoring rules", () => {
       points: 10,
     });
 
-    await expect(local.scoring.listRules()).resolves.toEqual([
+    await expect(local.scoring.listRules().then((page) => page.items)).resolves.toEqual([
       expect.objectContaining({
         categoryId: null,
         categoryName: null,

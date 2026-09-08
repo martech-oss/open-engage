@@ -197,7 +197,7 @@ it("rejects preview when a published form status is missing from the chosen prog
     code: "PROJECT_CLONE_CONFLICT",
     message: expect.stringMatching(/Registration.*registered/),
   });
-  expect(await f.client.projects.cloneList({ id: f.project.id })).toHaveLength(0);
+  expect((await f.client.projects.cloneList({ id: f.project.id })).items).toHaveLength(0);
 });
 
 it("generates and publishes above all copied experiment versions without changing the source", async () => {

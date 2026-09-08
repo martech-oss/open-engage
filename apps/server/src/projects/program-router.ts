@@ -1,6 +1,7 @@
 import { hasWorkspaceRole } from "@openengage/core/shared";
 import { writeAuditLog } from "@openengage/database/platform";
 import {
+  ProgramMemberImportRepository,
   ProjectRepository,
   FormProgramRepository,
   ProjectMemberRepository,
@@ -95,11 +96,19 @@ export const programProcedures = {
   memberImport: authed.projects.memberImport.handler(({ context, input, errors }) =>
     execute(errors, async () => {
       requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-      return importProgramMembers(context.database, context.workspace, {
+      return importProgramMembers(context.env, context.workspace, {
         ...input,
         projectId: input.id,
       });
     }),
+  ),
+  memberImportGet: authed.projects.memberImportGet.handler(({ context, input, errors }) =>
+    execute(errors, () =>
+      new ProgramMemberImportRepository(context.database, context.workspace).detail(
+        input.id,
+        input.jobId,
+      ),
+    ),
   ),
   memberHistory: authed.projects.memberHistory.handler(({ context, input, errors }) =>
     execute(errors, () =>
