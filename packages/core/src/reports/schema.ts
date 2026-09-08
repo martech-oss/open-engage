@@ -78,6 +78,7 @@ export const reportCategorySchema = z.enum([
   "deals",
   "site",
   "campaigns",
+  "lifecycle",
 ]);
 export type ReportCategory = z.infer<typeof reportCategorySchema>;
 
@@ -323,6 +324,7 @@ export const campaignsReportSchema = z.object({
   category: z.literal("campaigns"),
   range: reportRangeOutputSchema,
   currency: z.string(),
+  attributionModel: z.enum(["first_touch", "last_touch"]),
   summary: z.object({
     campaigns: int,
     activeCampaigns: int,
@@ -331,6 +333,9 @@ export const campaignsReportSchema = z.object({
     influencedDeals: int,
     firstTouchValue: int,
     lastTouchValue: int,
+    cost: z.number(),
+    attributedValue: z.number(),
+    roi: z.number().nullable(),
   }),
   campaigns: z.array(
     z.object({
@@ -343,8 +348,41 @@ export const campaignsReportSchema = z.object({
       influencedValue: int,
       firstTouchValue: int,
       lastTouchValue: int,
+      cost: z.number(),
+      attributedValue: z.number(),
+      roi: z.number().nullable(),
       touchesPerContact: rate,
     }),
   ),
 });
 export type CampaignsReport = z.infer<typeof campaignsReportSchema>;
+
+export const campaignReportQuerySchema = reportQuerySchema.safeExtend({
+  attributionModel: z.enum(["first_touch", "last_touch"]).default("last_touch"),
+});
+export const lifecycleReportQuerySchema = reportDateRangeSchema.safeExtend({
+  projectId: z.string().min(1).optional(),
+  ownerUserId: z.string().min(1).optional(),
+});
+const lifecycleMetricsSchema = z.object({
+  leads: int,
+  mql: int,
+  sql: int,
+  customer: int,
+  mqlRate: rate,
+  sqlRate: rate,
+  customerRate: rate,
+  skippedMql: int,
+  skippedSql: int,
+  medianLeadToMqlDays: z.number().nullable(),
+  medianMqlToSqlDays: z.number().nullable(),
+  medianSqlToCustomerDays: z.number().nullable(),
+});
+export const lifecycleReportSchema = z.object({
+  category: z.literal("lifecycle"),
+  range: reportRangeOutputSchema,
+  asOf: z.iso.datetime(),
+  summary: lifecycleMetricsSchema,
+  cohorts: z.array(lifecycleMetricsSchema.extend({ day: z.iso.date() })),
+});
+export type LifecycleReport = z.infer<typeof lifecycleReportSchema>;

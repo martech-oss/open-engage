@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, isNull, min, ne, or, sql, type SQL } from "d
 import { dealSummarySchema, type DealCreate } from "@openengage/core/deals";
 
 import { user } from "../auth/schema";
+import { LifecycleRepository } from "../contacts/lifecycle-repository";
 import { companies, contacts } from "../contacts/schema";
 import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
@@ -13,6 +14,23 @@ import type { DealListSummaryRow, DealRow } from "./types";
 
 export class DealRecordRepository extends WorkspaceRepository {
   private readonly options = new DealOptionsRepository(this.database, this.context);
+
+  private lifecycleStatements(
+    dealId: string,
+    contactId: string | null,
+    status: string,
+    at: string,
+  ) {
+    if (!contactId) return [];
+    const lifecycle = new LifecycleRepository(this.database, this.context);
+    const guard = sql`EXISTS (SELECT 1 FROM ${deals} WHERE ${deals.workspaceId} = ${this.context.workspaceId} AND ${deals.id} = ${dealId} AND ${deals.contactId} = ${contactId} AND ${deals.archivedAt} IS NULL)`;
+    return [
+      ...lifecycle.statements(contactId, "sql", at, `deal:${dealId}`, guard),
+      ...(status === "won"
+        ? lifecycle.statements(contactId, "customer", at, `deal:${dealId}:won`, guard)
+        : []),
+    ];
+  }
 
   /**
    * Checks that a deal's would-be pipeline/stage/contact/company/owner
@@ -153,7 +171,7 @@ export class DealRecordRepository extends WorkspaceRepository {
   public async createDeal(input: DealCreate): Promise<DealRow> {
     const id = uuidv7();
     const now = nowIso();
-    await this.database.orm.insert(deals).values({
+    const mutation = this.database.orm.insert(deals).values({
       id,
       workspaceId: this.context.workspaceId,
       pipelineId: input.pipelineId,
@@ -172,6 +190,10 @@ export class DealRecordRepository extends WorkspaceRepository {
       createdAt: now,
       updatedAt: now,
     });
+    await this.database.orm.batch([
+      mutation,
+      ...this.lifecycleStatements(id, input.contactId ?? null, input.status, now),
+    ]);
     return ensureLoaded(await this.getDeal(id), "Created deal");
   }
 
@@ -180,7 +202,7 @@ export class DealRecordRepository extends WorkspaceRepository {
     id: string,
     input: DealCreate & { wonAt: string | null; lostAt: string | null; updatedAt: string },
   ): Promise<DealRow | null> {
-    await this.database.orm
+    const mutation = this.database.orm
       .update(deals)
       .set({
         pipelineId: input.pipelineId,
@@ -199,6 +221,10 @@ export class DealRecordRepository extends WorkspaceRepository {
         updatedAt: input.updatedAt,
       })
       .where(and(this.inWorkspace(deals), eq(deals.id, id), isNull(deals.archivedAt)));
+    await this.database.orm.batch([
+      mutation,
+      ...this.lifecycleStatements(id, input.contactId ?? null, input.status, input.updatedAt),
+    ]);
     return this.getDeal(id);
   }
 

@@ -50,8 +50,21 @@ export const segmentFullRefreshQueueMessageSchema = z.object({
 });
 export type SegmentFullRefreshQueueMessage = z.infer<typeof segmentFullRefreshQueueMessageSchema>;
 
+export const landingGenerationQueueMessageSchema = z.object({
+  kind: z.literal("landing_generation"),
+  jobId: z.string().min(1),
+});
+
+export const visitorHistoryQueueMessageSchema = z.object({
+  kind: z.literal("visitor_history"),
+  workspaceId: z.string().min(1),
+  visitorId: z.string().min(1),
+});
+
 /** Everything the jobs queue carries, dispatched on the kind discriminator. */
 export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
+  visitorHistoryQueueMessageSchema,
+  landingGenerationQueueMessageSchema,
   automationJobQueueMessageSchema,
   contactEventQueueMessageSchema,
   contactImportQueueMessageSchema,
@@ -63,6 +76,8 @@ export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
 export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
 
 export type QueueMessage =
+  | z.infer<typeof landingGenerationQueueMessageSchema>
+  | z.infer<typeof visitorHistoryQueueMessageSchema>
   | AutomationJobQueueMessage
   | DeliveryQueueMessage
   | ContactEventQueueMessage

@@ -13,6 +13,7 @@ import {
   type AutomationJobRow,
 } from "@openengage/database/automations";
 import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
+import { SalesRepository } from "@openengage/database/deals";
 
 import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
@@ -33,6 +34,19 @@ interface AutomationActionExecutionContext {
 }
 
 const automationActionExecutors = {
+  handoff_to_sales: async (action, context) => {
+    await new SalesRepository(context.database, {
+      workspaceId: context.job.workspaceId,
+    }).handoffForAutomation(
+      {
+        ...action,
+        contactId: context.job.contactId,
+        executionKey: `automation:${context.job.enrollmentId}:${context.job.nodeId}`,
+      },
+      context.job.id,
+      context.leaseId,
+    );
+  },
   send_email: async (action, context) => {
     await createEmailDelivery(action, context.job, context.leaseId, context.env, context.database);
   },

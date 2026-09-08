@@ -1,8 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field";
+import { assignmentGroupsQueryOptions, salesMembersQueryOptions } from "@/features/deals/sales-api";
 import type { AutomationNode } from "@openengage/core/automations";
 
 import type { AutomationOptions } from "../automation-types";
@@ -18,6 +20,8 @@ export function ActionSettings({
   options: AutomationOptions;
   onUpdate: NodeUpdate;
 }): ReactNode {
+  if (node.config.action === "handoff_to_sales")
+    return <SalesHandoffSettings config={node.config} onUpdate={onUpdate} />;
   if (node.config.action === "send_email") {
     const config = node.config;
     const selected = options.templates.find((template) => template.id === config.templateId);
@@ -74,5 +78,64 @@ export function ActionSettings({
   }
   return (
     <p className="text-sm text-muted-foreground">このアクションはJSON定義で設定されています。</p>
+  );
+}
+
+function SalesHandoffSettings({
+  config,
+  onUpdate,
+}: {
+  config: Extract<
+    Extract<AutomationNode, { type: "action" }>["config"],
+    { action: "handoff_to_sales" }
+  >;
+  onUpdate: NodeUpdate;
+}) {
+  const { data: members = [] } = useQuery(salesMembersQueryOptions());
+  const { data: groups = [] } = useQuery(assignmentGroupsQueryOptions());
+  return (
+    <>
+      <SettingSelect
+        label="営業担当の割り当て"
+        value={
+          config.groupId
+            ? `group:${config.groupId}`
+            : config.ownerUserId
+              ? `user:${config.ownerUserId}`
+              : "existing"
+        }
+        options={[
+          ["existing", "現在の担当者を使用"],
+          ...members.map((member) => [`user:${member.id}`, member.name] as [string, string]),
+          ...groups.map((group) => [`group:${group.id}`, group.name] as [string, string]),
+        ]}
+        onChange={(value) =>
+          patchNodeConfig(onUpdate, actionIs("handoff_to_sales"), () => ({
+            ownerUserId: value.startsWith("user:") ? value.slice(5) : undefined,
+            groupId: value.startsWith("group:") ? value.slice(6) : undefined,
+          }))
+        }
+      />
+      <SettingInput
+        label="タスク名"
+        value={config.title}
+        onChange={(value) =>
+          patchNodeConfig(onUpdate, actionIs("handoff_to_sales"), () => ({ title: value }))
+        }
+      />
+      <SettingSelect
+        label="現在の担当者"
+        value={config.preserveOwner ? "keep" : "replace"}
+        options={[
+          ["keep", "有効な担当者を保持"],
+          ["replace", "再割り当て"],
+        ]}
+        onChange={(value) =>
+          patchNodeConfig(onUpdate, actionIs("handoff_to_sales"), () => ({
+            preserveOwner: value === "keep",
+          }))
+        }
+      />
+    </>
   );
 }

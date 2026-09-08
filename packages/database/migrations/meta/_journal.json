@@ -120,6 +120,48 @@
       "when": 1787670626512,
       "tag": "0016_lonely_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788794478643,
+      "tag": "0017_visitor_identity_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788794679090,
+      "tag": "0018_contact_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1788795195024,
+      "tag": "0019_task_reference_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1788795998722,
+      "tag": "0020_form_retry_proof",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1788796337982,
+      "tag": "0021_landing_costs",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1788796936770,
+      "tag": "0022_landing_optimization",
+      "breakpoints": true
     }
   ]
 }

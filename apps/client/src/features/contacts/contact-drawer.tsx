@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ContactOptions } from "@/features/contacts/contact-api";
+import { ContactSales } from "@/features/deals/contact-sales";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import type { ContactProfile } from "@openengage/core/contacts";
 
@@ -63,6 +64,7 @@ function ContactDrawerContent({ contactId, options, onClose, onChanged }: Contac
             <TabsContent value="details" className="flex flex-col gap-5 p-6">
               {controller.error ? <ErrorNotice>{controller.error}</ErrorNotice> : null}
               <ContactDrawerOverview profile={controller.profile} />
+              <ContactSales contactId={contactId} />
               <ContactProfileForm
                 key={controller.profile.contact.id}
                 profile={controller.profile}

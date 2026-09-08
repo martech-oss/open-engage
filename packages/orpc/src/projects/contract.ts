@@ -2,6 +2,8 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import {
+  campaignCostInputSchema,
+  campaignCostSchema,
   generateMarketingBriefInputSchema,
   marketingBriefGenerationResultSchema,
   projectBriefDetailSchema,
@@ -27,7 +29,34 @@ const expectedRowVersionInput = {
 
 const briefIdInput = idInput.extend(expectedRowVersionInput);
 
+const costErrors = {
+  ...authedErrors,
+  PROJECT_NOT_FOUND: { status: 404, message: "Projectまたは費用が見つかりません" },
+  COST_CONFLICT: { status: 409, message: "同じ費用IDで異なる内容は登録できません" },
+};
+const costIdInput = idInput.extend({ costId: z.uuid() });
+
 export const projectsContract = {
+  listCosts: oc
+    .route({ method: "GET", path: "/projects/{id}/costs" })
+    .errors(costErrors)
+    .input(idInput)
+    .output(z.array(campaignCostSchema)),
+  createCost: oc
+    .route({ method: "POST", path: "/projects/{id}/costs", successStatus: 201 })
+    .errors(costErrors)
+    .input(campaignCostInputSchema.extend(costIdInput.shape))
+    .output(ackSchema),
+  updateCost: oc
+    .route({ method: "PUT", path: "/projects/{id}/costs/{costId}" })
+    .errors(costErrors)
+    .input(campaignCostInputSchema.extend(costIdInput.shape))
+    .output(ackSchema),
+  deleteCost: oc
+    .route({ method: "DELETE", path: "/projects/{id}/costs/{costId}" })
+    .errors(costErrors)
+    .input(costIdInput)
+    .output(ackSchema),
   list: oc
     .route({ method: "GET", path: "/projects" })
     .errors(workspaceErrors)

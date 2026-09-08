@@ -146,6 +146,64 @@ describe("full segment refresh definition guards", () => {
   });
 });
 
+it("freezes membership deltas before transition events can change an event filter", async () => {
+  const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+  const contact = await client.contacts.create({
+    email: "no-joined-event@example.com",
+    customFields: {},
+  });
+  const segment = await client.segments.create({
+    name: "No prior join",
+    slug: "no-prior-join",
+    kind: "dynamic",
+    filter: {
+      kind: "group",
+      relation: "event",
+      combinator: "and",
+      negated: true,
+      children: [
+        { kind: "condition", field: "event_type", operator: "eq", value: "segment_joined" },
+      ],
+    },
+  });
+  expect(
+    await env.DB.prepare(
+      "SELECT contact_id FROM segment_memberships WHERE workspace_id=? AND segment_id=?",
+    )
+      .bind(workspaceId, segment.id)
+      .all(),
+  ).toMatchObject({ results: [{ contact_id: contact.id }] });
+  expect(
+    await env.DB.prepare("SELECT type FROM contact_events WHERE workspace_id=? AND resource_id=?")
+      .bind(workspaceId, segment.id)
+      .all(),
+  ).toMatchObject({ results: [{ type: "segment_joined" }] });
+  await refreshSegmentMemberships(createDatabase(env.DB), workspaceId, segment.id);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT contact_id FROM segment_memberships WHERE workspace_id=? AND segment_id=?",
+      )
+        .bind(workspaceId, segment.id)
+        .all()
+    ).results,
+  ).toHaveLength(0);
+  const events = await env.DB.prepare(
+    "SELECT type FROM contact_events WHERE workspace_id=? AND resource_id=? ORDER BY id",
+  )
+    .bind(workspaceId, segment.id)
+    .all();
+  expect(events.results).toEqual([{ type: "segment_joined" }, { type: "segment_left" }]);
+  await refreshSegmentMemberships(createDatabase(env.DB), workspaceId, segment.id);
+  expect(
+    (
+      await env.DB.prepare("SELECT id FROM contact_events WHERE workspace_id=? AND resource_id=?")
+        .bind(workspaceId, segment.id)
+        .all()
+    ).results,
+  ).toHaveLength(2);
+});
+
 async function replaceDefinition(id: string, kind: "dynamic" | "static"): Promise<void> {
   await env.DB.prepare(
     `UPDATE segments

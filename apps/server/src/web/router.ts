@@ -1,4 +1,4 @@
-import { siteMessageScheduleSchema } from "@openengage/core/web";
+import { emptyLandingPageDocument, siteMessageScheduleSchema } from "@openengage/core/web";
 import { isConstraintError, isUniqueConstraintError } from "@openengage/database/shared";
 import { CustomRedirectRepository, WebRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
@@ -7,6 +7,12 @@ import { authed, requireRole } from "../orpc/base";
 import { availableSlug } from "../workspaces/slug-service";
 import { hasTurnstileConfiguration } from "./config";
 import { isValidDomain, normalizeDomain } from "./domain";
+import { formHandlerProcedures } from "./form-handler-router";
+import { validateLandingReferences, publishLandingPage } from "./landing-design-service";
+import { landingDesignProcedures } from "./landing-router";
+import { sanitizeLandingDocument } from "./landing-safety";
+import { optimizationProcedures } from "./optimization-router";
+import { VisitorIdentityService } from "./visitor-identity-service";
 
 const FORM_SLUG_UNIQUE_COLUMNS = ["forms.workspace_id", "forms.slug"] as const;
 const PAGE_SLUG_UNIQUE_COLUMNS = ["landing_pages.workspace_id", "landing_pages.slug"] as const;
@@ -89,6 +95,20 @@ export const listPagesProcedure = authed.website.listPages.handler(({ context })
 export const createPageProcedure = authed.website.createPage.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    if (!input.content && !input.document) input.document = emptyLandingPageDocument(input.name);
+    if (input.document) {
+      try {
+        input.document = await sanitizeLandingDocument(input.document);
+        await validateLandingReferences(
+          context.database,
+          context.workspace.workspaceId,
+          input.document,
+          context.env,
+        );
+      } catch (error) {
+        throw errors.PAGE_INVALID({ cause: error });
+      }
+    }
     const repository = new WebRepository(context.database, context.workspace);
     let slug =
       input.slug ??
@@ -97,7 +117,23 @@ export const createPageProcedure = authed.website.createPage.handler(
       ));
     for (;;) {
       try {
-        return await repository.createLandingPage({ ...input, slug });
+        const created = await repository.createLandingPage({
+          ...input,
+          slug,
+          ...(input.document ? { status: "draft" as const } : {}),
+        });
+        if (input.document && input.status === "published") {
+          try {
+            await publishLandingPage(context.database, context.workspace.workspaceId, context.env, {
+              id: created.id,
+              versionId: created.versionId,
+              baseVersionId: created.versionId,
+            });
+          } catch (error) {
+            throw errors.PAGE_INVALID({ cause: error });
+          }
+        }
+        return created;
       } catch (error) {
         if (!isUniqueConstraintError(error, PAGE_SLUG_UNIQUE_COLUMNS)) throw error;
         if (input.slug) throw errors.PAGE_SLUG_TAKEN({ cause: error });
@@ -113,6 +149,20 @@ export const updatePageProcedure = authed.website.updatePage.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
+    if (changes.document) {
+      if (!changes.baseVersionId) throw errors.PAGE_CONFLICT();
+      try {
+        changes.document = await sanitizeLandingDocument(changes.document);
+        await validateLandingReferences(
+          context.database,
+          context.workspace.workspaceId,
+          changes.document,
+          context.env,
+        );
+      } catch (error) {
+        throw errors.PAGE_INVALID({ cause: error });
+      }
+    }
     let outcome;
     try {
       outcome = await new WebRepository(context.database, context.workspace).updateLandingPage(
@@ -123,10 +173,12 @@ export const updatePageProcedure = authed.website.updatePage.handler(
       if (isUniqueConstraintError(error, PAGE_SLUG_UNIQUE_COLUMNS)) {
         throw errors.PAGE_SLUG_TAKEN({ cause: error });
       }
+      if (isConstraintError(error)) throw errors.PAGE_CONFLICT({ cause: error });
       throw error;
     }
     if (outcome.kind === "not_found") throw errors.PAGE_NOT_FOUND();
     if (outcome.kind === "archived") throw errors.PAGE_ARCHIVED();
+    if (outcome.kind === "conflict") throw errors.PAGE_CONFLICT();
     return { id: outcome.id, versionId: outcome.versionId };
   },
 );
@@ -254,7 +306,23 @@ export const archiveRedirectProcedure = authed.website.archiveRedirect.handler(
   },
 );
 
+const issueIdentityTokenProcedure = authed.website.issueIdentityToken.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    const token = await new VisitorIdentityService(context.database, context.env).issueAssertion(
+      context.workspace.workspaceId,
+      input.contactId,
+    );
+    if (!token) throw errors.CONTACT_NOT_FOUND();
+    return { token, expiresInSeconds: 600 };
+  },
+);
+
 export const websiteProcedures = {
+  ...formHandlerProcedures,
+  ...optimizationProcedures,
+  ...landingDesignProcedures,
+  issueIdentityToken: issueIdentityTokenProcedure,
   listForms: listFormsProcedure,
   createForm: createFormProcedure,
   updateForm: updateFormProcedure,

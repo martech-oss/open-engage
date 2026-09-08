@@ -31,6 +31,7 @@ import { getFormString } from "@/lib/form-data";
 import { formatMoney, formatPercent } from "@/lib/format";
 
 import { reportExport } from "./report-export";
+import { ReportFilterFields } from "./report-filter-fields";
 import {
   AutomationsReportView,
   CampaignsReportView,
@@ -38,6 +39,7 @@ import {
   EmailsReportView,
   SiteReportView,
 } from "./report-views";
+import { LifecycleReportView } from "./report-views/lifecycle-report-view";
 import { AttentionItem, ProgressRow } from "./report-widgets";
 
 const reportNavigation: Array<{
@@ -50,6 +52,7 @@ const reportNavigation: Array<{
   { view: "automations", label: "オートメーション", icon: GitBranch },
   { view: "emails", label: "メール", icon: Mail },
   { view: "site", label: "サイト", icon: Globe2 },
+  { view: "lifecycle", label: "営業進捗", icon: BriefcaseBusiness },
   { view: "campaigns", label: "キャンペーン", icon: Megaphone },
 ];
 
@@ -95,6 +98,9 @@ export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
       ) : null}
       {data.view === "emails" && data.emails ? <EmailsReportView report={data.emails} /> : null}
       {data.view === "site" && data.site ? <SiteReportView report={data.site} /> : null}
+      {data.view === "lifecycle" && data.lifecycle ? (
+        <LifecycleReportView report={data.lifecycle} />
+      ) : null}
       {data.view === "campaigns" && data.campaigns ? (
         <CampaignsReportView report={data.campaigns} />
       ) : null}
@@ -114,6 +120,21 @@ function ReportControls({ search }: { search: ReportSearch }): ReactNode {
         ...search,
         from: getFormString(form, "from"),
         to: getFormString(form, "to"),
+        ...(search.view === "campaigns"
+          ? {
+              currency: getFormString(form, "currency").toUpperCase(),
+              attributionModel:
+                getFormString(form, "attributionModel") === "first_touch"
+                  ? ("first_touch" as const)
+                  : ("last_touch" as const),
+            }
+          : {}),
+        ...(search.view === "lifecycle"
+          ? {
+              projectId: getFormString(form, "projectId"),
+              ownerUserId: getFormString(form, "ownerUserId"),
+            }
+          : {}),
       },
     });
   }
@@ -142,7 +163,7 @@ function ReportControls({ search }: { search: ReportSearch }): ReactNode {
             </Button>
           ))}
         </nav>
-        <form onSubmit={applyRange} key={`${search.from}-${search.to}`}>
+        <form onSubmit={applyRange} key={`${search.view}-${search.from}-${search.to}`}>
           <FieldGroup className="flex-row flex-wrap items-end gap-3 border-t pt-4">
             <FieldGroup className="min-w-44">
               <FormInput
@@ -156,7 +177,8 @@ function ReportControls({ search }: { search: ReportSearch }): ReactNode {
             <FieldGroup className="min-w-44">
               <FormInput label="終了日" name="to" type="date" defaultValue={search.to} required />
             </FieldGroup>
-            <Button type="submit">期間を適用</Button>
+            <ReportFilterFields search={search} />
+            <Button type="submit">条件を適用</Button>
             <span className="pb-1 text-xs text-muted-foreground">
               最大366日・終了日を含む期間で集計
             </span>

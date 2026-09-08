@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  foreignKey,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 import { organization, user } from "../auth/schema";
 import { companies, contacts } from "../contacts/schema";
@@ -105,6 +113,8 @@ export const deals = sqliteTable(
       table.status,
       table.expectedCloseDate,
     ),
+    uniqueIndex("deals_workspace_id_unique").on(table.workspaceId, table.id),
+    uniqueIndex("deals_workspace_contact_unique").on(table.workspaceId, table.id, table.contactId),
     check("deals_value_check", sql`${table.value} >= 0`),
     check("deals_status_check", sql`${table.status} IN ('open', 'won', 'lost')`),
     check("deals_currency_check", sql`length(${table.currency}) = 3`),
@@ -118,9 +128,8 @@ export const dealTasks = sqliteTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    dealId: text("deal_id")
-      .notNull()
-      .references(() => deals.id, { onDelete: "cascade" }),
+    dealId: text("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+    contactId: text("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
     type: text().default("task").notNull(),
     title: text().notNull(),
     notes: text().default("").notNull(),
@@ -149,7 +158,30 @@ export const dealTasks = sqliteTable(
       table.status,
       table.completedAt,
     ),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
+      name: "deal_tasks_workspace_contact_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.dealId],
+      foreignColumns: [deals.workspaceId, deals.id],
+      name: "deal_tasks_workspace_deal_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.workspaceId, table.dealId, table.contactId],
+      foreignColumns: [deals.workspaceId, deals.id, deals.contactId],
+      name: "deal_tasks_matching_contact_fk",
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+    check(
+      "deal_tasks_link_check",
+      sql`${table.dealId} IS NOT NULL OR ${table.contactId} IS NOT NULL`,
+    ),
     check("deal_tasks_type_check", sql`${table.type} IN ('task', 'call', 'email', 'meeting')`),
     check("deal_tasks_status_check", sql`${table.status} IN ('open', 'completed')`),
   ],
 );
+
+export * from "./sales-schema";

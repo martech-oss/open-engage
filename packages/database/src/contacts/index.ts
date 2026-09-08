@@ -11,3 +11,8 @@ export * from "./resource-repository";
 export * from "./resource-query-repository";
 export * from "./segment-membership-repository";
 export * from "./tag-membership-repository";
+
+export * from "./visitor-repository";
+export * from "./visitor-schema";
+export * from "./lifecycle-repository";
+export * from "./lifecycle-schema";

@@ -51,6 +51,71 @@ const relationOperators = [
 ] as const satisfies readonly SegmentOperator[];
 
 export const segmentFieldDefinitions = [
+  {
+    field: "category_score",
+    valueType: "number",
+    operators: comparableOperators,
+    keyRequirement: "required",
+  },
+  { field: "owner_user_id", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  { field: "lifecycle_stage", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  { field: "company_name", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  {
+    field: "company_custom_field",
+    valueType: "custom",
+    operators: segmentOperatorValues,
+    keyRequirement: "required",
+  },
+  { field: "deal_status", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  {
+    field: "deal_stage_id",
+    valueType: "text",
+    operators: ["eq", "neq", "in", "exists", "not_exists"],
+    keyRequirement: "none",
+  },
+  {
+    field: "deal_owner_user_id",
+    valueType: "text",
+    operators: textOperators,
+    keyRequirement: "none",
+  },
+  {
+    field: "deal_value",
+    valueType: "number",
+    operators: comparableOperators,
+    keyRequirement: "none",
+  },
+  { field: "event_type", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  {
+    field: "event_resource_type",
+    valueType: "text",
+    operators: textOperators,
+    keyRequirement: "none",
+  },
+  {
+    field: "event_resource_id",
+    valueType: "text",
+    operators: textOperators,
+    keyRequirement: "none",
+  },
+  {
+    field: "event_occurred_at",
+    valueType: "date",
+    operators: comparableOperators,
+    keyRequirement: "none",
+  },
+  {
+    field: "event_age_minutes",
+    valueType: "number",
+    operators: comparableOperators,
+    keyRequirement: "none",
+  },
+  {
+    field: "event_property",
+    valueType: "custom",
+    operators: segmentOperatorValues,
+    keyRequirement: "required",
+  },
   { field: "email", valueType: "text", operators: textOperators, keyRequirement: "none" },
   { field: "first_name", valueType: "text", operators: textOperators, keyRequirement: "none" },
   { field: "last_name", valueType: "text", operators: textOperators, keyRequirement: "none" },

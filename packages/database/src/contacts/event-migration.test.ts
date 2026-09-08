@@ -25,6 +25,16 @@ const migrationFiles = [
   "0010_giant_bishop.sql",
   "0011_condemned_rocket_raccoon.sql",
   "0012_keen_boom_boom.sql",
+  "0013_omniscient_jasper_sitwell.sql",
+  "0014_deep_logan.sql",
+  "0015_quarantine_legacy_automation_actions.sql",
+  "0016_lonely_maggott.sql",
+  "0017_visitor_identity_sales.sql",
+  "0018_contact_lifecycle.sql",
+  "0019_task_reference_integrity.sql",
+  "0020_form_retry_proof.sql",
+  "0021_landing_costs.sql",
+  "0022_landing_optimization.sql",
 ] as const;
 
 describe("contact projection migration 0012", () => {

@@ -32,7 +32,15 @@ export function createDefaultSegmentCondition(
 ): SegmentCondition {
   const options = segmentOptionsForField(field, catalog);
   const keyOptions =
-    field === "event" ? catalog.events : field === "custom_field" ? catalog.customFields : [];
+    field === "event"
+      ? catalog.events
+      : field === "custom_field"
+        ? catalog.customFields
+        : field === "category_score"
+          ? (catalog.categories ?? [])
+          : field === "company_custom_field"
+            ? (catalog.companyCustomFields ?? [])
+            : [];
   const keyOption = keyOptions[0];
   const operator = normalizeSegmentOperator(field, field === "event" ? "exists" : "eq");
   const rawValue = defaultRawValueForField(field, catalog, options, keyOption, defaults);
@@ -135,6 +143,12 @@ export function segmentOptionsForField(
   catalog: SegmentGenerationCatalog,
 ): SegmentResourceOption[] {
   switch (field) {
+    case "status":
+      return ["active", "anonymous"].map((value) => ({ id: value, name: value, value }));
+    case "stage":
+      return catalog.stages.map((value) => ({ id: value, name: value, value }));
+    case "deal_stage_id":
+      return catalog.dealStages ?? [];
     case "tag":
       return catalog.tags;
     case "segment":

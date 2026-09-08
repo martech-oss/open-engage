@@ -10,3 +10,4 @@ export * from "./project-resource-link-types";
 export * from "./project-resource-query-repository";
 export * from "./project-resource-resolvers";
 export * from "./repository";
+export * from "./cost-repository";

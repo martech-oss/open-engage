@@ -142,13 +142,21 @@ describe("public form atomic idempotency", () => {
     });
     expect(await first.json()).toEqual({ data: { accepted: true, message: "Accepted" } });
 
+    const identicalReplay = await publicCall(form.path, {
+      email: "duplicate@example.com",
+      firstName: "Original",
+      idempotencyKey,
+    });
+    expect(identicalReplay.status).toBe(202);
+    expect(await identicalReplay.json()).toEqual({ data: { accepted: true, duplicate: true } });
+
     const duplicate = await publicCall(form.path, {
       email: "duplicate@example.com",
       firstName: "Mutated",
       idempotencyKey,
     });
-    expect(duplicate.status).toBe(202);
-    expect(await duplicate.json()).toEqual({ data: { accepted: true, duplicate: true } });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
 
     const contact = await env.DB.prepare(
       "SELECT first_name AS firstName FROM contacts WHERE email = ?",

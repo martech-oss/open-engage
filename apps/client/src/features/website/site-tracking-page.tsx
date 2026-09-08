@@ -138,8 +138,9 @@ export function SiteTrackingPage(): ReactNode {
             <AlertTitle>訪問者の同意が必須です</AlertTitle>
             <AlertDescription>
               サンプルコードの consent: true
-              は、Cookieバナー等で同意を得た後にだけ設定してください。 既知の連絡先は
-              openengage.identify(email) で識別でき、サイトメッセージの対象になります。
+              は、Cookieバナー等で同意を得た後にだけ設定してください。
+              フォーム送信後は再訪時も識別されます。外部アプリからの識別には、管理APIで発行したトークンを
+              openengage.identify(token) に渡します。
             </AlertDescription>
           </Alert>
         </TabsContent>

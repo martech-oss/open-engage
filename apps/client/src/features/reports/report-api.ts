@@ -5,6 +5,7 @@ import { orpcQuery } from "@/lib/orpc";
 import type {
   AutomationsReport,
   CampaignsReport,
+  LifecycleReport,
   ContactsReport,
   DealsReport,
   EmailsReport,
@@ -16,6 +17,7 @@ import type {
 export type {
   AutomationsReport,
   CampaignsReport,
+  LifecycleReport,
   ContactsReport,
   DealsReport,
   EmailsReport,
@@ -29,6 +31,9 @@ export interface ReportSearch {
   from: string;
   to: string;
   currency: string;
+  attributionModel?: "first_touch" | "last_touch";
+  projectId?: string;
+  ownerUserId?: string;
 }
 
 export interface ReportWorkspace {
@@ -39,6 +44,7 @@ export interface ReportWorkspace {
   deals?: DealsReport;
   site?: SiteReport;
   campaigns?: CampaignsReport;
+  lifecycle?: LifecycleReport;
 }
 
 export interface ReportClock {
@@ -53,7 +59,8 @@ type ReportQueryOutput =
   | EmailsReport
   | DealsReport
   | SiteReport
-  | CampaignsReport;
+  | CampaignsReport
+  | LifecycleReport;
 
 interface ReportQueryOptions {
   queryKey: QueryKey;
@@ -81,6 +88,7 @@ function isReportView(value: unknown): value is ReportView {
     value === "emails" ||
     value === "deals" ||
     value === "site" ||
+    value === "lifecycle" ||
     value === "campaigns"
   );
 }
@@ -98,6 +106,15 @@ export function parseReportSearch(
     from: isIsoDate(search.from) ? search.from : defaults.from,
     to: isIsoDate(search.to) ? search.to : defaults.to,
     currency: typeof search.currency === "string" ? search.currency : "",
+    ...(search.attributionModel === "first_touch" || search.attributionModel === "last_touch"
+      ? { attributionModel: search.attributionModel }
+      : {}),
+    ...(typeof search.projectId === "string" && search.projectId
+      ? { projectId: search.projectId }
+      : {}),
+    ...(typeof search.ownerUserId === "string" && search.ownerUserId
+      ? { ownerUserId: search.ownerUserId }
+      : {}),
   };
 }
 
@@ -118,9 +135,21 @@ export function reportWorkspaceQueryOptions(search: ReportSearch): ReportQueryOp
       return withWorkspaceSelection(orpcQuery.reports.deals.queryOptions({ input: dealsInput }));
     case "site":
       return withWorkspaceSelection(orpcQuery.reports.site.queryOptions({ input: range }));
+    case "lifecycle":
+      return withWorkspaceSelection(
+        orpcQuery.reports.lifecycle.queryOptions({
+          input: {
+            ...range,
+            ...(search.projectId ? { projectId: search.projectId } : {}),
+            ...(search.ownerUserId ? { ownerUserId: search.ownerUserId } : {}),
+          },
+        }),
+      );
     case "campaigns":
       return withWorkspaceSelection(
-        orpcQuery.reports.campaigns.queryOptions({ input: dealsInput }),
+        orpcQuery.reports.campaigns.queryOptions({
+          input: { ...dealsInput, attributionModel: search.attributionModel ?? "last_touch" },
+        }),
       );
   }
 }
@@ -149,6 +178,8 @@ function toReportWorkspace(output: ReportQueryOutput): ReportWorkspace {
       return { view: output.category, deals: output };
     case "site":
       return { view: output.category, site: output };
+    case "lifecycle":
+      return { view: output.category, lifecycle: output };
     case "campaigns":
       return { view: output.category, campaigns: output };
   }
@@ -167,3 +198,6 @@ export function parseDealReportSearch(
 export function dealReportQueryOptions(search: DealReportSearch) {
   return reportWorkspaceQueryOptions({ view: "deals", ...search });
 }
+
+export const reportProjectOptions = () => orpcQuery.projects.list.queryOptions();
+export const reportOwnerOptions = () => orpcQuery.projects.briefOptions.queryOptions();

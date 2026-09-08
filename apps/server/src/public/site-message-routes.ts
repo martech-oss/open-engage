@@ -6,6 +6,7 @@ import { WebRepository } from "@openengage/database/web";
 import type { AppEnvironment } from "../env";
 import { processPendingPublicFormEvent } from "../runtime/contact-event-service";
 import { originAllowed, pagePatternMatches } from "../web/domain";
+import { VisitorIdentityService } from "../web/visitor-identity-service";
 import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";
 
@@ -16,9 +17,10 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
       database,
       context.req.param("workspaceSlug"),
     );
-    const visitorId = context.req.query("visitorId");
+    const visitorToken = context.req.query("visitorToken");
+    context.header("Cache-Control", "private, no-store");
     const pageUrl = context.req.query("url") ?? "";
-    if (!workspace || !visitorId || !z.string().uuid().safeParse(visitorId).success) {
+    if (!workspace || !visitorToken || context.req.query("consent") !== "true") {
       return context.json({ data: [] });
     }
     const origin = context.req.header("origin");
@@ -26,7 +28,11 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
       return context.json({ data: [] });
     }
     const repository = new WebRepository(database, { workspaceId: workspace.id });
-    const contactId = await repository.findVisitorContactId(visitorId);
+    const visitor = await new VisitorIdentityService(database, context.env).resolve(
+      workspace.id,
+      visitorToken,
+    );
+    const contactId = visitor?.contactId;
     if (!contactId) return context.json({ data: [] });
     const messages = await repository.listActiveSiteMessagesForVisitor(new Date().toISOString());
     return context.json({
@@ -59,13 +65,18 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     }
     const parsed = z
       .object({
-        visitorId: z.string().uuid(),
+        visitorToken: z.string().max(2000),
+        consent: z.literal(true),
         type: z.enum(["impression", "click"]),
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return context.json({ data: { accepted: false } }, 202);
     const repository = new WebRepository(database, { workspaceId: workspace.id });
-    const contactId = await repository.findVisitorContactId(parsed.data.visitorId);
+    const visitor = await new VisitorIdentityService(database, context.env).resolve(
+      workspace.id,
+      parsed.data.visitorToken,
+    );
+    const contactId = visitor?.contactId;
     if (!contactId) return context.json({ data: { accepted: false } }, 202);
     const messageId = context.req.param("messageId");
     const updated = await repository.incrementSiteMessageCounter(messageId, parsed.data.type);
@@ -74,7 +85,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     }
     const eventId = await repository.recordSiteMessageEvent({
       contactId,
-      visitorId: parsed.data.visitorId,
+      visitorId: visitor!.id,
       messageId,
       type: parsed.data.type,
     });

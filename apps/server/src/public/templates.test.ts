@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderPublicForm } from "./templates";
+import { renderPublicForm, selectPublicFormFields } from "./templates";
 
 const ACTION = "https://app.example.com/f/acme/contact";
 
@@ -54,11 +54,11 @@ describe("renderPublicForm", () => {
       { key: "job_title", kind: "custom", label: "役職", type: "text", progressive: true },
       { key: "industry", kind: "custom", label: "業種", type: "text", progressive: true },
     ];
-    const html = renderPublicForm("問い合わせ", definition(fields), ACTION, {
-      answered: new Set(["job_title"]),
-    });
-    expect(html).not.toContain('name="custom:job_title"');
-    expect(html).toContain('name="custom:industry"');
+    const visible = selectPublicFormFields(definition(fields), new Set(["job_title"]));
+    expect(visible.map((field) => field.key)).toEqual(["email", "industry"]);
+    // Controls stay available to the runtime so a different email restores unanswered fields.
+    const html = renderPublicForm("問い合わせ", definition(fields), ACTION);
+    expect(html).toContain('name="custom:job_title"');
   });
 
   it("caps how many progressive fields one visit asks for", () => {
@@ -72,9 +72,10 @@ describe("renderPublicForm", () => {
         progressive: true,
       })),
     ];
-    const html = renderPublicForm("問い合わせ", definition(fields, 2), ACTION);
-    const shown = ["a", "b", "c", "d"].filter((key) => html.includes(`name="custom:${key}"`));
-    expect(shown).toHaveLength(2);
+    const shown = selectPublicFormFields(definition(fields, 2), new Set()).filter(
+      (field) => field.kind === "custom",
+    );
+    expect(shown.map((field) => field.key)).toEqual(["a", "b"]);
   });
 
   it("keeps non-progressive fields regardless of what is already known", () => {
@@ -91,11 +92,12 @@ describe("renderPublicForm", () => {
   });
 
   it("ignores a field key that could break out of the attribute", () => {
-    const html = renderPublicForm(
-      "問い合わせ",
-      definition([{ key: 'x" onfocus="alert(1)', kind: "custom", type: "text" }]),
-      ACTION,
-    );
-    expect(html).not.toContain("onfocus");
+    expect(() =>
+      renderPublicForm(
+        "問い合わせ",
+        definition([{ key: 'x" onfocus="alert(1)', kind: "custom", type: "text" }]),
+        ACTION,
+      ),
+    ).toThrow();
   });
 });

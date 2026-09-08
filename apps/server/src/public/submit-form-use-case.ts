@@ -1,13 +1,17 @@
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import { uuidv7 } from "@openengage/database/shared";
-import { PublicFormRepository } from "@openengage/database/web";
+import { PublicFormRepository, type PublicFormRecord } from "@openengage/database/web";
 
 import type { RuntimeEnv } from "../env";
+import { sha256Hex } from "../platform/crypto";
 import { isRecord, primitiveString, stringOrNull } from "../platform/values";
 import { hasTurnstileConfiguration } from "../web/config";
 import { originAllowed, redactFormPayload } from "../web/domain";
+import { verifyMeasurementContext } from "../web/measurement-service";
+import { VisitorIdentityService } from "../web/visitor-identity-service";
 import { validatePublicFormBody } from "./form-validation";
 import { hashIp, verifyTurnstile } from "./shared";
+import { selectPublicFormFields } from "./templates";
 
 export interface SubmitPublicFormCommand {
   workspaceSlug: string;
@@ -17,6 +21,7 @@ export interface SubmitPublicFormCommand {
   requestHostname: string;
   connectingIp: string | undefined;
   idempotencyKeyHeader: string | undefined;
+  resolvedForm?: PublicFormRecord;
 }
 
 export type SubmitPublicFormResult =
@@ -26,7 +31,8 @@ export type SubmitPublicFormResult =
   | { kind: "invalid_payload" }
   | { kind: "honeypot" }
   | { kind: "idempotency_key_required" }
-  | { kind: "duplicate" }
+  | { kind: "duplicate"; visitorToken?: string }
+  | { kind: "idempotency_conflict" }
   | { kind: "invalid_form_fields"; fields: Array<{ field: string; reason: string }> }
   | { kind: "turnstile_failed" }
   | {
@@ -35,6 +41,9 @@ export type SubmitPublicFormResult =
       formId: string;
       successMessage: string;
       eventIds: [string, string];
+      visitorToken?: string;
+      visitorId?: string;
+      contactId: string;
     };
 
 export class SubmitPublicFormUseCase {
@@ -45,8 +54,19 @@ export class SubmitPublicFormUseCase {
 
   public async execute(command: SubmitPublicFormCommand): Promise<SubmitPublicFormResult> {
     const repository = new PublicFormRepository(this.database);
-    const form = await repository.findPublishedForm(command.workspaceSlug, command.formSlug);
+    let form =
+      command.resolvedForm ??
+      (await repository.findPublishedForm(command.workspaceSlug, command.formSlug));
     if (!form) return { kind: "form_not_found" };
+    const submittedContext = isRecord(command.body) ? command.body["measurementToken"] : undefined;
+    const measurement = submittedContext
+      ? await verifyMeasurementContext(this.database, this.environment, submittedContext, {
+          workspaceId: form.workspaceId,
+          formId: form.id,
+        })
+      : null;
+    if (submittedContext && !measurement) return { kind: "invalid_payload" };
+    if (measurement?.form) form = measurement.form;
     if (form.turnstileEnabled && !hasTurnstileConfiguration(this.environment)) {
       return { kind: "turnstile_not_configured" };
     }
@@ -59,30 +79,76 @@ export class SubmitPublicFormUseCase {
       return { kind: "origin_denied" };
     }
     if (!isRecord(command.body)) return { kind: "invalid_payload" };
-    const body = command.body;
+    const body = { ...command.body };
     if (body["_website"]) return { kind: "honeypot" };
 
     const idempotencyKey = command.idempotencyKeyHeader ?? primitiveString(body["idempotencyKey"]);
     if (idempotencyKey.length < 8 || idempotencyKey.length > 191) {
       return { kind: "idempotency_key_required" };
     }
-    if (
-      await repository.submissionExists({
+    const identity = new VisitorIdentityService(this.database, this.environment);
+    const payloadForFingerprint = redactFormPayload(body);
+    delete payloadForFingerprint["consent"];
+    const requestFingerprint = await sha256Hex(
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(payloadForFingerprint).sort(([a], [b]) => a.localeCompare(b)),
+        ),
+      ),
+    );
+    const originalVisitor =
+      body["consent"] === true ? await identity.resolve(form.workspaceId, body["oe_v"]) : null;
+    if (originalVisitor && measurement?.visitorId && originalVisitor.id !== measurement.visitorId)
+      return { kind: "invalid_payload" };
+    const identityProofHash = originalVisitor
+      ? await sha256Hex(primitiveString(body["oe_v"]))
+      : null;
+    const acknowledgeDuplicate = async (): Promise<SubmitPublicFormResult> => {
+      const prior = await repository.findSubmission({
         workspaceId: form.workspaceId,
         formId: form.id,
         idempotencyKey,
-      })
-    ) {
-      return { kind: "duplicate" };
-    }
-
-    const visitorId = primitiveString(body["oe_v"]);
-    const answered = visitorId
-      ? await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitorId)
-      : new Set<string>();
+      });
+      if (!prior || prior.requestFingerprint !== requestFingerprint)
+        return { kind: "idempotency_conflict" };
+      const proven =
+        originalVisitor &&
+        (prior.visitorId === originalVisitor.id ||
+          (identityProofHash && prior.identityProofHash === identityProofHash));
+      return {
+        kind: "duplicate",
+        ...(body["consent"] === true && proven && prior.visitorId
+          ? { visitorToken: await identity.token(form.workspaceId, prior.visitorId) }
+          : {}),
+      };
+    };
+    const duplicate = await repository.findSubmission({
+      workspaceId: form.workspaceId,
+      formId: form.id,
+      idempotencyKey,
+    });
+    if (duplicate) return await acknowledgeDuplicate();
+    const visitor =
+      body["consent"] === true ? await identity.ensure(form.workspaceId, body["oe_v"]) : null;
+    // A newly supplied email never borrows another person's progressive answers.
+    const sameEmail =
+      visitor?.email?.toLowerCase() === primitiveString(body["email"]).trim().toLowerCase();
+    const answered =
+      visitor && sameEmail
+        ? await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitor.id)
+        : new Set<string>();
     const validationIssues = validatePublicFormBody(form.definition, answered, body);
     if (validationIssues.length > 0) {
       return { kind: "invalid_form_fields", fields: validationIssues };
+    }
+    const visibleFields = new Set(
+      selectPublicFormFields(form.definition, answered, body).map((field) =>
+        field.kind === "custom" ? `custom:${field.key}` : field.key,
+      ),
+    );
+    for (const field of form.definition.fields ?? []) {
+      const key = field.kind === "custom" ? `custom:${field.key}` : field.key;
+      if (!visibleFields.has(key)) delete body[key];
     }
     if (
       form.turnstileEnabled &&
@@ -109,8 +175,11 @@ export class SubmitPublicFormUseCase {
     const outcome = await repository.persistSubmission({
       workspaceId: form.workspaceId,
       formId: form.id,
+      visitorId: visitor?.id ?? null,
       email: submittedEmail.trim().toLowerCase(),
       idempotencyKey,
+      requestFingerprint,
+      identityProofHash,
       contactFields: {
         firstName: stringOrNull(body["firstName"]),
         lastName: stringOrNull(body["lastName"]),
@@ -123,10 +192,17 @@ export class SubmitPublicFormUseCase {
       submissionId: uuidv7(),
       contactCreatedEventId,
       formSubmittedEventId,
+      ...(measurement ? { context: measurement.properties } : {}),
     });
-    if (outcome === "duplicate") return { kind: "duplicate" };
+    if (outcome.kind === "duplicate") return await acknowledgeDuplicate();
+    const visitorToken =
+      body["consent"] === true && outcome.visitorId
+        ? await identity.token(form.workspaceId, outcome.visitorId)
+        : undefined;
     return {
       kind: "accepted",
+      contactId: outcome.contactId,
+      ...(visitorToken ? { visitorToken, visitorId: outcome.visitorId! } : {}),
       workspaceId: form.workspaceId,
       formId: form.id,
       successMessage: form.successMessage,

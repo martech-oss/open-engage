@@ -2,6 +2,11 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import {
+  landingGenerationJobSchema,
+  landingGenerationRequestSchema,
+  landingPageVersionSchema,
+  formHandlerSchema,
+  formHandlerWriteSchema,
   customRedirectSchema,
   customRedirectWriteSchema,
   landingPageCreateSchema,
@@ -18,6 +23,7 @@ import {
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput, notFoundError } from "../shared/schemas";
+import { optimizationContract } from "./optimization-contract";
 
 const created = z.object({ id: z.string() });
 
@@ -42,7 +48,69 @@ const invalidSiteMessageSchedule = {
   },
 } as const;
 
+const pageDesignErrors = {
+  ...notFound("PAGE_NOT_FOUND", "ページが見つかりません"),
+  PAGE_CONFLICT: { status: 409, message: "下書きが更新されています。最新の版を読み込んでください" },
+  PAGE_INVALID: { status: 422, message: "ページの参照または設定を確認してください" },
+} as const;
+
+const handlerErrors = {
+  ...notFound("HANDLER_NOT_FOUND", "Form Handlerが見つかりません"),
+  HANDLER_INVALID: { status: 422, message: "マッピング、ドメイン、遷移先を確認してください" },
+  HANDLER_SLUG_TAKEN: { status: 409, message: "スラッグが使用されています" },
+} as const;
+
 export const websiteContract = {
+  listFormHandlers: oc
+    .route({ method: "GET", path: "/website/form-handlers" })
+    .errors(workspaceErrors)
+    .output(z.array(formHandlerSchema)),
+  createFormHandler: oc
+    .route({ method: "POST", path: "/website/form-handlers", successStatus: 201 })
+    .errors(handlerErrors)
+    .input(formHandlerWriteSchema)
+    .output(created),
+  updateFormHandler: oc
+    .route({ method: "PATCH", path: "/website/form-handlers/{id}" })
+    .errors(handlerErrors)
+    .input(formHandlerWriteSchema.extend({ id: z.string() }))
+    .output(ackSchema),
+  deleteFormHandler: oc
+    .route({ method: "DELETE", path: "/website/form-handlers/{id}" })
+    .errors(handlerErrors)
+    .input(idInput)
+    .output(ackSchema),
+  ...optimizationContract,
+  getPageDesign: oc
+    .route({ method: "GET", path: "/website/pages/{id}/design" })
+    .errors(pageDesignErrors)
+    .input(idInput)
+    .output(
+      z.object({
+        name: z.string(),
+        slug: z.string(),
+        versions: z.array(landingPageVersionSchema),
+        jobs: z.array(landingGenerationJobSchema),
+        previewHtml: z.string(),
+        currentVersionId: z.string().nullable(),
+        publishedVersionId: z.string().nullable(),
+      }),
+    ),
+  generatePage: oc
+    .route({ method: "POST", path: "/website/pages/{pageId}/generate", successStatus: 202 })
+    .errors(pageDesignErrors)
+    .input(landingGenerationRequestSchema)
+    .output(landingGenerationJobSchema),
+  publishPage: oc
+    .route({ method: "POST", path: "/website/pages/{id}/publish" })
+    .errors(pageDesignErrors)
+    .input(z.object({ id: z.string(), versionId: z.string(), baseVersionId: z.string() }))
+    .output(ackSchema),
+  issueIdentityToken: oc
+    .route({ method: "POST", path: "/website/identity-tokens" })
+    .errors({ ...authedErrors, ...notFoundError("CONTACT_NOT_FOUND", "連絡先が見つかりません") })
+    .input(z.object({ contactId: z.string().min(1) }))
+    .output(z.object({ token: z.string(), expiresInSeconds: z.number() })),
   listForms: oc
     .route({ method: "GET", path: "/website/forms" })
     .errors(workspaceErrors)
@@ -80,6 +148,7 @@ export const websiteContract = {
     .errors({
       ...authedErrors,
       PAGE_SLUG_TAKEN: { status: 409, message: "同じスラッグのページが既に存在します" },
+      PAGE_INVALID: { status: 422, message: "ページの参照または設定を確認してください" },
     })
     .input(landingPageCreateSchema)
     .output(z.object({ id: z.string(), versionId: z.string() })),
@@ -87,6 +156,8 @@ export const websiteContract = {
     .route({ method: "PATCH", path: "/website/pages/{id}" })
     .errors({
       ...notFound("PAGE_NOT_FOUND", "ページが見つかりません"),
+      PAGE_CONFLICT: { status: 409, message: "下書きが更新されています" },
+      PAGE_INVALID: { status: 422, message: "ページの参照または設定を確認してください" },
       PAGE_ARCHIVED: { status: 409, message: "アーカイブ済みページは編集できません" },
       PAGE_SLUG_TAKEN: { status: 409, message: "同じスラッグのページが既に存在します" },
     })

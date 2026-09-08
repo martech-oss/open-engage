@@ -8,6 +8,8 @@ import {
   contactEvents,
   contacts,
 } from "../contacts/schema";
+import { VisitorRepository } from "../contacts/visitor-repository";
+import { siteVisitors } from "../contacts/visitor-schema";
 import { uuidv7 } from "../shared/uuid";
 import { formSubmissions } from "./schema";
 
@@ -16,6 +18,10 @@ export interface PersistPublicFormSubmissionInput {
   formId: string;
   email: string;
   idempotencyKey: string;
+  visitorId?: string | null;
+  requestFingerprint?: string;
+  identityProofHash?: string | null;
+  context?: Record<string, unknown>;
   contactFields: {
     firstName: string | null;
     lastName: string | null;
@@ -35,7 +41,7 @@ export async function persistPublicFormSubmissionBatch(
   database: OpenEngageDatabase,
   input: PersistPublicFormSubmissionInput,
   existingContactId: string | null,
-): Promise<void> {
+): Promise<{ contactId: string; visitorId: string | null }> {
   const orm = database.orm;
   const contactId = existingContactId ?? uuidv7();
   const contactMutation = existingContactId
@@ -67,12 +73,33 @@ export async function persistPublicFormSubmissionBatch(
         createdAt: input.occurredAt,
         updatedAt: input.occurredAt,
       });
+  const identityStatements = input.visitorId
+    ? [
+        orm
+          .insert(siteVisitors)
+          .values({
+            id: input.visitorId,
+            workspaceId: input.workspaceId,
+            createdAt: input.occurredAt,
+          })
+          .onConflictDoNothing(),
+        new VisitorRepository(database).bindingStatement(
+          input.workspaceId,
+          input.visitorId,
+          contactId,
+          input.occurredAt,
+        ),
+      ]
+    : [];
   const submission = orm.insert(formSubmissions).values({
     id: input.submissionId,
     workspaceId: input.workspaceId,
     formId: input.formId,
     contactId,
     idempotencyKey: input.idempotencyKey,
+    requestFingerprint: input.requestFingerprint ?? "",
+    identityProofHash: input.identityProofHash ?? null,
+    visitorId: input.visitorId ?? null,
     payload: JSON.stringify(input.payload),
     ipHash: input.ipHash,
     createdAt: input.occurredAt,
@@ -81,10 +108,11 @@ export async function persistPublicFormSubmissionBatch(
     id: input.formSubmittedEventId,
     workspaceId: input.workspaceId,
     contactId,
+    visitorId: input.visitorId ?? null,
     type: "form_submitted",
     resourceType: "form",
     resourceId: input.formId,
-    properties: JSON.stringify({ formId: input.formId }),
+    properties: JSON.stringify({ ...input.context, formId: input.formId }),
     occurredAt: input.occurredAt,
     createdAt: input.occurredAt,
   });
@@ -105,15 +133,17 @@ export async function persistPublicFormSubmissionBatch(
   if (existingContactId) {
     await orm.batch([
       contactMutation,
+      ...identityStatements,
       submission,
       formSubmittedEvent,
       formSubmittedWork,
       formSubmittedProjections,
     ]);
-    return;
+    return { contactId, visitorId: input.visitorId ?? null };
   }
   await orm.batch([
     contactMutation,
+    ...identityStatements,
     submission,
     orm.insert(contactEvents).values({
       id: input.contactCreatedEventId,
@@ -143,4 +173,5 @@ export async function persistPublicFormSubmissionBatch(
     formSubmittedWork,
     formSubmittedProjections,
   ]);
+  return { contactId, visitorId: input.visitorId ?? null };
 }

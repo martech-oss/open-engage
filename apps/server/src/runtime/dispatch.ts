@@ -29,6 +29,7 @@ import {
   reconcileContactSegmentMemberships,
   refreshSegmentMemberships,
 } from "../segments/membership-service";
+import { processLandingGeneration, recoverLandingGenerations } from "../web/landing-design-service";
 import {
   processPendingPublicFormEvent,
   retryPendingPublicFormEvents,
@@ -39,6 +40,7 @@ import {
   type JobsQueueMessage,
   type QueueMessage as OpenEngageQueueMessage,
 } from "./queues";
+import { processVisitorHistory, recoverVisitorHistories } from "./visitor-history-worker";
 
 type JobsQueueHandlerMap = {
   [Kind in JobsQueueMessage["kind"]]: (
@@ -48,6 +50,12 @@ type JobsQueueHandlerMap = {
 };
 
 export const jobsQueueHandlers = {
+  landing_generation: async (message, env) => {
+    await processLandingGeneration(message.jobId, env);
+  },
+  visitor_history: async (message, env) => {
+    await processVisitorHistory(env, message.workspaceId, message.visitorId);
+  },
   automation_job: async (message, env) => {
     await processAutomationJob(message.jobId, message.leaseId, env);
   },
@@ -91,6 +99,9 @@ export async function scheduled(
   for (const failure of publicFormEventFailures) {
     logError("public_form.event_retry_failed", failure.error, { eventId: failure.eventId });
   }
+  await recoverVisitorHistories(env);
+  await recoverLandingGenerations(env);
+  await enqueueSegmentCorrections(env);
   await enrollInactiveContacts(database);
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();

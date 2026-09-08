@@ -5,6 +5,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -254,5 +255,34 @@ export const campaignTouches = sqliteTable(
       table.sourceEventId,
       table.projectId,
     ),
+  ],
+);
+
+export const campaignCosts = sqliteTable(
+  "campaign_costs",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull(),
+    bookedOn: text("booked_on").notNull(),
+    category: text().notNull(),
+    amount: real().notNull(),
+    currency: text().notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.workspaceId, table.projectId],
+      foreignColumns: [projects.workspaceId, projects.id],
+    }).onDelete("cascade"),
+    index("campaign_costs_workspace_date_currency_idx").on(
+      table.workspaceId,
+      table.bookedOn,
+      table.currency,
+    ),
+    check("campaign_costs_amount_check", sql`${table.amount} >= 0`),
   ],
 );

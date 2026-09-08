@@ -366,6 +366,8 @@ function toContact(row: ContactRow): Contact {
     phone: row.phone,
     externalId: row.externalId,
     stage: row.stage,
+    ownerUserId: row.ownerUserId,
+    lifecycleStage: row.lifecycleStage,
     score: row.score,
     gradePoints: row.gradePoints,
     status: row.status,

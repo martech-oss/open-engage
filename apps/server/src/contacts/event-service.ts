@@ -35,6 +35,7 @@ export class ContactEventProcessor {
   public constructor(
     private readonly database: OpenEngageDatabase,
     private readonly runProjection: ContactEventProjectionRunner,
+    private readonly runVisitorProjection?: (event: ContactEventRecord) => Promise<void>,
   ) {}
 
   public async record(
@@ -89,6 +90,9 @@ export class ContactEventProcessor {
     );
     if (!event) return { eventId, enrollmentCount: 0 };
     try {
+      // Visitor metrics reduce original event timestamps, independently of contact-history projections.
+      // This also recovers a measured event whose first projection failed before contact identification.
+      await this.runVisitorProjection?.(event);
       if (
         !event.contactId ||
         !(await repository.isContactProcessable(event.workspaceId, event.contactId))
@@ -100,6 +104,19 @@ export class ContactEventProcessor {
 
       let enrollmentCount = 0;
       for (const projection of await repository.pendingProjections(event.id)) {
+        if (
+          event.replayMode === "history" &&
+          !["scoring", "grade", "campaign"].includes(projection)
+        ) {
+          await repository.finishProjection(
+            event.id,
+            leaseId,
+            projection,
+            "skipped",
+            new Date().toISOString(),
+          );
+          continue;
+        }
         if (!(await repository.isContactProcessable(event.workspaceId, event.contactId))) {
           await repository.skipPending(event.id, leaseId, new Date().toISOString());
           break;

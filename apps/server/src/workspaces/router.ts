@@ -17,6 +17,19 @@ export const getWorkspaceProcedure = authed.workspace.get.handler(async ({ conte
   getWorkspace(context.database, context.workspace),
 );
 
+export const getBrandProcedure = authed.workspace.getBrand.handler(({ context }) =>
+  getEmailBrandProfile(context.database, context.workspace),
+);
+
+export const updateBrandProcedure = authed.workspace.updateBrand.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
+    const result = await updateEmailBrandProfile(context.database, context.workspace, input);
+    if (result.kind === "invalid_logo") throw errors.BRAND_LOGO_INVALID();
+    return result.profile;
+  },
+);
+
 export const getEmailBrandProcedure = authed.workspace.getEmailBrand.handler(({ context }) =>
   getEmailBrandProfile(context.database, context.workspace),
 );
@@ -61,6 +74,8 @@ export const createApiKeyProcedure = authed.workspace.createApiKey.handler(
 export const workspaceProcedures = {
   create: createWorkspaceProcedure,
   get: getWorkspaceProcedure,
+  getBrand: getBrandProcedure,
+  updateBrand: updateBrandProcedure,
   getEmailBrand: getEmailBrandProcedure,
   updateEmailBrand: updateEmailBrandProcedure,
   createApiKey: createApiKeyProcedure,

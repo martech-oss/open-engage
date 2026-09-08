@@ -6,3 +6,5 @@ export * from "./pipeline-stage-statements";
 export * from "./repository";
 export * from "./task-repository";
 export * from "./types";
+
+export * from "./sales-repository";

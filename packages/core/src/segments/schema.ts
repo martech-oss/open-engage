@@ -44,7 +44,7 @@ export const segmentConditionSchema = z
     }
 
     if (
-      condition.field === "custom_field" &&
+      ["custom_field", "company_custom_field", "event_property"].includes(condition.field) &&
       condition.key &&
       !/^[A-Za-z0-9_.-]{1,191}$/.test(condition.key)
     ) {
@@ -63,6 +63,9 @@ export interface SegmentGroup {
   kind: "group";
   combinator: "and" | "or";
   children: SegmentFilter[];
+  relation?: "company" | "deal" | "event" | undefined;
+  negated?: boolean | undefined;
+  minimumCount?: number | undefined;
 }
 
 export type SegmentFilter = SegmentCondition | SegmentGroup;
@@ -70,13 +73,32 @@ export type SegmentFilter = SegmentCondition | SegmentGroup;
 export const segmentFilterSchema: z.ZodType<SegmentFilter> = z.lazy(() =>
   z.union([
     segmentConditionSchema,
-    z.object({
-      kind: z.literal("group"),
-      combinator: z.enum(["and", "or"]),
-      children: z.array(segmentFilterSchema).min(1).max(25),
-    }),
+    z
+      .object({
+        kind: z.literal("group"),
+        combinator: z.enum(["and", "or"]),
+        children: z.array(segmentFilterSchema).min(1).max(25),
+        relation: z.enum(["company", "deal", "event"]).optional(),
+        negated: z.boolean().optional(),
+        minimumCount: z.number().int().min(1).max(1000000).optional(),
+      })
+      .refine(
+        (group) => !group.relation || !group.children.some(hasExplicitRelation),
+        "Related groups cannot contain another explicit related scope; nested groups inherit the same row",
+      )
+      .refine(
+        (group) => group.minimumCount === undefined || group.relation !== undefined,
+        "Count requires a related-row scope",
+      ),
   ]),
 );
+
+function hasExplicitRelation(filter: SegmentFilter): boolean {
+  return (
+    filter.kind === "group" &&
+    (filter.relation !== undefined || filter.children.some(hasExplicitRelation))
+  );
+}
 
 export const segmentRowSchema = z.object({
   id: z.string(),
@@ -145,6 +167,7 @@ function validateConditionValue(
     return;
   }
 
+  if (Array.isArray(value)) addValueIssue(context, "Arrays are only supported by the in operator");
   if (valueType === "number" && typeof value !== "number") {
     addValueIssue(context, `${field} requires a numeric value`);
   }

@@ -41,6 +41,9 @@ function FilterNode({
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
       <span className="text-sm font-medium">
+        {filter.negated ? "一致なし · " : ""}
+        {filter.relation ? `同じ ${filter.relation} · ` : ""}
+        {filter.minimumCount ? `${filter.minimumCount}件以上 · ` : ""}
         {filter.combinator === "and" ? "すべて満たす" : "いずれか満たす"}
       </span>
       {filter.children.map((child, index) => (
@@ -52,7 +55,7 @@ function FilterNode({
 
 function formatCondition(condition: SegmentCondition, catalog: SegmentGenerationCatalog): string {
   const parts = [getSegmentFieldLabel(condition.field)];
-  if (condition.key && (condition.field === "event" || condition.field === "custom_field")) {
+  if (condition.key) {
     const customField =
       condition.field === "custom_field"
         ? catalog.customFields.find((option) => option.value === condition.key)

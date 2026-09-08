@@ -9,6 +9,7 @@ import {
   type SegmentResourceOption,
 } from "@openengage/core/segments";
 
+import { RichSegmentConditionValueEditor } from "./rich-segment-condition-value-editor";
 import {
   defaultSegmentRawValue,
   normalizeCustomFieldOperator,
@@ -36,6 +37,16 @@ export function SegmentConditionValueEditor({
   onChange: (condition: SegmentCondition) => void;
   onValueChange: (value: string) => void;
 }): ReactNode {
+  if (["category_score", "company_custom_field", "event_property"].includes(condition.field)) {
+    return (
+      <RichSegmentConditionValueEditor
+        condition={condition}
+        catalog={catalog}
+        needsValue={needsValue}
+        onChange={onChange}
+      />
+    );
+  }
   if (condition.field === "event" || condition.field === "custom_field") {
     const keyedOptions = condition.field === "event" ? catalog.events : catalog.customFields;
     return (
@@ -96,31 +107,6 @@ export function SegmentConditionValueEditor({
     );
   }
   if (!needsValue) return <span className="self-center text-sm text-muted-foreground">値なし</span>;
-  if (condition.field === "status") {
-    return (
-      <NativeSelect
-        value={String(condition.value)}
-        onChange={(event) => onValueChange(event.target.value)}
-      >
-        <NativeSelectOption value="active">active</NativeSelectOption>
-        <NativeSelectOption value="anonymous">anonymous</NativeSelectOption>
-      </NativeSelect>
-    );
-  }
-  if (condition.field === "stage" && catalog.stages.length > 0) {
-    return (
-      <NativeSelect
-        value={String(condition.value)}
-        onChange={(event) => onValueChange(event.target.value)}
-      >
-        {catalog.stages.map((stage) => (
-          <NativeSelectOption key={stage} value={stage}>
-            {stage}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    );
-  }
   const valueType = getSegmentFieldDefinition(condition.field).valueType;
   return (
     <Input

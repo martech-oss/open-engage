@@ -53,6 +53,14 @@ export async function loadSegmentCatalog(
     });
   }
   return {
+    categories: rows.categories.map((row) => ({ id: row.id, name: row.name, value: row.id })),
+    companyCustomFields: rows.companyCustomFields.map((row) => ({
+      id: row.id,
+      name: row.label,
+      value: row.key,
+      dataType: customFieldDataType(row.dataType),
+    })),
+    dealStages: rows.dealStages.map((row) => ({ id: row.id, name: row.name, value: row.id })),
     tags: rows.tags.map((row) => ({ id: row.id, name: row.name, value: row.slug })),
     staticSegments: rows.staticSegments.map((row) => ({
       id: row.id,
@@ -115,6 +123,28 @@ function validateNode(
     );
     return;
   }
+  const richOptions =
+    filter.field === "category_score"
+      ? catalog.categories
+      : filter.field === "company_custom_field"
+        ? catalog.companyCustomFields
+        : filter.field === "deal_stage_id"
+          ? catalog.dealStages
+          : undefined;
+  if (
+    richOptions &&
+    !(filter.field === "deal_stage_id" && ["exists", "not_exists"].includes(filter.operator))
+  ) {
+    const value = filter.field === "deal_stage_id" ? filter.value : filter.key;
+    const values = Array.isArray(value) ? value : [value];
+    if (!values.every((item) => richOptions.some((option) => option.value === item)))
+      issues.push({
+        phase: "resource",
+        code: "resource_not_found",
+        path,
+        message: `${filter.field} resource does not exist in this workspace`,
+      });
+  }
   const resource = resourceForField(filter.field);
   if (resource) {
     const value =
@@ -132,9 +162,32 @@ function validateNode(
       return;
     }
   }
-  if (filter.field !== "custom_field" || !filter.key) return;
-  const definition = catalog.customFields.find((item) => item.value === filter.key);
+  if ((filter.field !== "custom_field" && filter.field !== "company_custom_field") || !filter.key)
+    return;
+  const definition = (
+    filter.field === "company_custom_field"
+      ? (catalog.companyCustomFields ?? [])
+      : catalog.customFields
+  ).find((item) => item.value === filter.key);
   if (!definition?.dataType) return;
+  if (!["exists", "not_exists"].includes(filter.operator)) {
+    const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+    const valid = values.every((value) =>
+      definition.dataType === "number"
+        ? typeof value === "number"
+        : definition.dataType === "boolean"
+          ? typeof value === "boolean"
+          : typeof value === "string" &&
+            (definition.dataType !== "date" || Number.isFinite(Date.parse(value))),
+    );
+    if (!valid)
+      issues.push({
+        phase: "resource",
+        code: "operator_type_mismatch",
+        path: `${path}.value`,
+        message: `Value must match the ${definition.dataType} custom field type`,
+      });
+  }
   const allowed = customFieldOperators(definition.dataType);
   if (!allowed.has(filter.operator)) {
     issues.push({

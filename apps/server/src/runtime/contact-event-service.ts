@@ -13,6 +13,10 @@ import {
 } from "../contacts/event-service";
 import { applyScoringForEvent, recomputeContactGrade } from "../scoring/engine";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import {
+  recordLandingExperimentExposure,
+  recordLandingExperimentConversion,
+} from "../web/optimization-service";
 
 type ProjectionHandler = (
   database: OpenEngageDatabase,
@@ -49,6 +53,7 @@ const projectionHandlers = {
       type: event.type,
       resourceId: event.resourceId,
       occurredAt: event.occurredAt,
+      properties: event.properties,
     });
     return completedProjection;
   },
@@ -88,7 +93,21 @@ const runProjection: ContactEventProjectionRunner = async ({
 }) => projectionHandlers[projection](database, event, queue);
 
 function createContactEventProcessor(database: OpenEngageDatabase): ContactEventProcessor {
-  return new ContactEventProcessor(database, runProjection);
+  return new ContactEventProcessor(database, runProjection, async (event) => {
+    const { exposureId, pageVersionId } = event.properties;
+    if (!event.visitorId || typeof exposureId !== "string" || typeof pageVersionId !== "string")
+      return;
+    const identity = {
+      workspaceId: event.workspaceId,
+      visitorId: event.visitorId,
+      exposureId,
+      pageVersionId,
+    };
+    if (event.type === "page_viewed")
+      await recordLandingExperimentExposure(database, identity, event.occurredAt);
+    if (event.type === "form_submitted")
+      await recordLandingExperimentConversion(database, identity, event.occurredAt);
+  });
 }
 
 export function recordContactEvent(

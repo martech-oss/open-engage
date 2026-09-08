@@ -8,6 +8,8 @@ const SYSTEM_FIELDS = new Set([
   "turnstileToken",
   "cf-turnstile-response",
   "oe_v",
+  "consent",
+  "measurementToken",
 ]);
 
 export interface PublicFormValidationIssue {
@@ -20,14 +22,30 @@ export function validatePublicFormBody(
   answered: ReadonlySet<string>,
   body: Record<string, unknown>,
 ): PublicFormValidationIssue[] {
-  const fields = selectPublicFormFields(definition, answered);
+  const fields = selectPublicFormFields(definition, answered, body);
   const declared = new Map(
     fields.map((field) => [field.kind === "custom" ? `custom:${field.key}` : field.key, field]),
   );
   const issues: PublicFormValidationIssue[] = [];
 
+  const configured = new Set(
+    selectPublicFormFields(
+      {
+        ...definition,
+        fields: Array.isArray(definition["fields"])
+          ? definition["fields"].map((field) => ({
+              ...field,
+              progressive: false,
+              visibleWhen: undefined,
+              requiredWhen: undefined,
+            }))
+          : undefined,
+      },
+      new Set(),
+    ).map((field) => (field.kind === "custom" ? `custom:${field.key}` : field.key)),
+  );
   for (const name of Object.keys(body)) {
-    if (!SYSTEM_FIELDS.has(name) && !declared.has(name)) {
+    if (!SYSTEM_FIELDS.has(name) && !configured.has(name)) {
       issues.push({ field: name, reason: "undeclared" });
     }
   }

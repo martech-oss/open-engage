@@ -54,5 +54,6 @@ export function redactFormPayload(value: Record<string, unknown>): Record<string
   delete result["idempotencyKey"];
   delete result["oe_v"];
   delete result["_website"];
+  delete result["measurementToken"];
   return result;
 }

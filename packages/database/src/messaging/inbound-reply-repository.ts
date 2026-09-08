@@ -99,7 +99,7 @@ export class MessagingInboundReplyRepository extends DatabaseRepository {
       orm.insert(contactEvents).select(
         sql`SELECT
           ${input.contactEventId}, ${input.workspaceId}, ${input.contactId}, NULL,
-          'email_replied', 'delivery', ${input.deliveryId}, ${input.contactEventProperties},
+          'live', 'email_replied', 'delivery', ${input.deliveryId}, ${input.contactEventProperties},
           ${input.receivedAt}, NULL, ${input.receivedAt}
         WHERE ${ownsClaim}`,
       ),

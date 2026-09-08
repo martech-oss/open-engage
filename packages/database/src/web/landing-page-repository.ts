@@ -2,6 +2,8 @@ import { and, desc, eq, ne, sql } from "drizzle-orm";
 
 import {
   contentDocumentSchema,
+  emptyLandingPageDocument,
+  landingPageDocumentSchema,
   landingPageSchema,
   type LandingPage,
   type LandingPageWrite,
@@ -21,6 +23,7 @@ const landingPageContentCodec = defineJsonCodec(
 export type LandingPageUpdateOutcome =
   | { kind: "not_found" }
   | { kind: "archived" }
+  | { kind: "conflict" }
   | { kind: "ok"; id: string; versionId: string };
 
 export class LandingPageRepository extends WorkspaceRepository {
@@ -41,6 +44,8 @@ export class LandingPageRepository extends WorkspaceRepository {
         slug: landingPages.slug,
         status: landingPages.status,
         currentVersionId: landingPages.currentVersionId,
+        publishedVersionId: landingPages.publishedVersionId,
+        document: landingPageVersions.document,
         createdAt: landingPages.createdAt,
         updatedAt: landingPages.updatedAt,
         version: landingPageVersions.version,
@@ -60,6 +65,7 @@ export class LandingPageRepository extends WorkspaceRepository {
       landingPageSchema.parse({
         ...row,
         contentDocument: landingPageContentCodec.decodeNullable(row.contentDocument),
+        document: row.document ? landingPageDocumentSchema.parse(JSON.parse(row.document)) : null,
       }),
     );
   }
@@ -80,6 +86,7 @@ export class LandingPageRepository extends WorkspaceRepository {
         slug: input.slug,
         status: input.status,
         currentVersionId: versionId,
+        publishedVersionId: input.status === "published" ? versionId : null,
         createdAt: now,
         updatedAt: now,
       }),
@@ -88,8 +95,17 @@ export class LandingPageRepository extends WorkspaceRepository {
         workspaceId,
         pageId: id,
         version: 1,
-        contentDocument: landingPageContentCodec.encode(input.content),
-        publishedAt: input.status === "published" ? now : null,
+        contentDocument: input.content
+          ? landingPageContentCodec.encode(input.content)
+          : landingPageContentCodec.encode(
+              contentDocumentSchema.parse({ schemaVersion: 1, blocks: [] }),
+            ),
+        document: input.document
+          ? JSON.stringify(input.document)
+          : input.content
+            ? null
+            : JSON.stringify(emptyLandingPageDocument(input.name)),
+        publishedAt: input.content && input.status === "published" ? now : null,
         createdAt: now,
       }),
     ]);
@@ -103,12 +119,18 @@ export class LandingPageRepository extends WorkspaceRepository {
   ): Promise<LandingPageUpdateOutcome> {
     const workspaceId = this.context.workspaceId;
     const page = await this.database.orm
-      .select({ id: landingPages.id, status: landingPages.status })
+      .select({
+        id: landingPages.id,
+        status: landingPages.status,
+        currentVersionId: landingPages.currentVersionId,
+      })
       .from(landingPages)
       .where(and(eq(landingPages.workspaceId, workspaceId), eq(landingPages.id, id)))
       .get();
     if (!page) return { kind: "not_found" };
     if (page.status === "archived") return { kind: "archived" };
+    if (input.baseVersionId && input.baseVersionId !== page.currentVersionId)
+      return { kind: "conflict" };
     // A plain (non-correlated) lookup keyed on the id we already resolved
     // above, so there's no outer-query column to interpolate — and none of
     // the SELECT-column-position pitfall this file otherwise avoids.
@@ -129,10 +151,19 @@ export class LandingPageRepository extends WorkspaceRepository {
       orm.insert(landingPageVersions).values({
         id: versionId,
         workspaceId,
-        pageId: page.id,
+        pageId: sql`CASE WHEN EXISTS (SELECT 1 FROM landing_pages WHERE id = ${page.id} AND workspace_id = ${workspaceId} AND current_version_id = ${page.currentVersionId}) THEN ${page.id} ELSE NULL END`,
         version: nextVersion,
-        contentDocument: landingPageContentCodec.encode(input.content),
-        publishedAt: input.status === "published" ? now : null,
+        contentDocument: input.content
+          ? landingPageContentCodec.encode(input.content)
+          : landingPageContentCodec.encode(
+              contentDocumentSchema.parse({ schemaVersion: 1, blocks: [] }),
+            ),
+        document: input.document
+          ? JSON.stringify(input.document)
+          : input.content
+            ? null
+            : JSON.stringify(emptyLandingPageDocument(input.name)),
+        publishedAt: input.content && input.status === "published" ? now : null,
         createdAt: now,
       }),
       orm
@@ -140,7 +171,10 @@ export class LandingPageRepository extends WorkspaceRepository {
         .set({
           name: input.name,
           slug: input.slug,
-          status: input.status,
+          status: input.content ? input.status : page.status,
+          ...(input.content && input.status === "published"
+            ? { publishedVersionId: versionId }
+            : {}),
           currentVersionId: versionId,
           updatedAt: now,
         })

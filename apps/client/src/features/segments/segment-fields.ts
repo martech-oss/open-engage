@@ -7,6 +7,21 @@ import {
 } from "@openengage/core/segments";
 
 export const segmentFieldOptions = [
+  { field: "category_score", label: "カテゴリスコア" },
+  { field: "lifecycle_stage", label: "ライフサイクル" },
+  { field: "owner_user_id", label: "担当者ID" },
+  { field: "company_name", label: "会社名" },
+  { field: "company_custom_field", label: "会社カスタム項目" },
+  { field: "deal_status", label: "商談ステータス" },
+  { field: "deal_stage_id", label: "商談ステージID" },
+  { field: "deal_owner_user_id", label: "商談担当者ID" },
+  { field: "deal_value", label: "商談金額" },
+  { field: "event_type", label: "イベント種別" },
+  { field: "event_resource_type", label: "イベントリソース種別" },
+  { field: "event_resource_id", label: "イベントリソースID" },
+  { field: "event_occurred_at", label: "イベント日時" },
+  { field: "event_age_minutes", label: "イベント経過分数" },
+  { field: "event_property", label: "イベント属性" },
   { field: "email", label: "メールアドレス" },
   { field: "first_name", label: "名" },
   { field: "last_name", label: "姓" },
@@ -103,7 +118,7 @@ export function createSegmentCondition(
   return {
     kind: "condition",
     field,
-    ...((field === "event" || field === "custom_field") && key ? { key } : {}),
+    ...(definition.keyRequirement === "required" && key ? { key } : {}),
     operator,
     value,
   };

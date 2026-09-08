@@ -5,6 +5,7 @@ import { jsonRecordSchema } from "@openengage/core/shared";
 import { decodeJson, defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { contacts, contactEventOutbox, contactEventProjections, contactEvents } from "./schema";
+import { visitorBindings } from "./visitor-schema";
 
 export const CONTACT_EVENT_PROJECTIONS = [
   "scoring",
@@ -26,11 +27,13 @@ export interface ContactEventRecord {
   resourceType: string | null;
   resourceId: string | null;
   properties: Record<string, unknown>;
+  replayMode?: string;
   occurredAt: string;
 }
 
 export interface ContactEventCreate extends Omit<ContactEventRecord, "properties"> {
   properties: Record<string, unknown>;
+  replayMode?: string;
   createdAt: string;
 }
 
@@ -59,7 +62,11 @@ export class ContactEventRepository extends DatabaseRepository {
       orm.insert(contactEvents).values({
         id: input.id,
         workspaceId: input.workspaceId,
-        contactId: input.contactId,
+        contactId:
+          input.contactId ??
+          (input.visitorId
+            ? sql`(SELECT ${visitorBindings.contactId} FROM ${visitorBindings} WHERE ${visitorBindings.workspaceId} = ${input.workspaceId} AND ${visitorBindings.visitorId} = ${input.visitorId})`
+            : null),
         visitorId: input.visitorId,
         type: input.type,
         resourceType: input.resourceType,
@@ -116,6 +123,7 @@ export class ContactEventRepository extends DatabaseRepository {
         resourceType: contactEvents.resourceType,
         resourceId: contactEvents.resourceId,
         properties: contactEvents.properties,
+        replayMode: contactEvents.replayMode,
         occurredAt: contactEvents.occurredAt,
       })
       .from(contactEventOutbox)

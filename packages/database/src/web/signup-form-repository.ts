@@ -13,7 +13,7 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { forms, formSubmissions } from "./schema";
+import { forms, formSubmissions, formVersions } from "./schema";
 
 const formDefinitionCodec = defineJsonCodec(signupFormDefinitionSchema, "forms.definition");
 const formAllowedDomainsCodec = defineJsonCodec(stringArraySchema, "forms.allowed_domains");
@@ -70,37 +70,70 @@ export class SignupFormRepository extends WorkspaceRepository {
   public async createSignupForm(input: SignupFormWrite): Promise<{ id: string }> {
     const id = uuidv7();
     const now = nowIso();
-    await this.database.orm.insert(forms).values({
-      id,
-      workspaceId: this.context.workspaceId,
-      name: input.name,
-      slug: input.slug,
-      status: input.status,
-      definition: formDefinitionCodec.encode(input.definition),
-      allowedDomains: formAllowedDomainsCodec.encode(input.allowedDomains),
-      turnstileEnabled: input.turnstileEnabled,
-      successMessage: input.successMessage,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return { id };
-  }
-
-  public async updateSignupForm(id: string, input: SignupFormWrite): Promise<boolean> {
-    const result = await this.database.orm
-      .update(forms)
-      .set({
+    const orm = this.database.orm;
+    await orm.batch([
+      orm.insert(forms).values({
+        id,
+        workspaceId: this.context.workspaceId,
         name: input.name,
         slug: input.slug,
         status: input.status,
-        version: sql`${forms.version} + 1`,
         definition: formDefinitionCodec.encode(input.definition),
         allowedDomains: formAllowedDomainsCodec.encode(input.allowedDomains),
         turnstileEnabled: input.turnstileEnabled,
         successMessage: input.successMessage,
-        updatedAt: nowIso(),
-      })
-      .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived")));
+        createdAt: now,
+        updatedAt: now,
+      }),
+      orm.insert(formVersions).values({
+        id: uuidv7(),
+        workspaceId: this.context.workspaceId,
+        formId: id,
+        version: 1,
+        definition: formDefinitionCodec.encode(input.definition),
+        allowedDomains: formAllowedDomainsCodec.encode(input.allowedDomains),
+        turnstileEnabled: input.turnstileEnabled,
+        successMessage: input.successMessage,
+        createdAt: now,
+      }),
+    ]);
+    return { id };
+  }
+
+  public async updateSignupForm(id: string, input: SignupFormWrite): Promise<boolean> {
+    const orm = this.database.orm;
+    const [result] = await orm.batch([
+      orm
+        .update(forms)
+        .set({
+          name: input.name,
+          slug: input.slug,
+          status: input.status,
+          version: sql`${forms.version} + 1`,
+          definition: formDefinitionCodec.encode(input.definition),
+          allowedDomains: formAllowedDomainsCodec.encode(input.allowedDomains),
+          turnstileEnabled: input.turnstileEnabled,
+          successMessage: input.successMessage,
+          updatedAt: nowIso(),
+        })
+        .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived"))),
+      orm.insert(formVersions).select(
+        orm
+          .select({
+            id: sql<string>`${uuidv7()}`.as("snapshot_id"),
+            workspaceId: forms.workspaceId,
+            formId: forms.id,
+            version: forms.version,
+            definition: forms.definition,
+            allowedDomains: forms.allowedDomains,
+            turnstileEnabled: forms.turnstileEnabled,
+            successMessage: forms.successMessage,
+            createdAt: forms.updatedAt,
+          })
+          .from(forms)
+          .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived"))),
+      ),
+    ]);
     return changedExactlyOne(result);
   }
 

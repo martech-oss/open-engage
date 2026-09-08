@@ -107,13 +107,20 @@ export function useAutomationBuilder(
   }
 
   function addNode(
-    kind: "email" | "delay" | "decision" | "condition",
+    kind: "handoff" | "email" | "delay" | "decision" | "condition",
     options: AutomationOptions,
   ): "template_missing" | "connected" | "unconnected" {
     const id = crypto.randomUUID();
     const position = { x: 360, y: 120 + definition.nodes.length * 70 };
     let node: AutomationNode;
-    if (kind === "email") {
+    if (kind === "handoff") {
+      node = {
+        id,
+        type: "action",
+        position,
+        config: { action: "handoff_to_sales", preserveOwner: true, title: "営業フォロー" },
+      };
+    } else if (kind === "email") {
       const template = options.templates.find((candidate) => candidate.sendable);
       if (!template) return "template_missing";
       node = emailNode(id, position, template);

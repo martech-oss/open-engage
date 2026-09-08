@@ -1,11 +1,14 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { WebRepository } from "@openengage/database/web";
-
 import type { AppEnvironment } from "../env";
 import { recordContactEvent } from "../runtime/contact-event-service";
 import { originAllowed } from "../web/domain";
+import {
+  stripReservedMeasurementProperties,
+  verifyMeasurementContext,
+} from "../web/measurement-service";
+import { VisitorIdentityService } from "../web/visitor-identity-service";
 import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";
 import { siteTrackingScript } from "./templates";
@@ -47,8 +50,9 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
     const parsed = z
       .object({
         consent: z.literal(true),
-        visitorId: z.string().uuid().optional(),
-        email: z.email().optional(),
+        visitorToken: z.string().max(2000).optional(),
+        identityToken: z.string().max(2000).optional(),
+        measurementToken: z.string().max(12_000).optional(),
         type: z.enum(["page_viewed", "custom_event"]),
         resourceId: z.string().max(2_000).optional(),
         properties: z.record(z.string(), z.unknown()).default({}),
@@ -57,21 +61,46 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
     if (!parsed.success) {
       return context.json({ data: { accepted: false, identityIssued: false } }, 202);
     }
-    const visitorId = parsed.data.visitorId ?? crypto.randomUUID();
+    const identity = new VisitorIdentityService(database, context.env);
+    let visitor = await identity.ensure(workspace.id, parsed.data.visitorToken);
+    if (parsed.data.identityToken) {
+      visitor =
+        (await identity.identify(workspace.id, visitor.id, parsed.data.identityToken)) ?? visitor;
+      if (visitor.contactId)
+        context.executionCtx.waitUntil(
+          context.env.JOBS_QUEUE.send({
+            kind: "visitor_history",
+            workspaceId: workspace.id,
+            visitorId: visitor.id,
+          }),
+        );
+    }
+    const visitorId = visitor.id;
+    const contactId = visitor.contactId;
     const now = new Date().toISOString();
-    const contactId = parsed.data.email
-      ? await new WebRepository(database, { workspaceId: workspace.id }).findActiveContactIdByEmail(
-          parsed.data.email.toLowerCase(),
-        )
+    const measurement = parsed.data.measurementToken
+      ? await verifyMeasurementContext(database, context.env, parsed.data.measurementToken, {
+          workspaceId: workspace.id,
+          visitorId,
+        })
       : null;
+    if (parsed.data.measurementToken && !measurement)
+      return context.json({ data: { accepted: false } }, 202);
     await recordContactEvent(database, {
       workspaceId: workspace.id,
       contactId,
       visitorId,
       type: parsed.data.type,
       resourceType: "landing_page",
-      ...(parsed.data.resourceId ? { resourceId: parsed.data.resourceId } : {}),
-      properties: parsed.data.properties,
+      ...(measurement
+        ? { resourceId: measurement.properties.pageId }
+        : parsed.data.resourceId
+          ? { resourceId: parsed.data.resourceId }
+          : {}),
+      properties: {
+        ...stripReservedMeasurementProperties(parsed.data.properties),
+        ...measurement?.properties,
+      },
       occurredAt: now,
       queue: context.env.JOBS_QUEUE,
     });
@@ -80,6 +109,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
         data: {
           accepted: true,
           visitorId,
+          visitorToken: await identity.token(workspace.id, visitorId),
           identified: Boolean(contactId),
           identityIssued: true,
         },

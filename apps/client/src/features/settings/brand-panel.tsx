@@ -112,7 +112,7 @@ export function BrandPanel({
             {error ? <ErrorAlert>{error}</ErrorAlert> : null}
             {editable ? (
               <LoadingButton type="submit" busy={busy} busyLabel="保存中…" className="self-start">
-                メールブランドを保存
+                ブランドを保存
               </LoadingButton>
             ) : (
               <p className="text-sm text-muted-foreground">管理者のみ変更できます。</p>
@@ -132,9 +132,9 @@ function BrandPanelHeader(): ReactNode {
           <Palette />
         </div>
         <div>
-          <CardTitle>メールブランド</CardTitle>
+          <CardTitle>ワークスペースのブランド</CardTitle>
           <CardDescription>
-            AIの文体、React Emailのヘッダー・フッター、既定色に利用します。
+            LPやメールのAI生成で、文体・ロゴ・色を共通して利用します。
           </CardDescription>
         </div>
       </div>
@@ -160,7 +160,7 @@ function BrandLogoSelector({
       <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
         <ImageIcon className="text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">メールロゴ</p>
+          <p className="text-sm font-medium">ブランドロゴ</p>
           <p className="truncate text-sm text-muted-foreground">
             {profile.logoAssetId ?? "ロゴは設定されていません"}
           </p>

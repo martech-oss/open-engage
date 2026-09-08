@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { OpenEngageDatabase } from "../client";
 import { segments } from "./schema";
@@ -16,8 +16,13 @@ export class SegmentMaintenanceRepository {
         filterVersion: segments.filterVersion,
       })
       .from(segments)
-      .where(eq(segments.kind, "dynamic"))
-      .orderBy(asc(segments.workspaceId), asc(segments.id))
+      .where(
+        and(
+          eq(segments.kind, "dynamic"),
+          sql`(${segments.evaluatedAt} IS NULL OR julianday(${segments.evaluatedAt}) < julianday('now', '-2 minutes'))`,
+        ),
+      )
+      .orderBy(asc(segments.evaluatedAt), asc(segments.id))
       .limit(10_000);
   }
 }

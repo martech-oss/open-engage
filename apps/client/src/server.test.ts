@@ -19,6 +19,7 @@ describe("isBackendRequest", () => {
     "/api/assets/019f.../raw",
     "/f/acme/contact",
     "/p/acme/spring",
+    "/fh/acme/inquiry",
     "/c/token",
     "/r/acme/spring-ad",
     "/t/token",
