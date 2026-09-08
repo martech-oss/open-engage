@@ -12,6 +12,7 @@ import {
   type useUpdateLandingPage,
   useGenerateLandingPage,
   usePublishLandingPage,
+  useRetryLandingGeneration,
 } from "./website-api";
 
 export function useLandingPageEditor({
@@ -31,7 +32,8 @@ export function useLandingPageEditor({
     [mobile, setMobile] = useState(false);
   const { busy, error, run } = useFormSubmission("ページを更新できませんでした");
   const generate = useGenerateLandingPage(),
-    publish = usePublishLandingPage();
+    publish = usePublishLandingPage(),
+    retry = useRetryLandingGeneration();
   const design = useQuery({
     ...landingPageDesignQueryOptions(pageId),
     enabled: Boolean(pageId) && open,
@@ -100,6 +102,12 @@ export function useLandingPageEditor({
       await design.refetch();
     });
   }
+  async function retryGeneration(jobId: string) {
+    await run(async () => {
+      await retry.mutateAsync({ pageId, jobId });
+      await design.refetch();
+    });
+  }
   const saveName = () =>
     run(async () => {
       await saveMetadata();
@@ -120,5 +128,6 @@ export function useLandingPageEditor({
     submit,
     publishVersion,
     saveName,
+    retryGeneration,
   };
 }

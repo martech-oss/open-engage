@@ -7,8 +7,8 @@ import { sha256Hex } from "../platform/crypto";
 import { isRecord, primitiveString, stringOrNull } from "../platform/values";
 import { hasTurnstileConfiguration } from "../web/config";
 import { originAllowed, redactFormPayload } from "../web/domain";
-import { verifyMeasurementContext } from "../web/measurement-service";
 import { VisitorIdentityService } from "../web/visitor-identity-service";
+import { resolvePublicForm } from "./form-context";
 import { validatePublicFormBody } from "./form-validation";
 import { hashIp, verifyTurnstile } from "./shared";
 import { selectPublicFormFields } from "./templates";
@@ -54,19 +54,15 @@ export class SubmitPublicFormUseCase {
 
   public async execute(command: SubmitPublicFormCommand): Promise<SubmitPublicFormResult> {
     const repository = new PublicFormRepository(this.database);
-    let form =
-      command.resolvedForm ??
-      (await repository.findPublishedForm(command.workspaceSlug, command.formSlug));
-    if (!form) return { kind: "form_not_found" };
-    const submittedContext = isRecord(command.body) ? command.body["measurementToken"] : undefined;
-    const measurement = submittedContext
-      ? await verifyMeasurementContext(this.database, this.environment, submittedContext, {
-          workspaceId: form.workspaceId,
-          formId: form.id,
-        })
-      : null;
-    if (submittedContext && !measurement) return { kind: "invalid_payload" };
-    if (measurement?.form) form = measurement.form;
+    const resolved = await resolvePublicForm(this.database, this.environment, {
+      workspaceSlug: command.workspaceSlug,
+      formSlug: command.formSlug,
+      measurementToken: isRecord(command.body) ? command.body["measurementToken"] : undefined,
+      ...(command.resolvedForm ? { resolvedForm: command.resolvedForm } : {}),
+    });
+    if (resolved.kind === "form_not_found") return { kind: "form_not_found" };
+    if (resolved.kind === "invalid_context") return { kind: "invalid_payload" };
+    const { form, measurement } = resolved;
     if (form.turnstileEnabled && !hasTurnstileConfiguration(this.environment)) {
       return { kind: "turnstile_not_configured" };
     }

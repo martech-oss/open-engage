@@ -7,9 +7,10 @@ import { emptyLandingPageDocument, landingPageSchema } from "@openengage/core/we
 
 import { LandingPageEditorDialog } from "./landing-page-editor-dialog";
 
-const { generate, publish } = vi.hoisted(() => ({
+const { generate, publish, retry } = vi.hoisted(() => ({
   generate: vi.fn<() => Promise<object>>(async () => ({})),
   publish: vi.fn<() => Promise<{ ok: boolean }>>(async () => ({ ok: true })),
+  retry: vi.fn<() => Promise<{ ok: boolean }>>(async () => ({ ok: true })),
 }));
 vi.mock("./landing-optimization-panel", () => ({
   LandingOptimizationPanel: () => (
@@ -29,11 +30,31 @@ vi.mock("./website-api", () => ({
       previewHtml: "<h1>Preview</h1>",
       jobs: [
         {
+          id: "invalid",
+          prompt: "Invalid",
+          explanation: null,
+          error: "Invalid reference",
+          status: "failed",
+          retryable: false,
+          baseVersionId: "v2",
+        },
+        {
+          id: "stale",
+          prompt: "Old",
+          explanation: null,
+          error: "Timeout",
+          status: "failed",
+          retryable: true,
+          baseVersionId: "v1",
+        },
+        {
           id: "j1",
           prompt: "青色に変更",
           explanation: null,
           error: "生成に失敗しました",
           status: "failed",
+          retryable: true,
+          baseVersionId: "v2",
         },
       ],
       versions: [
@@ -44,6 +65,7 @@ vi.mock("./website-api", () => ({
   }),
   useGenerateLandingPage: () => ({ mutateAsync: generate }),
   usePublishLandingPage: () => ({ mutateAsync: publish }),
+  useRetryLandingGeneration: () => ({ mutateAsync: retry }),
 }));
 afterEach(() => {
   cleanup();
@@ -85,6 +107,13 @@ describe("landing page editor", () => {
     const preview = await screen.findByTitle("ランディングページのプレビュー");
     expect(preview.getAttribute("sandbox")).toBe("");
     expect(screen.getByText("生成に失敗しました")).toBeTruthy();
+    const retryButtons = screen.getAllByRole<HTMLButtonElement>("button", {
+      name: "この生成を再試行",
+    });
+    expect(retryButtons).toHaveLength(2);
+    expect(retryButtons.filter((button) => button.disabled)).toHaveLength(1);
+    fireEvent.click(retryButtons.find((button) => !button.disabled)!);
+    await waitFor(() => expect(retry).toHaveBeenCalledWith({ pageId: "page", jobId: "j1" }));
     const mobile = screen.getByRole("button", { name: "スマートフォン" });
     mobile.focus();
     expect(document.activeElement).toBe(mobile);

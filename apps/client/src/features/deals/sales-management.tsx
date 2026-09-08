@@ -107,8 +107,18 @@ export function SalesManagement() {
               </label>
             ))}
           </div>
+          <p className="text-sm text-muted-foreground">
+            {mode === "fixed"
+              ? "担当者を1人選択してください。"
+              : "担当者を1人以上選択してください。"}
+          </p>
           <Button
-            disabled={save.isPending || !name.trim()}
+            disabled={
+              save.isPending ||
+              !name.trim() ||
+              userIds.length === 0 ||
+              (mode === "fixed" && userIds.length !== 1)
+            }
             onClick={() =>
               save.mutate(
                 { ...(id ? { id } : {}), name, mode, userIds },

@@ -73,6 +73,13 @@ export function useGenerateLandingPage() {
     onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
   });
 }
+export function useRetryLandingGeneration() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.retryPageGeneration.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
+  });
+}
 export function usePublishLandingPage() {
   const client = useQueryClient();
   return useMutation({

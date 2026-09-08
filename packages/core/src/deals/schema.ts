@@ -248,7 +248,7 @@ export const assignmentGroupWriteSchema = z
     id: z.string().min(1).optional(),
     name: z.string().trim().min(1).max(191),
     mode: z.enum(["fixed", "round_robin"]),
-    userIds: z.array(z.string().min(1)).max(100),
+    userIds: z.array(z.string().min(1)).min(1, "少なくとも1人の担当者が必要です").max(100),
   })
   .refine(
     (input) => input.mode !== "fixed" || input.userIds.length === 1,

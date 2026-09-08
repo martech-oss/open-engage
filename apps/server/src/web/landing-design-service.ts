@@ -68,11 +68,6 @@ export async function publishLandingPage(
   if (page.currentVersionId !== input.baseVersionId) return "conflict" as const;
   await sanitizeLandingDocument(version.document);
   await validateLandingReferences(database, workspaceId, version.document, env, true);
-  // Preparing image visibility precedes the atomic page/form pointer change. Failure leaves live content intact.
-  await new GeneratedEmailImageRepository(database).claim(
-    workspaceId,
-    version.document.images.map((image) => image.assetId),
-  );
   await repository.publish(input.id, input.versionId, input.baseVersionId);
   return "ok" as const;
 }

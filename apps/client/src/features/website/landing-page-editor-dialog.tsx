@@ -48,6 +48,7 @@ export function LandingPageEditorDialog({
     submit,
     publishVersion,
     saveName,
+    retryGeneration,
   } = useLandingPageEditor({ item, open, createMutation, updateMutation });
   return (
     <AppDialog
@@ -79,7 +80,12 @@ export function LandingPageEditorDialog({
       </div>
       <div className="grid gap-5 lg:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
         <div className="space-y-4">
-          <LandingConversation jobs={design.data?.jobs ?? []} />
+          <LandingConversation
+            jobs={design.data?.jobs ?? []}
+            currentVersionId={design.data?.currentVersionId ?? null}
+            busy={busy || generating}
+            onRetry={retryGeneration}
+          />
           <LandingPromptForm
             pageId={pageId}
             prompt={prompt}

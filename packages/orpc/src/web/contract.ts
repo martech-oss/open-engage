@@ -101,6 +101,15 @@ export const websiteContract = {
     .errors(pageDesignErrors)
     .input(landingGenerationRequestSchema)
     .output(landingGenerationJobSchema),
+  retryPageGeneration: oc
+    .route({
+      method: "POST",
+      path: "/website/pages/{pageId}/generations/{jobId}/retry",
+      successStatus: 202,
+    })
+    .errors(pageDesignErrors)
+    .input(z.object({ pageId: z.string().min(1), jobId: z.string().min(1) }))
+    .output(ackSchema),
   publishPage: oc
     .route({ method: "POST", path: "/website/pages/{id}/publish" })
     .errors(pageDesignErrors)

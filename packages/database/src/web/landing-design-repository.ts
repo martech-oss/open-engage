@@ -9,6 +9,7 @@ import {
 } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
+import { GeneratedEmailImageRepository } from "../messaging/email-design-repository";
 import { generatedEmailImages } from "../messaging/schema";
 import { projects } from "../projects/schema";
 import { nowIso } from "../shared/database-utils";
@@ -147,6 +148,11 @@ export class LandingDesignRepository extends WorkspaceRepository {
           name: sql`CASE WHEN ${landingPages.currentVersionId} = ${expectedDraftId} AND ${landingPages.status} != 'archived' AND EXISTS (SELECT 1 FROM landing_page_versions WHERE id = ${versionId} AND page_id = ${pageId} AND workspace_id = ${workspaceId} AND published_at IS ${version.publishedAt} AND form_bindings = ${JSON.stringify(version.formBindings)}) THEN ${landingPages.name} ELSE NULL END`,
         })
         .where(and(this.inWorkspace(landingPages), eq(landingPages.id, pageId))),
+      ...new GeneratedEmailImageRepository(this.database).claimStatements(
+        workspaceId,
+        version.document.images.map((image) => image.assetId),
+        now,
+      ),
       ...writes,
       orm
         .update(landingPageVersions)
@@ -193,6 +199,46 @@ export class LandingDesignRepository extends WorkspaceRepository {
       )
       .get();
   }
+  /** Explicit retries retain the job ID and may never apply to a newer draft. */
+  async retryGeneration(pageId: string, jobId: string, userId: string) {
+    const workspaceId = this.context.workspaceId;
+    const currentBase = sql`EXISTS(SELECT 1 FROM landing_pages p WHERE p.id=${pageId} AND p.workspace_id=${workspaceId} AND p.current_version_id=${landingGenerationJobs.baseVersionId} AND p.status!='archived')`;
+    const scope = and(
+      this.inWorkspace(landingGenerationJobs),
+      eq(landingGenerationJobs.id, jobId),
+      eq(landingGenerationJobs.pageId, pageId),
+      currentBase,
+    );
+    const changed = await this.database.orm
+      .update(landingGenerationJobs)
+      .set({
+        status: "queued",
+        error: null,
+        leaseId: null,
+        leaseExpiresAt: null,
+        userId,
+        updatedAt: nowIso(),
+      })
+      .where(
+        and(
+          scope,
+          eq(landingGenerationJobs.status, "failed"),
+          sql`CASE WHEN json_valid(${landingGenerationJobs.error}) THEN json_extract(${landingGenerationJobs.error},'$.kind') END='retryable'`,
+        ),
+      )
+      .returning({ id: landingGenerationJobs.id })
+      .get();
+    if (changed) return true;
+    // A double click/ambiguous response must not create another request.
+    return Boolean(
+      await this.database.orm
+        .select({ id: landingGenerationJobs.id })
+        .from(landingGenerationJobs)
+        .where(and(scope, inArray(landingGenerationJobs.status, ["queued", "running"])))
+        .get(),
+    );
+  }
+
   async jobs(pageId: string) {
     const rows = await this.database.orm
       .select()

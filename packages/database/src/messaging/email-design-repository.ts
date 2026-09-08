@@ -153,7 +153,12 @@ export class GeneratedEmailImageRepository extends DatabaseRepository {
 
   public async claim(workspaceId: string, assetIds: string[], now = nowIso()): Promise<void> {
     if (assetIds.length === 0) return;
-    await this.database.orm.batch([
+    await this.database.orm.batch(this.claimStatements(workspaceId, assetIds, now));
+  }
+
+  /** Compose with the caller's CAS-protected publication transaction. */
+  public claimStatements(workspaceId: string, assetIds: string[], now = nowIso()) {
+    return [
       this.database.orm
         .update(assets)
         .set({ visibility: "public", updatedAt: now })
@@ -174,7 +179,7 @@ export class GeneratedEmailImageRepository extends DatabaseRepository {
             isNull(generatedEmailImages.claimedAt),
           ),
         ),
-    ]);
+    ] as const;
   }
 
   public async availableUnclaimed(

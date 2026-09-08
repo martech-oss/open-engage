@@ -260,6 +260,7 @@ export function renderPublicForm(
     const resolveFields = ${resolveFormFields.toString()};
     let answered = new Set();
     let profileRequest = 0;
+    let parentOrigin = null;
     function reconcileControls() {
       const values = Object.fromEntries([...signup.querySelectorAll("input,select,textarea")].map(input => [input.name.replace(/^custom:/, ""), input.value]));
       const visible = new Map(resolveFields(definition, values, answered).map(field => [field.key, field]));
@@ -292,6 +293,9 @@ export function renderPublicForm(
     reconcileControls();
     window.addEventListener("message", (event) => {
       if (window.parent === window || event.source !== window.parent || event.data?.type !== "openengage:identity") return;
+      const sender = URL.parse(event.origin);
+      if (!sender || !["http:", "https:"].includes(sender.protocol)) return;
+      parentOrigin = sender.origin;
       for (const name of ["oe_v", "consent"]) signup.querySelector('input[name="' + name + '"]')?.remove();
       if (event.data.consent === true && typeof event.data.visitorToken === "string") {
         for (const [name, value] of [["oe_v", event.data.visitorToken], ["consent", "true"]]) {
@@ -323,7 +327,7 @@ export function renderPublicForm(
         if (body?.data?.visitorToken) {
           const input = form.querySelector('input[name="oe_v"]');
           if (input) { input.value = body.data.visitorToken; input.defaultValue = body.data.visitorToken; }
-          const targetOrigin = document.referrer ? new URL(document.referrer).origin : location.origin;
+          const targetOrigin = parentOrigin ?? (document.referrer ? new URL(document.referrer).origin : location.origin);
           window.parent.postMessage({ type: "openengage:form-identity", visitorToken: body.data.visitorToken }, targetOrigin);
         }
         delete form.dataset.submissionKey;

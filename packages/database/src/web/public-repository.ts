@@ -60,6 +60,16 @@ export type { PersistPublicFormSubmissionInput } from "./public-form-submission-
  * after that.
  */
 export class PublicFormRepository extends DatabaseRepository {
+  /** Resolve the URL identity before choosing a mutable form or a signed snapshot. */
+  public async findFormReference(workspaceSlug: string, formSlug: string) {
+    return this.database.orm
+      .select({ id: forms.id, workspaceId: forms.workspaceId, status: forms.status })
+      .from(forms)
+      .innerJoin(organization, eq(organization.id, forms.workspaceId))
+      .where(and(eq(organization.slug, workspaceSlug), eq(forms.slug, formSlug)))
+      .get();
+  }
+
   /** Resolves a published form from its public workspace-slug/form-slug pair. */
   public async findPublishedForm(
     workspaceSlug: string,

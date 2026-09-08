@@ -20,3 +20,14 @@ it("requires a stable execution key for sales handoff", () => {
     }).success,
   ).toBe(true);
 });
+it("rejects memberless groups in every assignment mode", () => {
+  for (const mode of ["fixed", "round_robin"] as const) {
+    expect(
+      schemas.assignmentGroupWriteSchema.safeParse({ name: "Empty", mode, userIds: [] }).success,
+    ).toBe(false);
+    expect(
+      schemas.assignmentGroupWriteSchema.safeParse({ name: "Ready", mode, userIds: ["u1"] })
+        .success,
+    ).toBe(true);
+  }
+});

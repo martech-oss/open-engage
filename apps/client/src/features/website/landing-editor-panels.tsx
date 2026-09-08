@@ -10,6 +10,8 @@ interface ConversationJob {
   explanation: string | null;
   error: string | null;
   status: string;
+  retryable?: boolean;
+  baseVersionId?: string;
 }
 export function LandingPromptForm({
   pageId,
@@ -57,7 +59,17 @@ export function LandingPromptForm({
     </form>
   );
 }
-export function LandingConversation({ jobs }: { jobs: ConversationJob[] }) {
+export function LandingConversation({
+  jobs,
+  currentVersionId,
+  busy,
+  onRetry,
+}: {
+  jobs: ConversationJob[];
+  currentVersionId: string | null;
+  busy: boolean;
+  onRetry: (jobId: string) => Promise<void>;
+}) {
   return (
     <div
       role="log"
@@ -80,6 +92,22 @@ export function LandingConversation({ jobs }: { jobs: ConversationJob[] }) {
                     ? "生成中"
                     : job.status)}
             </p>
+            {job.status === "failed" && job.retryable && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || job.baseVersionId !== currentVersionId}
+                onClick={() => void onRetry(job.id)}
+              >
+                この生成を再試行
+              </Button>
+            )}
+            {job.status === "failed" && job.retryable && job.baseVersionId !== currentVersionId && (
+              <p className="text-xs text-muted-foreground">
+                下書きが更新されています。最新の版から生成を依頼してください。
+              </p>
+            )}
           </article>
         ))}
       {!jobs.length && (

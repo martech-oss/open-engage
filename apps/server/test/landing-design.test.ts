@@ -73,6 +73,33 @@ describe("AI landing pages", () => {
         binding.formId,
       )
       .run();
+    await client.website.archiveForm({ id: binding.formId });
+    await env.DB.prepare("UPDATE forms SET turnstile_enabled=1 WHERE id=?")
+      .bind(binding.formId)
+      .run();
+    const formUrl = `http://localhost:8787/f/${slug}/lp-${binding.formId}`;
+    expect((await exports.default.fetch(new Request(formUrl))).status).toBe(404);
+    const pinnedUrl = new URL(formUrl);
+    pinnedUrl.searchParams.set("measurementToken", data.measurementToken);
+    expect((await exports.default.fetch(new Request(pinnedUrl))).status).toBe(200);
+    expect(
+      (
+        await post(`/f/${slug}/lp-${binding.formId}/fields`, {
+          email: "landing@example.com",
+          consent: true,
+          visitorToken: data.visitorToken,
+          measurementToken: data.measurementToken,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await post(`/f/${slug}/lp-${binding.formId}`, {
+          email: "denied@example.com",
+          idempotencyKey: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(404);
     const submitted = await post(`/f/${slug}/lp-${binding.formId}`, {
       email: "landing@example.com",
       consent: true,

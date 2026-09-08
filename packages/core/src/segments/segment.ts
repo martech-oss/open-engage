@@ -80,9 +80,16 @@ function compileNode(
       params.push(`$.${sanitizeJsonPath(filter.key ?? "")}`);
       column = `json_extract(${column}, ?)`;
     }
-    const expression = scalarExpression(column, filter, params);
-    if (scope === related[0]) return expression;
-    return `EXISTS (SELECT 1 ${relatedQuery(related[0])} AND ${expression})`;
+    if (scope === related[0]) return scalarExpression(column, filter, params);
+    // An unscoped absence condition means no related row has a value. Inside
+    // an explicit relation it instead tests the nullable field of that row.
+    const absent = filter.operator === "not_exists";
+    const expression = scalarExpression(
+      column,
+      absent ? { ...filter, operator: "exists" } : filter,
+      params,
+    );
+    return `${absent ? "NOT " : ""}EXISTS (SELECT 1 ${relatedQuery(related[0])} AND ${expression})`;
   }
   return compileCondition(filter, params);
 }

@@ -67,7 +67,11 @@ describe("public form browser identity changes", () => {
     const listener = browserWindow.addEventListener.mock.calls.find(
       (call) => call[0] === "message",
     )?.[1] as (event: unknown) => void;
-    listener({ source: parent, data: { type: "openengage:identity", consent: false } });
+    listener({
+      source: parent,
+      origin: "https://external.example",
+      data: { type: "openengage:identity", consent: false },
+    });
     expect(job.disabled).toBe(false);
     expect(job.required).toBe(true);
     expect(document.querySelector('[name="oe_v"]')).toBeNull();
@@ -111,4 +115,56 @@ describe("public form browser identity changes", () => {
     expect(size.disabled).toBe(true);
     expect(new FormData(document.querySelector("form")!).has("custom:size")).toBe(false);
   });
+});
+
+it("returns a rotated identity to the verified parent when the referrer is absent", async () => {
+  vi.spyOn(document, "referrer", "get").mockReturnValue("");
+  const parent = { postMessage: vi.fn<(message: unknown, origin: string) => void>() };
+  const browserWindow = {
+    parent,
+    addEventListener: vi.fn<(name: string, listener: (event: unknown) => void) => void>(),
+  };
+  const html = renderPublicForm(
+    "Inquiry",
+    { fields: [{ key: "email", type: "email", required: true }] },
+    "https://forms.example/f/acme/inquiry",
+  );
+  document.body.innerHTML = html.match(/<body>([\s\S]*?)<script>/)?.[1] ?? "";
+  const fetcher = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async (url) =>
+    Response.json({
+      data: url.endsWith("/fields")
+        ? { answered: [] }
+        : { visitorToken: "rotated-bob", message: "Done" },
+    }),
+  );
+  // oxlint-disable-next-line typescript/no-implied-eval -- Run only our generated form runtime in a controlled DOM.
+  new Function(
+    "window",
+    "document",
+    "fetch",
+    "location",
+    html.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "",
+  )(browserWindow, document, fetcher, { origin: "https://forms.example" });
+  const listener = browserWindow.addEventListener.mock.calls.find(
+    (call) => call[0] === "message",
+  )![1];
+  listener({
+    source: parent,
+    origin: "https://external.example",
+    data: { type: "openengage:identity", consent: true, visitorToken: "alice" },
+  });
+  listener({
+    source: {},
+    origin: "https://spoof.example",
+    data: { type: "openengage:identity", consent: true, visitorToken: "spoof" },
+  });
+  const form = document.querySelector("form")!;
+  form.querySelector<HTMLInputElement>('[name="email"]')!.value = "bob@example.com";
+  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await vi.waitFor(() =>
+    expect(parent.postMessage).toHaveBeenCalledWith(
+      { type: "openengage:form-identity", visitorToken: "rotated-bob" },
+      "https://external.example",
+    ),
+  );
 });

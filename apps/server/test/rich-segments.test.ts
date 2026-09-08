@@ -179,3 +179,46 @@ it("validates advertised stage unary predicates and custom value types before SQ
   });
   expect(invalid.valid).toBe(false);
 });
+
+it("negates unscoped related existence while retaining same-row null checks inside a scope", async () => {
+  const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB);
+  const none = await client.contacts.create({ email: "no-deals@example.com" });
+  const missing = await client.contacts.create({ email: "unassigned-deal@example.com" });
+  const mixed = await client.contacts.create({ email: "mixed-deals@example.com" });
+  const pipeline = (await client.deals.options()).pipelines[0]!;
+  for (const contact of [missing, mixed])
+    await client.deals.create({
+      name: contact.email!,
+      contactId: contact.id,
+      pipelineId: pipeline.id,
+      stageId: pipeline.stages[0]!.id,
+    });
+  const owned = await client.deals.create({
+    name: "Owned",
+    contactId: mixed.id,
+    pipelineId: pipeline.id,
+    stageId: pipeline.stages[0]!.id,
+  });
+  await env.DB.prepare("UPDATE deals SET owner_user_id=? WHERE id=?").bind(userId, owned.id).run();
+  async function ids(value: unknown) {
+    const filter = segmentFilterSchema.parse(value);
+    const compiled = compileSegmentFilter(workspaceId, filter);
+    const rows = await env.DB.prepare(compiled.sql)
+      .bind(...compiled.params)
+      .all<{ id: string }>();
+    return rows.results.map((row) => row.id).sort();
+  }
+  expect(
+    await ids({ kind: "condition", field: "deal_stage_id", operator: "not_exists", value: null }),
+  ).toEqual([none.id]);
+  const absentOwner = {
+    kind: "condition",
+    field: "deal_owner_user_id",
+    operator: "not_exists",
+    value: null,
+  };
+  expect(await ids(absentOwner)).toEqual([none.id, missing.id].sort());
+  expect(
+    await ids({ kind: "group", relation: "deal", combinator: "and", children: [absentOwner] }),
+  ).toEqual([missing.id, mixed.id].sort());
+});

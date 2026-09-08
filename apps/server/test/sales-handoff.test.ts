@@ -33,14 +33,30 @@ describe("sales handoff and unified tasks", () => {
       .first();
     expect(row).toEqual({ owner_user_id: userId, lifecycle_stage: "mql" });
   });
-  it("fails empty assignment without task or owner effects", async () => {
-    const { client } = await seedWorkspaceClient(env.DB);
+  it("fails assignment after its last member becomes ineligible without partial effects", async () => {
+    const fixture = await seedWorkspaceClient(env.DB);
+    const { client, userId, workspaceId } = fixture;
+    await seedMember(env.DB, fixture);
     const contact = await client.contacts.create({ email: "empty@example.com" });
     const group = await client.deals.saveAssignmentGroup({
-      name: "Empty",
-      userIds: [],
+      name: "Sales",
+      userIds: [userId],
       mode: "round_robin",
     });
+    await expect(
+      client.deals.saveAssignmentGroup({
+        id: group.id,
+        name: "Empty",
+        mode: "round_robin",
+        userIds: [],
+      }),
+    ).rejects.toThrow();
+    expect(
+      (await client.deals.assignmentGroups()).find((item) => item.id === group.id)?.userIds,
+    ).toEqual([userId]);
+    await env.DB.prepare("DELETE FROM member WHERE organization_id=? AND user_id=?")
+      .bind(workspaceId, userId)
+      .run();
     await expect(
       client.deals.handoff({
         contactId: contact.id,

@@ -38,6 +38,7 @@ export function ContactSales({ contactId }: { contactId: string }) {
     [dueAt, setDueAt] = useState(""),
     [preserveOwner, setPreserveOwner] = useState(true);
   const executionKey = useRef<string | null>(null);
+  const groupSelected = assignment.startsWith("group:");
   const canManage = bootstrap?.workspace?.capabilities.manageMarketing ?? false;
   const error = handoff.error ?? create.error ?? status.error ?? update.error ?? remove.error;
   return (
@@ -114,17 +115,18 @@ export function ContactSales({ contactId }: { contactId: string }) {
             value={assignment}
             onChange={(event) => setAssignment(event.target.value)}
           >
-            <NativeSelectOption value="">現在の担当者を使用</NativeSelectOption>
+            <NativeSelectOption value="">指定なし</NativeSelectOption>
             {members.map((member) => (
               <NativeSelectOption key={member.id} value={`user:${member.id}`}>
                 {member.name}
               </NativeSelectOption>
             ))}
-            {groups.map((group) => (
-              <NativeSelectOption key={group.id} value={`group:${group.id}`}>
-                {group.name} ({group.mode})
-              </NativeSelectOption>
-            ))}
+            {!editingId &&
+              groups.map((group) => (
+                <NativeSelectOption key={group.id} value={`group:${group.id}`}>
+                  {group.name} ({group.mode})
+                </NativeSelectOption>
+              ))}
           </NativeSelect>
           <Input
             aria-label="期限"
@@ -140,6 +142,11 @@ export function ContactSales({ contactId }: { contactId: string }) {
             />
             有効な現在の担当者を保持
           </label>
+          {groupSelected && (
+            <p className="text-sm text-muted-foreground">
+              グループへの割り当ては「営業へ引き継ぐ」から実行してください。タスク追加には個人の担当者を選択してください。
+            </p>
+          )}
           <div className="flex gap-2">
             {!editingId && (
               <Button
@@ -172,8 +179,9 @@ export function ContactSales({ contactId }: { contactId: string }) {
             )}
             <Button
               variant="outline"
-              disabled={create.isPending || update.isPending || !title.trim()}
+              disabled={create.isPending || update.isPending || !title.trim() || groupSelected}
               onClick={() => {
+                if (groupSelected) return;
                 const fields = {
                   type,
                   title,

@@ -63,6 +63,21 @@ export const landingDesignProcedures = {
     }
     return landingGenerationJobSchema.parse(job);
   }),
+  retryPageGeneration: authed.website.retryPageGeneration.handler(
+    async ({ context, input, errors }) => {
+      requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+      const repository = new LandingDesignRepository(context.database, context.workspace);
+      if (!(await repository.page(input.pageId))) throw errors.PAGE_NOT_FOUND();
+      if (!(await repository.retryGeneration(input.pageId, input.jobId, context.workspace.userId)))
+        throw errors.PAGE_CONFLICT();
+      try {
+        await context.env.JOBS_QUEUE.send({ kind: "landing_generation", jobId: input.jobId });
+      } catch {
+        /* The persisted queued state is retried by scheduled recovery. */
+      }
+      return ack;
+    },
+  ),
   publishPage: authed.website.publishPage.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     let result;

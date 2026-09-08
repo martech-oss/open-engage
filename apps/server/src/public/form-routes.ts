@@ -7,8 +7,8 @@ import type { AppEnvironment } from "../env";
 import { logError } from "../observability";
 import type { JobsQueueMessage } from "../runtime/queues";
 import { hasTurnstileConfiguration } from "../web/config";
-import { verifyMeasurementContext } from "../web/measurement-service";
 import { VisitorIdentityService } from "../web/visitor-identity-service";
+import { resolvePublicForm } from "./form-context";
 import { safeJson } from "./http";
 import { SubmitPublicFormUseCase } from "./submit-form-use-case";
 import { formEmbedScript, renderPublicForm } from "./templates";
@@ -16,17 +16,23 @@ import { formEmbedScript, renderPublicForm } from "./templates";
 export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.post("/f/:workspaceSlug/:formSlug/fields", async (context) => {
     const repository = new PublicFormRepository(context.get("database"));
-    const form = await repository.findPublishedForm(
-      context.req.param("workspaceSlug"),
-      context.req.param("formSlug"),
-    );
-    if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
     context.header("Cache-Control", "private, no-store");
     const body = (await safeJson(context)) as {
       consent?: unknown;
       visitorToken?: unknown;
       email?: unknown;
+      measurementToken?: unknown;
     } | null;
+    const resolved = await resolvePublicForm(context.get("database"), context.env, {
+      workspaceSlug: context.req.param("workspaceSlug"),
+      formSlug: context.req.param("formSlug"),
+      measurementToken: body?.measurementToken,
+    });
+    if (resolved.kind === "form_not_found")
+      return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (resolved.kind === "invalid_context")
+      return apiError(context, 422, "invalid_context", "ページの参照が無効です");
+    const { form } = resolved;
     const visitor =
       body?.consent === true
         ? await new VisitorIdentityService(context.get("database"), context.env).resolve(
@@ -75,26 +81,19 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
   });
 
   publicApp.get("/f/:workspaceSlug/:formSlug", async (context) => {
-    let form = await new PublicFormRepository(context.get("database")).findPublishedForm(
-      context.req.param("workspaceSlug"),
-      context.req.param("formSlug"),
-    );
-    if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
-    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env)) {
-      return apiError(context, 503, "turnstile_not_configured", "Turnstileが設定されていません");
-    }
     const measurementToken = context.req.query("measurementToken");
-    if (measurementToken) {
-      const measurement = await verifyMeasurementContext(
-        context.get("database"),
-        context.env,
-        measurementToken,
-        { workspaceId: form.workspaceId, formId: form.id },
-      );
-      if (!measurement?.form)
-        return apiError(context, 422, "invalid_context", "ページの参照が無効です");
-      form = measurement.form;
-    }
+    const resolved = await resolvePublicForm(context.get("database"), context.env, {
+      workspaceSlug: context.req.param("workspaceSlug"),
+      formSlug: context.req.param("formSlug"),
+      measurementToken,
+    });
+    if (resolved.kind === "form_not_found")
+      return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (resolved.kind === "invalid_context")
+      return apiError(context, 422, "invalid_context", "ページの参照が無効です");
+    const { form } = resolved;
+    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env))
+      return apiError(context, 503, "turnstile_not_configured", "Turnstileが設定されていません");
     const domains = form.allowedDomains;
     const frameAncestors =
       domains.length > 0
