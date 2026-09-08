@@ -78,3 +78,64 @@ export function usePublishAutomationDraft() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
   });
 }
+
+export function automationExecutionOptionsQueryOptions() {
+  return orpcQuery.automations.executionOptions.queryOptions();
+}
+export function automationFilterCatalogQueryOptions() {
+  return orpcQuery.segments.options.queryOptions();
+}
+export function automationStaticListsQueryOptions() {
+  return orpcQuery.segments.list.queryOptions({ input: { kind: "static" } });
+}
+export function automationRunsQueryOptions(id: string) {
+  return {
+    ...orpcQuery.automations.listRuns.queryOptions({ input: { id } }),
+    refetchInterval: 5000,
+  };
+}
+export function automationRunDetailQueryOptions(id: string, runId: string, cursor?: string) {
+  return {
+    ...orpcQuery.automations.runDetail.queryOptions({
+      input: { id, runId, ...(cursor ? { cursor } : {}) },
+    }),
+    refetchInterval: 5000,
+  };
+}
+export function automationEnrollmentDetailQueryOptions(id: string, enrollmentId: string) {
+  return {
+    ...orpcQuery.automations.enrollmentDetail.queryOptions({ input: { id, enrollmentId } }),
+    refetchInterval: 5000,
+  };
+}
+export function usePreviewAutomationRun() {
+  return useMutation(orpcQuery.automations.previewRun.mutationOptions());
+}
+export function useStartAutomationRun() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.automations.startRun.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.automations.listRuns.key() }),
+  });
+}
+export function useCancelAutomationRun() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.automations.cancelRun.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.automations.key() }),
+  });
+}
+export function useCancelAutomationEnrollment() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.automations.cancelEnrollment.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.automations.key() }),
+  });
+}
+
+export function automationEnrollmentsQueryOptions(id: string) {
+  return {
+    ...orpcQuery.automations.listEnrollments.queryOptions({ input: { id } }),
+    refetchInterval: 5000,
+  };
+}

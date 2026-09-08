@@ -1,12 +1,18 @@
 import {
   validateAutomation,
+  pinAutomationDependencies,
+  type AutomationExecutionSnapshot,
   type ApplyEmailSequenceResult,
   type AutomationDefinition,
   type AutomationValidationIssue,
   type EmailSequenceProposal,
 } from "@openengage/core/automations";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { AutomationRepository } from "@openengage/database/automations";
+import {
+  AutomationRepository,
+  AutomationPublicationRepository,
+  AutomationPublicationConflictError,
+} from "@openengage/database/automations";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import { writeAuditLog } from "@openengage/database/platform";
 import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
@@ -16,6 +22,7 @@ import {
   type CommandBriefReference,
   type CommandBriefResolution,
 } from "../projects/brief-resolution";
+import { resolveProjectVariables } from "../projects/variable-service";
 import { applyEmailSequence, EmailSequenceError } from "./email-sequence-service";
 import {
   loadAutomationResourceContext,
@@ -49,6 +56,7 @@ interface AutomationCommandRepositoryPort {
     draftVersionId: string;
     version: number;
     graph: AutomationDefinition;
+    rawGraph?: string;
   } | null>;
   publishDraft(input: {
     automationId: string;
@@ -56,12 +64,14 @@ interface AutomationCommandRepositoryPort {
     currentVersion: number;
     timezone: string;
     graph: AutomationDefinition;
+    snapshot?: AutomationExecutionSnapshot;
+    expectedGraph?: string;
     trigger: {
       sourceNodeId: string;
       source: string;
       eventType: string | null;
       resourceId: string | null;
-      reentry: "once" | "every_time";
+      reentry: "once" | "every_time" | "cooldown";
       inactivityDays: number | null;
     };
   }): Promise<{ draftVersionId: string }>;
@@ -69,6 +79,10 @@ interface AutomationCommandRepositoryPort {
 }
 
 export interface AutomationCommandPorts {
+  preparePublication?(
+    id: string,
+    definition: AutomationDefinition,
+  ): Promise<AutomationExecutionSnapshot>;
   repository: AutomationCommandRepositoryPort;
   resolveBrief(reference: CommandBriefReference): Promise<CommandBriefResolution>;
   classifyWriteError(
@@ -190,21 +204,40 @@ export class AutomationCommandService {
       return { kind: "invalid_graph", message: "開始条件がありません", issues: [] };
     }
     const trigger = automationTrigger(source.config);
-    const published = await this.ports.repository.publishDraft({
-      automationId: id,
-      draftVersionId: row.draftVersionId,
-      currentVersion: row.version,
-      timezone: definition.timezone,
-      graph: row.graph,
-      trigger: {
-        sourceNodeId: source.id,
-        source: source.config.source,
-        eventType: trigger.eventType,
-        resourceId: trigger.resourceId,
-        reentry: source.config.reentry,
-        inactivityDays: trigger.inactivityDays,
-      },
-    });
+    let snapshot: AutomationExecutionSnapshot | undefined;
+    try {
+      snapshot = await this.ports.preparePublication?.(id, definition);
+    } catch (error) {
+      return {
+        kind: "invalid_graph",
+        message: error instanceof Error ? error.message : String(error),
+        issues: [],
+      };
+    }
+    let published: { draftVersionId: string };
+    try {
+      published = await this.ports.repository.publishDraft({
+        automationId: id,
+        draftVersionId: row.draftVersionId,
+        currentVersion: row.version,
+        timezone: definition.timezone,
+        graph: row.graph,
+        ...(row.rawGraph ? { expectedGraph: row.rawGraph } : {}),
+        ...(snapshot ? { snapshot } : {}),
+        trigger: {
+          sourceNodeId: source.id,
+          source: source.config.source,
+          eventType: trigger.eventType,
+          resourceId: trigger.resourceId,
+          reentry: source.config.reentry,
+          inactivityDays: trigger.inactivityDays,
+        },
+      });
+    } catch (error) {
+      if (error instanceof AutomationPublicationConflictError)
+        return { kind: "invalid_graph", message: error.message, issues: [] };
+      throw error;
+    }
     return {
       kind: "ok",
       automation: {
@@ -275,6 +308,27 @@ export function createAutomationCommandService(input: {
   const repository = new AutomationRepository(input.database, input.workspace);
   return new AutomationCommandService(input.workspace, {
     repository,
+    preparePublication: async (id, definition) =>
+      pinAutomationDependencies(
+        id,
+        definition,
+        await resolveProjectVariables(
+          input.database,
+          input.workspace.workspaceId,
+          definition.variableProjectId ?? null,
+        ),
+        (childId) =>
+          new AutomationPublicationRepository(input.database, input.workspace).publishedDependency(
+            childId,
+          ),
+        async (graph) => {
+          const issues = validateAutomationResources(
+            graph,
+            await loadAutomationResourceContext(input.database, input.workspace),
+          );
+          if (issues.length) throw new Error(issues.map((issue) => issue.message).join("; "));
+        },
+      ),
     resolveBrief: (reference) => resolveCommandBrief(input.database, input.workspace, reference),
     classifyWriteError: (error) => {
       if (error instanceof ProjectBriefLinkConflictError) return "brief_conflict";

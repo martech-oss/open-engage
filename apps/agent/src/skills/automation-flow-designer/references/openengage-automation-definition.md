@@ -61,7 +61,7 @@ Publishing an email action requires a real published, unarchived transactional t
 
 ## Condition nodes
 
-Set `type` to `condition`. The config is `{ "field", "operator", "value" }`. Operators are `eq`, `neq`, `contains`, `starts_with`, `in`, `gt`, `gte`, `lt`, `lte`, `exists`, and `not_exists`. Prefer documented OpenEngage scalar contact fields. The condition-node schema has no `key`, so do not pretend it can express keyed `event` or `custom_field` segment conditions.
+Set `type` to `condition`. The preferred config is `{ "filter": SegmentFilter }` with the shared nested AND/OR conditions, related company/deal/event/project_member row scope and minimumCount. Legacy scalar config `{ "field", "operator", "value" }` remains readable. Operators are `eq`, `neq`, `contains`, `starts_with`, `in`, `gt`, `gte`, `lt`, `lte`, `exists`, and `not_exists`. Prefer documented OpenEngage scalar contact fields. Use the filter form for keyed custom fields, behavioral periods/counts, category scores and Project membership.
 
 A condition must branch with `yes` and/or `no` edges.
 
@@ -93,4 +93,17 @@ Each edge is `{ "id", "source", "target", "branch" }`.
 - Keep node IDs and edge IDs unique.
 - Reference existing endpoints only.
 - Ensure exactly one source, no cycles, and all nodes reachable from the source.
-- Do not create two outgoing edges with the same branch from one node, even though the core graph validator does not currently reject that ambiguity.
+- Do not create two outgoing edges with the same branch from one node, the core graph validator rejects that ambiguity.
+
+## Execution controls and publication
+
+- `variableProjectId: string | null` explicitly selects Project variable overrides (null means Workspace). Callable children inherit the parent's resolved context.
+- Sources also support `batch` (`audience` + `schedule`), `callable`, and `project_member_joined` / `project_member_progressed` / `project_member_succeeded` (`projectId`).
+- `audience`: `{kind:"segment",segmentId}` for a static list, or `{kind:"filter",filter:SegmentFilter}`.
+- `schedule`: `{kind:"now"}` (manual), `{kind:"once",at:ISO}`, `{kind:"daily",hour,minute}`, `{kind:"weekly",weekdays:[0..6],hour,minute}`, `{kind:"monthly",day:1..31,hour,minute}`. All use graph timezone; nonexistent monthly days clamp to month end; DST gaps skip and folds run first occurrence. Missed slots collapse to latest one.
+- Source `reentry`: once/every_time/cooldown. Cooldown requires positive cooldownMinutes, measured from the last enrollment start across all published versions.
+- `upsert_project_member`: projectId and optional statusId; normal forward progress only. Use published program statuses.
+- `change_score`: amount plus optional operation add/set (default add), categoryId (default overall). Negative add amounts subtract.
+- `call_automation`: automationId selected from callableAutomations, mode await/async. Await blocks until child flow completion and propagates failure/cancellation; async continues immediately. Explicit cancellation cascades to descendants. Webhook completion means accepted for delivery.
+- Publishing pins all callable versions and variables. Child republishing changes no existing parent; republish parent to adopt changes. Cycles and cross-workspace references are rejected.
+- Typed VariableRef `{kind:"variable",key,type}` supports number for delay minutes / decision withinMinutes / score amount; datetime for delay at; string for handoff title; scalar types for update_field value. String literals support `{{variables.key}}`. Resource IDs are never substituted.

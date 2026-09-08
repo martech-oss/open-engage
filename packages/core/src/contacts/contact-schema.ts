@@ -31,6 +31,7 @@ export type ContactUpdate = z.infer<typeof contactUpdateSchema>;
 export const contactSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
+  acquisitionProjectId: z.string().nullable().default(null),
   visitorId: z.string().nullable(),
   email: z.string().nullable(),
   firstName: z.string().nullable(),

@@ -48,6 +48,9 @@ export class AutomationEngineRepository extends DatabaseRepository {
   ) {
     return this.jobs.completeJobAdvancingEnrollment(...args);
   }
+  public captureCondition(...args: Parameters<AutomationDecisionRepository["captureCondition"]>) {
+    return this.decisions.captureCondition(...args);
+  }
   public hasContactEventSince(
     ...args: Parameters<AutomationDecisionRepository["hasContactEventSince"]>
   ) {

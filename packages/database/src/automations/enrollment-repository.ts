@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, notExists, or, sql } from "drizzle-orm";
 
 import {
   automationDefinitionSchema,
@@ -11,6 +11,7 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import {
+  automationRunTargets,
   automationEnrollments,
   automationJobs,
   automations,
@@ -101,7 +102,7 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
    * archived contact inserts nothing and the job's FK aborts the batch; that
    * — like a duplicate (workspace, automation, contact, source event) — comes
    * back as a constraint violation and is reported as null. Note the
-   * caller-provided sourceEventId may be the "once" re-entry sentinel.
+   * caller-provided sourceEventId preserves the original event identity.
    */
   public async enrollContact(input: {
     automationId: string;
@@ -109,11 +110,47 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
     sourceNodeId: string;
     contactId: string;
     sourceEventId: string;
+    reentry?: "once" | "every_time" | "cooldown";
+    cooldownMinutes?: number;
+    now?: string;
+    runId?: string;
   }): Promise<{ enrollmentId: string; jobId: string } | null> {
     const workspaceId = this.context.workspaceId;
     const enrollmentId = uuidv7();
     const jobId = uuidv7();
-    const now = nowIso();
+    const now = input.now ?? nowIso();
+    const version = await this.database.orm
+      .select({ graph: automationVersions.graph })
+      .from(automationVersions)
+      .where(
+        and(
+          this.inWorkspace(automationVersions),
+          eq(automationVersions.id, input.automationVersionId),
+          eq(automationVersions.automationId, input.automationId),
+          eq(automationVersions.status, "published"),
+        ),
+      )
+      .get();
+    if (!version) return null;
+    const source = graphCodec.decode(version.graph).nodes.find((node) => node.type === "source");
+    if (!source || source.id !== input.sourceNodeId) return null;
+    const reentry = input.reentry ?? source.config.reentry;
+    const cooldown = input.cooldownMinutes ?? source.config.cooldownMinutes;
+    if (reentry === "cooldown" && (!cooldown || cooldown <= 0))
+      throw new Error("Cooldown requires a positive duration");
+    const cutoff = new Date(Date.parse(now) - (cooldown ?? 0) * 60_000).toISOString();
+    const prior = this.database.orm
+      .select({ id: automationEnrollments.id })
+      .from(automationEnrollments)
+      .where(
+        and(
+          this.inWorkspace(automationEnrollments),
+          eq(automationEnrollments.automationId, input.automationId),
+          eq(automationEnrollments.contactId, input.contactId),
+          isNull(automationEnrollments.parentJobId),
+          ...(reentry === "cooldown" ? [sql`${automationEnrollments.enteredAt} > ${cutoff}`] : []),
+        ),
+      );
     const orm = this.database.orm;
     try {
       await orm.batch([
@@ -136,6 +173,11 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
               enteredAt: sql<string>`${now}`.as("enteredAt"),
               completedAt: sql<string | null>`NULL`.as("completed_at"),
               updatedAt: sql<string>`${now}`.as("updated_at"),
+              parentJobId: sql<string | null>`NULL`.as("parent_job_id"),
+              projectId: sql<
+                string | null
+              >`${graphCodec.decode(version.graph).variableProjectId ?? null}`.as("project_id"),
+              executionSnapshot: sql<string | null>`NULL`.as("execution_snapshot"),
             })
             .from(contacts)
             .where(
@@ -143,6 +185,12 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
                 eq(contacts.workspaceId, workspaceId),
                 eq(contacts.id, input.contactId),
                 ne(contacts.status, "archived"),
+                ...(reentry === "every_time" ? [] : [notExists(prior)]),
+                ...(input.runId
+                  ? [
+                      sql`EXISTS(SELECT 1 FROM automation_runs r JOIN automation_run_targets t ON t.run_id=r.id WHERE r.workspace_id=${workspaceId} AND r.id=${input.runId} AND r.status='enrolling' AND t.contact_id=${input.contactId} AND t.status='pending')`,
+                    ]
+                  : []),
               ),
             ),
         ),
@@ -159,6 +207,21 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
           createdAt: now,
           updatedAt: now,
         }),
+        ...(input.runId
+          ? [
+              orm
+                .update(automationRunTargets)
+                .set({ status: "enrolled", enrollmentId, updatedAt: now })
+                .where(
+                  and(
+                    eq(automationRunTargets.workspaceId, workspaceId),
+                    eq(automationRunTargets.runId, input.runId),
+                    eq(automationRunTargets.contactId, input.contactId),
+                    eq(automationRunTargets.status, "pending"),
+                  ),
+                ),
+            ]
+          : []),
       ]);
       return { enrollmentId, jobId };
     } catch (error) {

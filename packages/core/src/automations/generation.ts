@@ -14,6 +14,9 @@ export const AUTOMATION_RESOURCE_KINDS = [
   "tag",
   "webhook_endpoint",
   "subscription_topic",
+  "project",
+  "automation",
+  "scoring_category",
 ] as const;
 
 export const automationResourceKindSchema = z.enum(AUTOMATION_RESOURCE_KINDS);
@@ -113,6 +116,9 @@ export const automationGenerationResultSchema = z.discriminatedUnion("status", [
 export type AutomationGenerationResult = z.infer<typeof automationGenerationResultSchema>;
 
 export const automationGenerationCatalogSchema = z.object({
+  projects: z.array(automationResourceOptionSchema).max(1000).optional(),
+  callableAutomations: z.array(automationResourceOptionSchema).max(1000).optional(),
+  scoringCategories: z.array(automationResourceOptionSchema).max(1000).optional(),
   timezone: z.string().min(1),
   emailTemplates: z.array(automationResourceOptionSchema).max(1_000),
   forms: z.array(automationResourceOptionSchema).max(1_000),

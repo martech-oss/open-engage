@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "email:dev": "email dev --dir src/auth/email-templates",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && node scripts/check-no-raw-sql.mjs",
+    "test": "vitest run && node --test scripts/public-form-runtime.check.mjs && node scripts/check-no-raw-sql.mjs",
     "cf:types": "wrangler types --env-interface ServerBindings",
     "db:migrate:local": "wrangler d1 migrations apply openengage-db --local --persist-to ../client/.wrangler/state",
     "db:migrate:remote": "wrangler d1 migrations apply openengage-db --remote"

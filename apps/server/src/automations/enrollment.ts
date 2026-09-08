@@ -56,7 +56,7 @@ export async function enrollInactiveContacts(
     const repository = new AutomationRepository(database, { workspaceId: candidate.workspaceId });
     const result = await enrollFromTrigger(repository, candidate, {
       contactId: candidate.contactId,
-      sourceEventId: `inactive:${candidate.automationVersionId}:${candidate.contactId}`,
+      sourceEventId: `inactive:${candidate.automationId}:${candidate.contactId}:${candidate.lastActivityAt}`,
     });
     if (result) enrolled += 1;
   }
@@ -91,6 +91,7 @@ export async function enrollContactManually(
     contactId: input.contactId,
     sourceNodeId: source.id,
     sourceEventId: input.sourceEventId ?? uuidv7(),
+    reentry: source.config.reentry,
   });
   if (!result) return { kind: "already_enrolled" };
   return { kind: "enrolled", result };
@@ -105,7 +106,7 @@ export async function enrollPublishedAutomation(
     contactId: string;
     sourceNodeId: string;
     sourceEventId: string;
-    reentry?: "once" | "every_time";
+    reentry?: "once" | "every_time" | "cooldown";
   },
 ): Promise<EnrollmentResult | null> {
   return enrollFromTrigger(
@@ -114,7 +115,7 @@ export async function enrollPublishedAutomation(
       automationId: input.automationId,
       automationVersionId: input.automationVersionId,
       sourceNodeId: input.sourceNodeId,
-      reentry: input.reentry ?? "every_time",
+      reentry: input.reentry ?? "published",
     },
     {
       contactId: input.contactId,
@@ -131,9 +132,8 @@ async function enrollFromTrigger(
     sourceEventId: string;
   },
 ): Promise<EnrollmentResult | null> {
-  // "once" re-entry is enforced by storing the sentinel string "once" as the
-  // source event id, which trips the enrollment unique index on any repeat.
-  const sourceEventId = trigger.reentry === "once" ? "once" : input.sourceEventId;
+  // Preserve event identity across policy/version changes; SQL arbitrates reentry.
+  const sourceEventId = input.sourceEventId;
   return repository.enrollContact({
     automationId: trigger.automationId,
     automationVersionId: trigger.automationVersionId,

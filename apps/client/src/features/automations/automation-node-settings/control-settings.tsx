@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 
 import type { AutomationNode } from "@openengage/core/automations";
+import type { SegmentOperator } from "@openengage/core/segments";
 
-import { formatDuration } from "../automation-labels";
+import { AutomationFilterEditor } from "../automation-filter-editor";
 import { SettingInput, SettingSelect } from "./fields";
-import { delayModeIs, nodeTypeIs, patchNodeConfig, type NodeUpdate } from "./node-config";
+import { nodeTypeIs, patchNodeConfig, type NodeUpdate } from "./node-config";
+import { VariableSetting } from "./variable-setting";
 
 export function DelaySettings({
   node,
@@ -13,25 +15,85 @@ export function DelaySettings({
   node: Extract<AutomationNode, { type: "delay" }>;
   onUpdate: NodeUpdate;
 }): ReactNode {
-  if (node.config.mode !== "relative") {
-    return (
-      <p className="text-sm text-muted-foreground">相対待機へ変更すると画面で編集できます。</p>
-    );
-  }
+  const config = node.config;
+  const change = (config: Extract<AutomationNode, { type: "delay" }>["config"]) =>
+    onUpdate((current) => (current.type === "delay" ? { ...current, config } : current));
   return (
-    <SettingInput
-      label="待機時間（分）"
-      type="number"
-      min={1}
-      max={525600}
-      value={String(node.config.minutes)}
-      description={`${formatDuration(node.config.minutes)} 待ってから次へ進みます。`}
-      onChange={(value) =>
-        patchNodeConfig(onUpdate, delayModeIs("relative"), () => ({
-          minutes: Math.max(1, Number(value) || 1),
-        }))
-      }
-    />
+    <>
+      <SettingSelect
+        label="待機の方法"
+        value={config.mode}
+        options={[
+          ["relative", "一定時間待つ"],
+          ["absolute", "日時まで待つ"],
+          ["window", "曜日・時間帯に合わせる"],
+        ]}
+        onChange={(mode) =>
+          change(
+            mode === "absolute"
+              ? { mode, at: new Date(Date.now() + 3600000).toISOString() }
+              : mode === "window"
+                ? { mode, minutes: 60, weekdays: [1, 2, 3, 4, 5], startHour: 9, endHour: 18 }
+                : { mode: "relative", minutes: 60 },
+          )
+        }
+      />
+      {config.mode === "absolute" ? (
+        <VariableSetting
+          label="待機終了日時"
+          type="datetime"
+          value={config.at}
+          onChange={(at) => change({ ...config, at })}
+        />
+      ) : (
+        <VariableSetting
+          label="待機時間（分）"
+          type="number"
+          value={config.minutes}
+          onChange={(minutes) => change({ ...config, minutes })}
+        />
+      )}
+      {config.mode === "window" ? (
+        <>
+          <SettingInput
+            label="開始時刻"
+            type="number"
+            min={0}
+            max={23}
+            value={config.startHour}
+            onChange={(value) => change({ ...config, startHour: Number(value) })}
+          />
+          <SettingInput
+            label="終了時刻"
+            type="number"
+            min={1}
+            max={24}
+            value={config.endHour}
+            onChange={(value) => change({ ...config, endHour: Number(value) })}
+          />
+          <fieldset>
+            <legend>曜日</legend>
+            {["日", "月", "火", "水", "木", "金", "土"].map((day, index) => (
+              <label key={day}>
+                <input
+                  type="checkbox"
+                  checked={config.weekdays.includes(index)}
+                  onChange={(event) =>
+                    change({
+                      ...config,
+                      weekdays: event.target.checked
+                        ? [...config.weekdays, index]
+                        : config.weekdays.filter((day) => day !== index),
+                    })
+                  }
+                />
+                {day}
+              </label>
+            ))}
+          </fieldset>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -71,16 +133,12 @@ export function DecisionSettings({
           }))
         }
       />
-      <SettingInput
+      <VariableSetting
         label="待機上限（分）"
         type="number"
-        min={1}
-        max={525600}
-        value={String(node.config.withinMinutes)}
-        onChange={(value) =>
-          patchNodeConfig(onUpdate, nodeTypeIs("decision"), () => ({
-            withinMinutes: Math.max(1, Number(value) || 1),
-          }))
+        value={node.config.withinMinutes}
+        onChange={(withinMinutes) =>
+          patchNodeConfig(onUpdate, nodeTypeIs("decision"), () => ({ withinMinutes }))
         }
       />
       <p className="text-xs leading-5 text-muted-foreground">
@@ -97,11 +155,41 @@ export function ConditionSettings({
   node: Extract<AutomationNode, { type: "condition" }>;
   onUpdate: NodeUpdate;
 }): ReactNode {
+  const config = node.config;
+  if ("filter" in config)
+    return (
+      <AutomationFilterEditor
+        value={config.filter}
+        onChange={(filter) =>
+          onUpdate((current) =>
+            current.type === "condition" ? { ...current, config: { filter } } : current,
+          )
+        }
+      />
+    );
   return (
     <>
+      <button
+        type="button"
+        className="text-sm underline"
+        onClick={() =>
+          onUpdate((current) =>
+            current.type === "condition"
+              ? {
+                  ...current,
+                  config: {
+                    filter: { kind: "condition", field: "status", operator: "eq", value: "active" },
+                  },
+                }
+              : current,
+          )
+        }
+      >
+        会社・商談・行動・施策条件を追加
+      </button>
       <SettingInput
         label="連絡先フィールド"
-        value={node.config.field}
+        value={config.field}
         placeholder="stage"
         onChange={(value) =>
           patchNodeConfig(onUpdate, nodeTypeIs("condition"), () => ({ field: value }))
@@ -109,10 +197,10 @@ export function ConditionSettings({
       />
       <SettingSelect
         label="比較"
-        value={node.config.operator}
+        value={config.operator}
         onChange={(value) =>
-          patchNodeConfig(onUpdate, nodeTypeIs("condition"), (config) => ({
-            operator: value as typeof config.operator,
+          patchNodeConfig(onUpdate, nodeTypeIs("condition"), () => ({
+            operator: value as SegmentOperator,
           }))
         }
         options={[
@@ -129,11 +217,7 @@ export function ConditionSettings({
       />
       <SettingInput
         label="比較する値"
-        value={
-          typeof node.config.value === "string"
-            ? node.config.value
-            : String(node.config.value ?? "")
-        }
+        value={typeof config.value === "string" ? config.value : String(config.value ?? "")}
         onChange={(value) => patchNodeConfig(onUpdate, nodeTypeIs("condition"), () => ({ value }))}
       />
       <p className="text-xs leading-5 text-muted-foreground">

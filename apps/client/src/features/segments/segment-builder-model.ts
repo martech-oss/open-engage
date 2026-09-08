@@ -8,6 +8,7 @@ import {
   type SegmentResourceOption,
 } from "@openengage/core/segments";
 
+import { programSegmentOptions } from "./program-segment-options";
 import { createSegmentCondition, normalizeSegmentOperator } from "./segment-fields";
 
 export interface SegmentDefaultValues {
@@ -142,6 +143,8 @@ export function segmentOptionsForField(
   field: SegmentField,
   catalog: SegmentGenerationCatalog,
 ): SegmentResourceOption[] {
+  const programOptions = programSegmentOptions(field, catalog);
+  if (programOptions) return programOptions;
   switch (field) {
     case "status":
       return ["active", "anonymous"].map((value) => ({ id: value, name: value, value }));
@@ -224,10 +227,13 @@ export function mapSegmentDateValues(
       : { ...filter, children };
   }
   const isDate =
-    filter.field === "created_at" ||
-    filter.field === "updated_at" ||
+    getSegmentFieldDefinition(filter.field).valueType === "date" ||
     (filter.field === "custom_field" &&
       catalog.customFields.some(
+        (field) => field.value === filter.key && field.dataType === "date",
+      )) ||
+    (filter.field === "company_custom_field" &&
+      (catalog.companyCustomFields ?? []).some(
         (field) => field.value === filter.key && field.dataType === "date",
       ));
   if (!isDate) return filter;

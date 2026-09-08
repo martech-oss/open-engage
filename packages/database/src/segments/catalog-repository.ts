@@ -1,5 +1,6 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
+import { projectProgramDefinitionSchema } from "@openengage/core/projects";
 import { type SegmentFilter } from "@openengage/core/segments";
 
 import { subscriptionTopics } from "../consent/schema";
@@ -11,6 +12,8 @@ import {
   tags,
 } from "../contacts/schema";
 import { dealStages, dealPipelines } from "../deals/schema";
+import { projectProgramVersions } from "../projects/program-schema";
+import { projects } from "../projects/schema";
 import { scoringCategories } from "../scoring/schema";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { segments } from "./schema";
@@ -18,6 +21,8 @@ import { filterAstCodec } from "./support";
 
 export class SegmentCatalogRepository extends WorkspaceRepository {
   public async loadGenerationCatalogRows(): Promise<{
+    projects: Array<{ id: string; name: string }>;
+    projectStatuses: Array<{ id: string; name: string; value: string }>;
     categories: Array<{ id: string; name: string }>;
     companyCustomFields: Array<{ id: string; key: string; label: string; dataType: string }>;
     dealStages: Array<{ id: string; name: string }>;
@@ -126,7 +131,35 @@ export class SegmentCatalogRepository extends WorkspaceRepository {
         .where(this.inWorkspace(dealPipelines))
         .limit(1000),
     ]);
+    const programProjects = await orm
+      .select({ id: projects.id, name: projects.name })
+      .from(projects)
+      .where(and(this.inWorkspace(projects), isNull(projects.archivedAt)))
+      .limit(1000);
+    const programVersions = await orm
+      .select()
+      .from(projectProgramVersions)
+      .where(this.inWorkspace(projectProgramVersions))
+      .orderBy(desc(projectProgramVersions.version))
+      .limit(1000);
     return {
+      projects: programProjects,
+      projectStatuses: programVersions
+        .flatMap((version) =>
+          projectProgramDefinitionSchema
+            .parse(JSON.parse(version.definition))
+            .statuses.map((status) => ({
+              id: `${version.projectId}:${version.version}:${status.id}`,
+              value: JSON.stringify([version.projectId, version.version, status.id]),
+              programStatus: {
+                projectId: version.projectId,
+                definitionVersion: version.version,
+                statusId: status.id,
+              },
+              name: `${programProjects.find((p) => p.id === version.projectId)?.name ?? version.projectId} / v${version.version} / ${status.label}`,
+            })),
+        )
+        .slice(0, 1000),
       categories: categoryRows,
       companyCustomFields: companyFieldRows,
       dealStages: dealStageRows,

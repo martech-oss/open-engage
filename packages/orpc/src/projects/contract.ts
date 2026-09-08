@@ -22,6 +22,8 @@ import {
   workspaceErrors,
 } from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
+import { projectCloneContract } from "./clone-contract";
+import { variablesContract } from "./variable-contract";
 
 const expectedRowVersionInput = {
   expectedRowVersion: z.number().int().positive().optional(),
@@ -36,7 +38,12 @@ const costErrors = {
 };
 const costIdInput = idInput.extend({ costId: z.uuid() });
 
+import { programContract } from "./program-contract";
+
 export const projectsContract = {
+  ...programContract,
+  ...projectCloneContract,
+  ...variablesContract,
   listCosts: oc
     .route({ method: "GET", path: "/projects/{id}/costs" })
     .errors(costErrors)

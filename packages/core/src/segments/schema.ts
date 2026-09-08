@@ -22,10 +22,22 @@ export const segmentConditionSchema = z
     kind: z.literal("condition"),
     field: segmentFieldSchema,
     key: z.string().max(191).optional(),
+    program: z
+      .object({ projectId: z.string().min(1), definitionVersion: z.number().int().positive() })
+      .optional(),
     operator: segmentOperatorSchema,
     value: segmentValueSchema,
   })
   .superRefine((condition, context) => {
+    if (
+      condition.program &&
+      (condition.field !== "project_status" || !["eq", "neq", "in"].includes(condition.operator))
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["program"],
+        message: "A program version qualifies only project_status eq, neq or in",
+      });
     if (!isSegmentOperatorAllowed(condition.field, condition.operator)) {
       context.addIssue({
         code: "custom",
@@ -63,22 +75,22 @@ export interface SegmentGroup {
   kind: "group";
   combinator: "and" | "or";
   children: SegmentFilter[];
-  relation?: "company" | "deal" | "event" | undefined;
+  relation?: "company" | "deal" | "event" | "project_member" | undefined;
   negated?: boolean | undefined;
   minimumCount?: number | undefined;
 }
 
 export type SegmentFilter = SegmentCondition | SegmentGroup;
 
-export const segmentFilterSchema: z.ZodType<SegmentFilter> = z.lazy(() =>
+const segmentNodeSchema: z.ZodType<SegmentFilter> = z.lazy(() =>
   z.union([
     segmentConditionSchema,
     z
       .object({
         kind: z.literal("group"),
         combinator: z.enum(["and", "or"]),
-        children: z.array(segmentFilterSchema).min(1).max(25),
-        relation: z.enum(["company", "deal", "event"]).optional(),
+        children: z.array(segmentNodeSchema).min(1).max(25),
+        relation: z.enum(["company", "deal", "event", "project_member"]).optional(),
         negated: z.boolean().optional(),
         minimumCount: z.number().int().min(1).max(1000000).optional(),
       })
@@ -91,6 +103,46 @@ export const segmentFilterSchema: z.ZodType<SegmentFilter> = z.lazy(() =>
         "Count requires a related-row scope",
       ),
   ]),
+);
+
+export const segmentFilterSchema: z.ZodType<SegmentFilter> = segmentNodeSchema.superRefine(
+  (filter, context) => {
+    function validate(
+      node: SegmentFilter,
+      scope: SegmentGroup["relation"],
+      path: (string | number)[],
+    ) {
+      if (node.kind === "group") {
+        node.children.forEach((child, index) =>
+          validate(child, node.relation ?? scope, [...path, "children", index]),
+        );
+        return;
+      }
+      if (
+        node.field.startsWith("project_") &&
+        node.field !== "project_id" &&
+        scope !== "project_member"
+      )
+        context.addIssue({
+          code: "custom",
+          path,
+          message: "Project status/outcome/date conditions require the same project_member scope",
+        });
+      if (scope === "project_member" && !node.field.startsWith("project_"))
+        context.addIssue({
+          code: "custom",
+          path,
+          message: "A project_member scope contains only Project member conditions",
+        });
+      if (node.field === "project_success" && node.value !== 0 && node.value !== 1)
+        context.addIssue({
+          code: "custom",
+          path,
+          message: "Project success must be 1 (achieved) or 0 (not achieved)",
+        });
+    }
+    validate(filter, undefined, []);
+  },
 );
 
 function hasExplicitRelation(filter: SegmentFilter): boolean {

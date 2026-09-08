@@ -25,6 +25,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - 行動スコアのルールエンジン、製品別のカテゴリスコア、属性で決まるA〜Fグレード
 - カスタムフィールドを収集し、既知の項目を出し分けるProgressive Profiling対応フォーム
 - Projectをキャンペーンとして扱い、関与・初回接点・最終接点で受注金額を配分するアトリビューション
+- 施策参加者の進捗・成果、Automationの定期バッチ・共通処理、公開時に固定する共通変数、施策一式の複製（[操作・設計・検証記録](docs/marketo-implementation.md)）
 - Topic別購読、グローバル配信停止、Suppressionを扱うPreference Center
 - Contact・Automation・Email・Deals・Site・キャンペーンを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP

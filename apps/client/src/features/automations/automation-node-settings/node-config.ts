@@ -2,7 +2,6 @@ import type { AutomationNode } from "@openengage/core/automations";
 
 type SourceNodeConfig = Extract<AutomationNode, { type: "source" }>["config"];
 type ActionNodeConfig = Extract<AutomationNode, { type: "action" }>["config"];
-type DelayNodeConfig = Extract<AutomationNode, { type: "delay" }>["config"];
 
 export type NodeUpdate = (update: (node: AutomationNode) => AutomationNode) => void;
 
@@ -34,18 +33,6 @@ export function actionIs<TAction extends ActionNodeConfig["action"]>(
   ): node is Extract<AutomationNode, { type: "action" }> & {
     config: Extract<ActionNodeConfig, { action: TAction }>;
   } => node.type === "action" && node.config.action === action;
-}
-
-export function delayModeIs<TMode extends DelayNodeConfig["mode"]>(
-  mode: TMode,
-): (node: AutomationNode) => node is Extract<AutomationNode, { type: "delay" }> & {
-  config: Extract<DelayNodeConfig, { mode: TMode }>;
-} {
-  return (
-    node,
-  ): node is Extract<AutomationNode, { type: "delay" }> & {
-    config: Extract<DelayNodeConfig, { mode: TMode }>;
-  } => node.type === "delay" && node.config.mode === mode;
 }
 
 export function patchNodeConfig<TNode extends AutomationNode>(

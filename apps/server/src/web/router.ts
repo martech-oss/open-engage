@@ -1,4 +1,8 @@
+import { ZodError } from "zod";
+
+import { VariableResolutionError } from "@openengage/core/projects";
 import { emptyLandingPageDocument, siteMessageScheduleSchema } from "@openengage/core/web";
+import { VariableRepositoryError } from "@openengage/database/projects";
 import { isConstraintError, isUniqueConstraintError } from "@openengage/database/shared";
 import { CustomRedirectRepository, WebRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
@@ -41,6 +45,12 @@ export const createFormProcedure = authed.website.createForm.handler(
       try {
         return await repository.createSignupForm({ ...input, slug });
       } catch (error) {
+        if (
+          error instanceof VariableResolutionError ||
+          error instanceof VariableRepositoryError ||
+          error instanceof ZodError
+        )
+          throw errors.FORM_VARIABLE_INVALID({ cause: error });
         if (!isUniqueConstraintError(error, FORM_SLUG_UNIQUE_COLUMNS)) throw error;
         if (input.slug) throw errors.FORM_SLUG_TAKEN({ cause: error });
         slug = await availableSlug(input.name, "signup-form", (candidate) =>
@@ -68,6 +78,12 @@ export const updateFormProcedure = authed.website.updateForm.handler(
         throw errors.FORM_NOT_FOUND();
       }
     } catch (error) {
+      if (
+        error instanceof VariableResolutionError ||
+        error instanceof VariableRepositoryError ||
+        error instanceof ZodError
+      )
+        throw errors.FORM_VARIABLE_INVALID({ cause: error });
       if (isUniqueConstraintError(error, FORM_SLUG_UNIQUE_COLUMNS)) {
         throw errors.FORM_SLUG_TAKEN({ cause: error });
       }

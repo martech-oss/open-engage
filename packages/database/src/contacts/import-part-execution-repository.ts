@@ -102,7 +102,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
         .insert(contacts)
         .select(
           sql`SELECT
-            ${id}, ${input.workspaceId}, NULL, ${row.email}, ${row.firstName}, ${row.lastName},
+            ${id}, ${input.workspaceId}, NULL, NULL, ${row.email}, ${row.firstName}, ${row.lastName},
             ${row.phone}, ${row.externalId}, ${row.stage}, NULL, 'lead', 0, 0, 'active',
             ${JSON.stringify(row.customFields)}, ${input.now}, ${input.now}, NULL
           WHERE ${phaseIsOwned}`,

@@ -78,6 +78,7 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       description: proposal.definition.description,
       status: "draft",
       draftVersionId,
+      variableProjectId: proposal.definition.variableProjectId ?? null,
       createdAt: now,
       updatedAt: now,
     } as const;
@@ -177,13 +178,14 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       orm.insert(automations).select(
         sql`SELECT
           ${proposal.automationId}, ${workspaceId}, ${proposal.definition.name},
-          ${proposal.definition.description}, 'draft', ${draftVersionId}, NULL, ${now}, ${now}
+          ${proposal.definition.description}, 'draft', ${draftVersionId}, NULL, ${now}, ${now},
+          ${proposal.definition.variableProjectId ?? null}
         WHERE ${exists(precondition)}`,
       ),
       orm.insert(automationVersions).select(
         sql`SELECT
           ${draftVersionId}, ${workspaceId}, ${proposal.automationId}, 1, 'draft',
-          ${proposal.definition.timezone}, ${encodedGraph}, NULL, ${now}
+          ${proposal.definition.timezone}, ${encodedGraph}, NULL, ${now}, NULL, '{}', NULL
         WHERE ${exists(precondition)}`,
       ),
       orm.insert(projectItems).select(itemRows),
@@ -430,7 +432,7 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
     });
     const graphMatches =
       JSON.stringify(graphCodec.decode(existingAutomation.graph)) ===
-      JSON.stringify(proposal.definition);
+      graphCodec.encode(proposal.definition);
     if (
       !templatesMatch ||
       !graphMatches ||

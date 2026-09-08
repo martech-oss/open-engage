@@ -26,6 +26,13 @@ export const segmentResourceOptionSchema = z.object({
   value: z.string().min(1).max(2_000),
   description: z.string().trim().max(500).optional(),
   dataType: z.enum(["text", "number", "boolean", "date", "select"]).optional(),
+  programStatus: z
+    .object({
+      projectId: z.string().min(1),
+      definitionVersion: z.number().int().positive(),
+      statusId: z.string().min(1),
+    })
+    .optional(),
 });
 export type SegmentResourceOption = z.infer<typeof segmentResourceOptionSchema>;
 
@@ -161,6 +168,8 @@ export const segmentGenerationResultSchema = z.discriminatedUnion("status", [
 export type SegmentGenerationResult = z.infer<typeof segmentGenerationResultSchema>;
 
 export const segmentGenerationCatalogSchema = z.object({
+  projects: z.array(segmentResourceOptionSchema).max(1000).optional(),
+  projectStatuses: z.array(segmentResourceOptionSchema).max(1000).optional(),
   categories: z.array(segmentResourceOptionSchema).max(1_000).optional(),
   companyCustomFields: z.array(segmentResourceOptionSchema).max(1_000).optional(),
   dealStages: z.array(segmentResourceOptionSchema).max(1_000).optional(),

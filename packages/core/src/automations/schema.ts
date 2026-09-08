@@ -1,6 +1,7 @@
 import * as z from "zod";
 
-import { segmentOperatorSchema, segmentValueSchema } from "../segments/schema";
+import { typedVariableRefSchema, variableRefSchema } from "../projects/variables";
+import { segmentFilterSchema, segmentOperatorSchema, segmentValueSchema } from "../segments/schema";
 
 const automationStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
 
@@ -30,39 +31,105 @@ export const automationRowSchema = z.object({
 });
 export type AutomationRow = z.infer<typeof automationRowSchema>;
 
+export const automationScheduleSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("now") }),
+  z.object({ kind: z.literal("once"), at: z.iso.datetime() }),
+  z.object({
+    kind: z.literal("daily"),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+  z.object({
+    kind: z.literal("weekly"),
+    weekdays: z.array(z.number().int().min(0).max(6)).min(1),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+  z.object({
+    kind: z.literal("monthly"),
+    day: z.number().int().min(1).max(31),
+    hour: z.number().int().min(0).max(23),
+    minute: z.number().int().min(0).max(59),
+  }),
+]);
+export type AutomationSchedule = z.infer<typeof automationScheduleSchema>;
+export const automationAudienceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("segment"), segmentId: z.string().min(1) }),
+  z.object({ kind: z.literal("filter"), filter: segmentFilterSchema }),
+]);
+export type AutomationAudience = z.infer<typeof automationAudienceSchema>;
+const reentrySchema = z.enum(["once", "every_time", "cooldown"]);
+const cooldownMinutesSchema = z.number().int().positive().max(5_256_000).optional();
+
 const sourceNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("source"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.discriminatedUnion("source", [
     z.object({
+      source: z.literal("batch"),
+      audience: automationAudienceSchema,
+      schedule: automationScheduleSchema,
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
+    }),
+    z.object({
+      source: z.literal("callable"),
+      reentry: reentrySchema.default("every_time"),
+      cooldownMinutes: cooldownMinutesSchema,
+    }),
+    z.object({
+      source: z.literal("project_member_joined"),
+      projectId: z.string().min(1),
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
+    }),
+    z.object({
+      source: z.literal("project_member_progressed"),
+      projectId: z.string().min(1),
+      reentry: reentrySchema.default("every_time"),
+      cooldownMinutes: cooldownMinutesSchema,
+    }),
+    z.object({
+      source: z.literal("project_member_succeeded"),
+      projectId: z.string().min(1),
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
+    }),
+    z.object({
       source: z.literal("segment_joined"),
       segmentId: z.string().min(1),
-      reentry: z.enum(["once", "every_time"]).default("once"),
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
     }),
     z.object({
       source: z.literal("form_submitted"),
       formId: z.string().min(1),
-      reentry: z.enum(["once", "every_time"]).default("once"),
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
     }),
     z.object({
       source: z.literal("contact_created"),
-      reentry: z.literal("once").default("once"),
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
     }),
     z.object({
       source: z.literal("api_event"),
       eventName: z.string().trim().min(1).max(120),
-      reentry: z.enum(["once", "every_time"]).default("every_time"),
+      reentry: reentrySchema.default("every_time"),
+      cooldownMinutes: cooldownMinutesSchema,
     }),
     z.object({
       source: z.literal("webhook_event"),
       eventName: z.string().trim().min(1).max(120),
-      reentry: z.enum(["once", "every_time"]).default("every_time"),
+      reentry: reentrySchema.default("every_time"),
+      cooldownMinutes: cooldownMinutesSchema,
     }),
     z.object({
       source: z.literal("contact_inactive"),
       days: z.number().int().min(1).max(3_650),
-      reentry: z.literal("once").default("once"),
+      reentry: reentrySchema.default("once"),
+      cooldownMinutes: cooldownMinutesSchema,
     }),
   ]),
 });
@@ -72,6 +139,16 @@ const actionNodeSchema = z.object({
   type: z.literal("action"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.discriminatedUnion("action", [
+    z.object({
+      action: z.literal("call_automation"),
+      automationId: z.string().min(1),
+      mode: z.enum(["await", "async"]),
+    }),
+    z.object({
+      action: z.literal("upsert_project_member"),
+      projectId: z.string().min(1),
+      statusId: z.string().min(1).optional(),
+    }),
     z.object({
       action: z.literal("send_email"),
       templateId: z.string().min(1),
@@ -87,13 +164,20 @@ const actionNodeSchema = z.object({
       ownerUserId: z.string().min(1).optional(),
       groupId: z.string().min(1).optional(),
       preserveOwner: z.boolean().default(true),
-      title: z.string().trim().min(1).max(191).default("Follow up with qualified lead"),
+      title: z
+        .union([z.string().trim().min(1).max(191), typedVariableRefSchema("string")])
+        .default("Follow up with qualified lead"),
     }),
-    z.object({ action: z.literal("change_score"), amount: z.number().int() }),
+    z.object({
+      action: z.literal("change_score"),
+      amount: z.union([z.number().int(), typedVariableRefSchema("number")]),
+      operation: z.enum(["add", "set"]).optional(),
+      categoryId: z.string().min(1).optional(),
+    }),
     z.object({
       action: z.literal("update_field"),
       field: z.string().min(1).max(191),
-      value: z.unknown(),
+      value: z.union([z.string(), z.number(), z.boolean(), z.null(), variableRefSchema]),
     }),
   ]),
 });
@@ -108,7 +192,7 @@ const conditionNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("condition"),
   position: z.object({ x: z.number(), y: z.number() }),
-  config: predicateSchema,
+  config: z.union([z.object({ filter: segmentFilterSchema }), predicateSchema]),
 });
 
 const decisionNodeSchema = z.object({
@@ -125,7 +209,10 @@ const decisionNodeSchema = z.object({
       "custom_event",
     ]),
     resourceId: z.string().optional(),
-    withinMinutes: z.number().int().positive().max(525_600),
+    withinMinutes: z.union([
+      z.number().int().positive().max(525_600),
+      typedVariableRefSchema("number"),
+    ]),
   }),
 });
 
@@ -134,11 +221,17 @@ const delayNodeSchema = z.object({
   type: z.literal("delay"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.discriminatedUnion("mode", [
-    z.object({ mode: z.literal("relative"), minutes: z.number().int().min(1).max(525_600) }),
-    z.object({ mode: z.literal("absolute"), at: z.iso.datetime() }),
+    z.object({
+      mode: z.literal("relative"),
+      minutes: z.union([z.number().int().min(1).max(525_600), typedVariableRefSchema("number")]),
+    }),
+    z.object({
+      mode: z.literal("absolute"),
+      at: z.union([z.iso.datetime({ offset: true }), typedVariableRefSchema("datetime")]),
+    }),
     z.object({
       mode: z.literal("window"),
-      minutes: z.number().int().min(1).max(525_600),
+      minutes: z.union([z.number().int().min(1).max(525_600), typedVariableRefSchema("number")]),
       weekdays: z.array(z.number().int().min(0).max(6)).min(1),
       startHour: z.number().int().min(0).max(23),
       endHour: z.number().int().min(1).max(24),
@@ -166,7 +259,19 @@ export type AutomationEdge = z.infer<typeof automationEdgeSchema>;
 export const automationDefinitionSchema = z.object({
   name: z.string().trim().min(1).max(191),
   description: z.string().max(2_000).default(""),
-  timezone: z.string().min(1).default("UTC"),
+  timezone: z
+    .string()
+    .min(1)
+    .refine((value) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: value });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid IANA timezone")
+    .default("UTC"),
+  variableProjectId: z.string().min(1).nullable().optional(),
   metadata: z
     .object({
       origin: z.literal("email_sequence"),
@@ -176,7 +281,20 @@ export const automationDefinitionSchema = z.object({
       earlySignal: z.string().trim().min(1).max(500),
     })
     .optional(),
-  nodes: z.array(automationNodeSchema).min(1).max(500),
+  nodes: z
+    .array(automationNodeSchema)
+    .min(1)
+    .max(500)
+    .refine(
+      (nodes) =>
+        nodes.every(
+          (node) =>
+            node.type !== "source" ||
+            node.config.reentry !== "cooldown" ||
+            (node.config.cooldownMinutes ?? 0) > 0,
+        ),
+      "Cooldown requires a positive cooldownMinutes",
+    ),
   edges: z.array(automationEdgeSchema).max(1_000),
 });
 export type AutomationDefinition = z.infer<typeof automationDefinitionSchema>;

@@ -33,7 +33,28 @@ export { isDefinedError, ORPCError, safe } from "@orpc/client";
 // Contract value/type re-exports so SDK consumers need only this package.
 export { contract } from "@openengage/orpc";
 export type { AssetSummary } from "@openengage/core/assets";
-export type { AutomationRow } from "@openengage/core/automations";
+export type {
+  AutomationAudience,
+  AutomationDefinition,
+  AutomationDependency,
+  AutomationDraft,
+  AutomationEdge,
+  AutomationExecutionSnapshot,
+  AutomationNode,
+  AutomationRow,
+  AutomationRun,
+  AutomationSchedule,
+} from "@openengage/core/automations";
+
+// Response-only types derive from the contract when core exposes only a schema.
+export type AutomationRunDetail = Awaited<ReturnType<OpenEngageClient["automations"]["runDetail"]>>;
+export type AutomationRunTarget = AutomationRunDetail["targets"][number];
+export type AutomationEnrollmentDetail = Awaited<
+  ReturnType<OpenEngageClient["automations"]["enrollmentDetail"]>
+>;
+export type AutomationRunPreview = Awaited<
+  ReturnType<OpenEngageClient["automations"]["previewRun"]>
+>;
 export type {
   ContactListInput,
   ContactListResult,
@@ -67,5 +88,35 @@ export type {
   ProjectLinkedResource,
   ProjectResourceAvailability,
   ProjectRow,
+  ProgramBinding,
+  ProgramBindingIntent,
+  ProgramCohortInput,
+  ProgramMemberMutation,
+  ProgramMemberMutationResult,
+  ProjectCloneJob,
+  ProjectCloneOptions,
+  ProjectClonePreview,
+  ProjectCloneReferenceMap,
+  ProjectCloneResource,
+  ProjectCloneResourceKind,
+  ProjectMember,
+  ProjectMemberSource,
+  ProjectMemberTransition,
+  ProjectProgram,
+  ProjectProgramDefinition,
+  ProjectProgramDetail,
+  ProjectProgramStatus,
+  VariableDefinition,
+  VariableImpactInput,
+  VariableRef,
+  VariableSnapshot,
+  VariableType,
+  VariableUsage,
+  VariableWrite,
 } from "@openengage/core/projects";
+export type ProgramCohort = Awaited<ReturnType<OpenEngageClient["projects"]["programCohort"]>>;
+export type ProjectMemberList = Awaited<ReturnType<OpenEngageClient["projects"]["memberList"]>>;
+export type VariableImpact = Awaited<
+  ReturnType<OpenEngageClient["projects"]["variablesImpact"]>
+>[number];
 export type { WebhookEndpointRow } from "@openengage/core/workspaces";

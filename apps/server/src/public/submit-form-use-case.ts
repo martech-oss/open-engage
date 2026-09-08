@@ -1,4 +1,5 @@
 import type { OpenEngageDatabase } from "@openengage/database/client";
+import { FormProgramRepository, ProgramError } from "@openengage/database/projects";
 import { uuidv7 } from "@openengage/database/shared";
 import { PublicFormRepository, type PublicFormRecord } from "@openengage/database/web";
 
@@ -165,10 +166,31 @@ export class SubmitPublicFormUseCase {
         fields: [{ field: "email", reason: "required" }],
       };
     }
+    const programs = new FormProgramRepository(this.database, { workspaceId: form.workspaceId });
+    let programBinding;
+    try {
+      // Verified LP records always carry the published snapshot (legacy means no binding).
+      programBinding = measurement
+        ? (form.programBinding ?? null)
+        : form.programBinding === undefined
+          ? await programs.get(form.id)
+          : form.programBinding;
+      if (programBinding)
+        await programs.validate(
+          programBinding,
+          typeof measurement?.properties["projectId"] === "string"
+            ? measurement.properties["projectId"]
+            : null,
+        );
+    } catch (error) {
+      if (error instanceof ProgramError) return { kind: "invalid_payload" };
+      throw error;
+    }
     const occurredAt = new Date().toISOString();
     const contactCreatedEventId = uuidv7();
     const formSubmittedEventId = uuidv7();
     const outcome = await repository.persistSubmission({
+      ...(programBinding ? { programBinding } : {}),
       workspaceId: form.workspaceId,
       formId: form.id,
       visitorId: visitor?.id ?? null,

@@ -162,9 +162,12 @@ export class AutomationQueryRepository extends WorkspaceRepository {
   }
 
   /** The automation's current draft version, if it is still publishable. */
-  public async findPublishableDraft(
-    automationId: string,
-  ): Promise<{ draftVersionId: string; version: number; graph: AutomationDefinition } | null> {
+  public async findPublishableDraft(automationId: string): Promise<{
+    draftVersionId: string;
+    version: number;
+    graph: AutomationDefinition;
+    rawGraph?: string;
+  } | null> {
     const row = await this.database.orm
       .select({
         draftVersionId: automationVersions.id,
@@ -191,6 +194,7 @@ export class AutomationQueryRepository extends WorkspaceRepository {
       ? {
           ...row,
           graph: graphCodec.decode(row.graph),
+          rawGraph: row.graph,
         }
       : null;
   }

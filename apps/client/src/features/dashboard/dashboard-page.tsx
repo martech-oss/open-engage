@@ -62,7 +62,7 @@ export function DashboardPage(): ReactNode {
           message={`レビュー期限を超過した施策が ${data.briefs.overdueReviews.toLocaleString()} 件あります`}
           detail="成果指標と成功基準を確認してください"
           actionLabel="施策を確認"
-          to="/automations/briefs"
+          to="/projects"
         />
       )}
 

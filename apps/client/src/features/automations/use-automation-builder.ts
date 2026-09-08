@@ -107,13 +107,29 @@ export function useAutomationBuilder(
   }
 
   function addNode(
-    kind: "handoff" | "email" | "delay" | "decision" | "condition",
+    kind: "handoff" | "email" | "delay" | "decision" | "condition" | "call" | "program" | "score",
     options: AutomationOptions,
   ): "template_missing" | "connected" | "unconnected" {
     const id = crypto.randomUUID();
     const position = { x: 360, y: 120 + definition.nodes.length * 70 };
     let node: AutomationNode;
-    if (kind === "handoff") {
+    if (kind === "call")
+      node = {
+        id,
+        type: "action",
+        position,
+        config: { action: "call_automation", automationId: "", mode: "await" },
+      };
+    else if (kind === "program")
+      node = {
+        id,
+        type: "action",
+        position,
+        config: { action: "upsert_project_member", projectId: "" },
+      };
+    else if (kind === "score")
+      node = { id, type: "action", position, config: { action: "change_score", amount: 1 } };
+    else if (kind === "handoff") {
       node = {
         id,
         type: "action",
@@ -138,7 +154,9 @@ export function useAutomationBuilder(
         id,
         type: "condition",
         position,
-        config: { field: "stage", operator: "eq", value: "customer" },
+        config: {
+          filter: { kind: "condition", field: "stage", operator: "eq", value: "customer" },
+        },
       };
     }
     const freeBranch = selectedNode

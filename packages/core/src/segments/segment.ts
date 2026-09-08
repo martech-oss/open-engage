@@ -22,16 +22,33 @@ const contactColumns: Partial<Record<SegmentCondition["field"], string>> = {
   updated_at: "c.updated_at",
 };
 
-export function compileSegmentFilter(workspaceId: string, filter: SegmentFilter): CompiledSegment {
+export function compileSegmentFilter(
+  workspaceId: string,
+  filter: SegmentFilter,
+  extensions: SegmentCompilerExtensions = {},
+): CompiledSegment {
   const params: Array<string | number | null> = [workspaceId];
-  const expression = compileNode(filter, params);
+  const expression = compileNode(filter, params, undefined, extensions);
   return {
     sql: `SELECT c.* FROM contacts c WHERE c.workspace_id = ? AND (${expression})`,
     params,
   };
 }
 
-type Relation = "company" | "deal" | "event";
+type Relation = "company" | "deal" | "event" | "project_member";
+export type SegmentCompilerExtensions = Partial<
+  Record<
+    Relation,
+    {
+      query: string;
+      columns: Record<string, string>;
+      qualifier?: (
+        condition: SegmentCondition,
+        params: Array<string | number | null>,
+      ) => string | undefined;
+    }
+  >
+>;
 const relatedColumns: Record<string, [Relation, string]> = {
   company_name: ["company", "co.name"],
   company_custom_field: ["company", "co.custom_fields"],
@@ -46,7 +63,10 @@ const relatedColumns: Record<string, [Relation, string]> = {
   event_age_minutes: ["event", "((julianday('now') - julianday(ce.occurred_at)) * 1440)"],
   event_property: ["event", "ce.properties"],
 };
-function relatedQuery(relation: Relation): string {
+function relatedQuery(relation: Relation, extensions: SegmentCompilerExtensions): string {
+  if (extensions[relation]) return extensions[relation]!.query;
+  if (relation === "project_member")
+    throw new Error("Project member filters require the database segment compiler");
   if (relation === "company")
     return "FROM company_contacts cc JOIN companies co ON co.id = cc.company_id AND co.workspace_id = c.workspace_id WHERE cc.workspace_id = c.workspace_id AND cc.contact_id = c.id";
   if (relation === "deal")
@@ -56,15 +76,16 @@ function relatedQuery(relation: Relation): string {
 function compileNode(
   filter: SegmentFilter,
   params: Array<string | number | null>,
-  scope?: Relation,
+  scope: Relation | undefined,
+  extensions: SegmentCompilerExtensions,
 ): string {
   if (filter.kind === "group") {
     if (scope && filter.relation)
       throw new Error("Nested explicit related scopes are not supported");
     const relation = filter.relation ?? scope;
-    const expression = `(${filter.children.map((child) => compileNode(child, params, relation)).join(filter.combinator === "and" ? " AND " : " OR ")})`;
+    const expression = `(${filter.children.map((child) => compileNode(child, params, relation, extensions)).join(filter.combinator === "and" ? " AND " : " OR ")})`;
     if (filter.relation) {
-      const query = relatedQuery(filter.relation);
+      const query = relatedQuery(filter.relation, extensions);
       if (filter.minimumCount !== undefined) {
         params.push(filter.minimumCount);
         return `${filter.negated ? "NOT " : ""}((SELECT COUNT(*) ${query} AND ${expression}) >= ?)`;
@@ -73,23 +94,28 @@ function compileNode(
     }
     return filter.negated ? `NOT ${expression}` : expression;
   }
-  const related = relatedColumns[filter.field];
+  const extension = Object.entries(extensions).find(([, value]) => value.columns[filter.field]);
+  const related: [Relation, string] | undefined = extension
+    ? [extension[0] as Relation, extension[1].columns[filter.field]!]
+    : relatedColumns[filter.field];
   if (related) {
     let column = related[1];
     if (filter.field === "company_custom_field" || filter.field === "event_property") {
       params.push(`$.${sanitizeJsonPath(filter.key ?? "")}`);
       column = `json_extract(${column}, ?)`;
     }
-    if (scope === related[0]) return scalarExpression(column, filter, params);
     // An unscoped absence condition means no related row has a value. Inside
     // an explicit relation it instead tests the nullable field of that row.
-    const absent = filter.operator === "not_exists";
+    const absent = scope !== related[0] && filter.operator === "not_exists";
     const expression = scalarExpression(
       column,
       absent ? { ...filter, operator: "exists" } : filter,
       params,
     );
-    return `${absent ? "NOT " : ""}EXISTS (SELECT 1 ${relatedQuery(related[0])} AND ${expression})`;
+    const qualifier = extension?.[1].qualifier?.(filter, params);
+    const qualified = qualifier ? `(${expression} AND ${qualifier})` : expression;
+    if (scope === related[0]) return qualified;
+    return `${absent ? "NOT " : ""}EXISTS (SELECT 1 ${relatedQuery(related[0], extensions)} AND ${qualified})`;
   }
   return compileCondition(filter, params);
 }

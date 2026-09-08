@@ -7,6 +7,11 @@ import {
 } from "@openengage/core/segments";
 
 export const segmentFieldOptions = [
+  { field: "project_id", label: "施策ID（参加）" },
+  { field: "project_status", label: "施策の参加 status" },
+  { field: "project_success", label: "施策の成果（1=達成、0=未達成）" },
+  { field: "project_joined_at", label: "施策の参加日時" },
+  { field: "project_success_at", label: "施策の初回成果日時" },
   { field: "category_score", label: "カテゴリスコア" },
   { field: "lifecycle_stage", label: "ライフサイクル" },
   { field: "owner_user_id", label: "担当者ID" },

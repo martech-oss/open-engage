@@ -2,6 +2,7 @@ import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { listDeadLetters, replayDeadLetter } from "./dead-letter-service";
+import { operationHealth } from "./operation-health-service";
 
 export const listDeadLettersProcedure = authed.platform.listDeadLetters.handler(
   async ({ context, errors }) => {
@@ -25,6 +26,10 @@ export const replayDeadLetterProcedure = authed.platform.replayDeadLetter.handle
 );
 
 export const platformProcedures = {
+  operationHealth: authed.platform.operationHealth.handler(({ context, errors }) => {
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
+    return operationHealth(context.database, context.workspace.workspaceId);
+  }),
   listDeadLetters: listDeadLettersProcedure,
   replayDeadLetter: replayDeadLetterProcedure,
 };

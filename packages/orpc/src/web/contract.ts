@@ -92,6 +92,7 @@ export const websiteContract = {
         versions: z.array(landingPageVersionSchema),
         jobs: z.array(landingGenerationJobSchema),
         previewHtml: z.string(),
+        variableError: z.string().nullable().default(null),
         currentVersionId: z.string().nullable(),
         publishedVersionId: z.string().nullable(),
       }),
@@ -129,6 +130,10 @@ export const websiteContract = {
     .errors({
       ...authedErrors,
       ...turnstileNotConfigured,
+      FORM_VARIABLE_INVALID: {
+        status: 422,
+        message: "変数のProject、型、値、参照を確認してください",
+      },
       FORM_SLUG_TAKEN: { status: 409, message: "同じスラッグのフォームが既に存在します" },
     })
     .input(signupFormCreateSchema)
@@ -138,6 +143,10 @@ export const websiteContract = {
     .errors({
       ...notFound("FORM_NOT_FOUND", "フォームが見つかりません"),
       ...turnstileNotConfigured,
+      FORM_VARIABLE_INVALID: {
+        status: 422,
+        message: "変数のProject、型、値、参照を確認してください",
+      },
       FORM_SLUG_TAKEN: { status: 409, message: "同じスラッグのフォームが既に存在します" },
     })
     .input(signupFormWriteSchema.extend({ id: z.string().min(1) }))

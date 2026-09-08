@@ -12,6 +12,7 @@ import {
   LandingPromptForm,
 } from "./landing-editor-panels";
 import { LandingOptimizationPanel } from "./landing-optimization-panel";
+import { LandingVariablePanel } from "./landing-variable-editor";
 import {
   type LandingPageRow,
   type useCreateLandingPage,
@@ -78,6 +79,11 @@ export function LandingPageEditorDialog({
           </Button>
         )}
       </div>
+      {design.data?.variableError && (
+        <p role="alert" className="text-sm text-destructive">
+          公開前に変数を修正してください: {design.data.variableError}
+        </p>
+      )}
       <div className="grid gap-5 lg:grid-cols-[minmax(260px,1fr)_minmax(0,2fr)]">
         <div className="space-y-4">
           <LandingConversation
@@ -113,6 +119,12 @@ export function LandingPageEditorDialog({
           }}
         />
       </div>
+      <LandingVariablePanel
+        design={design}
+        pageId={pageId}
+        name={name}
+        updateMutation={updateMutation}
+      />
       {design.data && (
         <LandingOptimizationPanel
           pageId={pageId}

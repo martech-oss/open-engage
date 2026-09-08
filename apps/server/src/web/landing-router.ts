@@ -7,6 +7,7 @@ import { authed, requireRole } from "../orpc/base";
 import { landingImageUrls } from "./landing-assets";
 import { publishLandingPage } from "./landing-design-service";
 import { renderLandingPage } from "./landing-renderer";
+import { resolveLandingVariablePublication } from "./variable-publication-service";
 
 export const landingDesignProcedures = {
   getPageDesign: authed.website.getPageDesign.handler(async ({ context, input, errors }) => {
@@ -18,29 +19,46 @@ export const landingDesignProcedures = {
       repository.jobs(input.id),
     ]);
     const current = versions.find((version) => version.id === page.currentVersionId);
-    const previewHtml = current
-      ? await renderLandingPage(current.document, {
-          origin: context.env.APP_URL,
-          workspaceSlug: "",
-          pageSlug: page.slug,
-          measurementToken: "",
-          formBindings: [],
-          imageUrls: await landingImageUrls(
+    let previewDocument = current?.publishedDocument ?? current?.document;
+    let variableError: string | null = null;
+    if (current && !current.publishedDocument) {
+      try {
+        previewDocument = (
+          await resolveLandingVariablePublication(
             context.database,
             context.workspace.workspaceId,
             current.document,
-            context.env.APP_URL,
-            true,
-          ),
-          preview: true,
-        })
-      : "";
+          )
+        ).document;
+      } catch (error) {
+        variableError = error instanceof Error ? error.message : "変数を解決できませんでした";
+      }
+    }
+    const previewHtml =
+      current && previewDocument
+        ? await renderLandingPage(previewDocument, {
+            origin: context.env.APP_URL,
+            workspaceSlug: "",
+            pageSlug: page.slug,
+            measurementToken: "",
+            formBindings: [],
+            imageUrls: await landingImageUrls(
+              context.database,
+              context.workspace.workspaceId,
+              current.document,
+              context.env.APP_URL,
+              true,
+            ),
+            preview: true,
+          })
+        : "";
     return {
       name: page.name,
       slug: page.slug,
       versions,
       jobs,
       previewHtml,
+      variableError,
       currentVersionId: page.currentVersionId,
       publishedVersionId: page.publishedVersionId,
     };

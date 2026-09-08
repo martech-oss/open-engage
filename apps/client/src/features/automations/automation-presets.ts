@@ -128,3 +128,33 @@ export function createPresetAutomation(
     edges: chainEdges(["source", "reengagement-email"]),
   };
 }
+
+export function createBlankAutomation(name: string, timeZone: string): AutomationDefinition {
+  return {
+    name,
+    description: "",
+    timezone: timeZone,
+    nodes: [
+      {
+        id: "source",
+        type: "source",
+        position: { x: 80, y: 180 },
+        config: {
+          source: "batch",
+          audience: {
+            kind: "filter",
+            filter: {
+              kind: "condition",
+              field: "status",
+              operator: "eq",
+              value: "active",
+            },
+          },
+          schedule: { kind: "now" },
+          reentry: "once",
+        },
+      },
+    ],
+    edges: [],
+  };
+}

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +12,13 @@ import type { AutomationOptions } from "./automation-types";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => <a href="/emails/templates">{children}</a>,
+}));
+
+vi.mock("./automation-api", () => ({
+  automationExecutionOptionsQueryOptions: () => ({
+    queryKey: ["execution-options"],
+    queryFn: async () => ({ projects: [], callableAutomations: [], scoringCategories: [] }),
+  }),
 }));
 
 const options: AutomationOptions = {
@@ -151,14 +159,31 @@ function renderSettings(
   ) => void = () => undefined,
 ): void {
   render(
-    <NodeSettings
-      node={node}
-      nodes={nodes}
-      edges={[]}
-      options={options}
-      onUpdate={onUpdate}
-      onConnectionChange={onConnectionChange}
-      onDelete={() => undefined}
-    />,
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <NodeSettings
+        node={node}
+        nodes={nodes}
+        edges={[]}
+        options={options}
+        onUpdate={onUpdate}
+        onConnectionChange={onConnectionChange}
+        onDelete={() => undefined}
+      />
+    </QueryClientProvider>,
   );
 }
+
+it("offers batch, callable and cooldown starts in the visual editor", () => {
+  const node: AutomationNode = {
+    id: "source",
+    type: "source",
+    position: { x: 0, y: 0 },
+    config: { source: "api_event", eventName: "start", reentry: "every_time" },
+  };
+  renderSettings(node, () => {});
+  expect(screen.getByRole("option", { name: "バッチ（対象者をまとめて登録）" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "他のフローから呼び出す" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "一定時間後に再登録" })).toBeTruthy();
+});

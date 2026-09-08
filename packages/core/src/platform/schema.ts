@@ -10,3 +10,20 @@ export const deadLetterRowSchema = z.object({
   replayedAt: z.string().nullable(),
 });
 export type DeadLetterRow = z.infer<typeof deadLetterRowSchema>;
+
+export const operationIssueSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["schedule_delay", "batch_failure", "call_failure", "clone_failure"]),
+  name: z.string(),
+  message: z.string(),
+  occurredAt: z.string(),
+  projectId: z.string().nullable(),
+  automationId: z.string().nullable(),
+  runId: z.string().nullable(),
+  enrollmentId: z.string().nullable(),
+});
+export type OperationIssue = z.infer<typeof operationIssueSchema>;
+export const operationHealthSchema = z.object({
+  checkedAt: z.string(),
+  issues: z.array(operationIssueSchema),
+});

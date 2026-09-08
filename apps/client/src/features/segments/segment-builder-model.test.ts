@@ -364,3 +364,61 @@ describe("segment date value mapping", () => {
     });
   });
 });
+
+it("converts event and company custom dates together with program dates", () => {
+  const dateCatalog: SegmentGenerationCatalog = {
+    ...catalog,
+    companyCustomFields: [{ id: "renewal", name: "Renewal", value: "renewal", dataType: "date" }],
+  };
+  const filter: SegmentFilter = {
+    kind: "group",
+    combinator: "and",
+    children: [
+      { kind: "condition", field: "event_occurred_at", operator: "gte", value: "2026-09-08T09:00" },
+      {
+        kind: "condition",
+        field: "company_custom_field",
+        key: "renewal",
+        operator: "lt",
+        value: "2026-10-01T09:00",
+      },
+      { kind: "condition", field: "project_joined_at", operator: "gte", value: "2026-09-01T09:00" },
+      {
+        kind: "condition",
+        field: "project_success_at",
+        operator: "lte",
+        value: "2026-09-30T09:00",
+      },
+    ],
+  };
+  expect(mapSegmentDateValues(filter, dateCatalog, (value) => `${value}+09:00`)).toEqual({
+    ...filter,
+    children: [
+      {
+        kind: "condition",
+        field: "event_occurred_at",
+        operator: "gte",
+        value: "2026-09-08T09:00+09:00",
+      },
+      {
+        kind: "condition",
+        field: "company_custom_field",
+        key: "renewal",
+        operator: "lt",
+        value: "2026-10-01T09:00+09:00",
+      },
+      {
+        kind: "condition",
+        field: "project_joined_at",
+        operator: "gte",
+        value: "2026-09-01T09:00+09:00",
+      },
+      {
+        kind: "condition",
+        field: "project_success_at",
+        operator: "lte",
+        value: "2026-09-30T09:00+09:00",
+      },
+    ],
+  });
+});

@@ -51,6 +51,27 @@ const relationOperators = [
 ] as const satisfies readonly SegmentOperator[];
 
 export const segmentFieldDefinitions = [
+  { field: "project_id", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  { field: "project_status", valueType: "text", operators: textOperators, keyRequirement: "none" },
+  {
+    field: "project_success",
+    valueType: "number",
+    operators: ["eq", "neq"],
+    keyRequirement: "none",
+  },
+  {
+    field: "project_joined_at",
+    valueType: "date",
+    operators: comparableOperators,
+    keyRequirement: "none",
+  },
+  {
+    field: "project_success_at",
+    valueType: "date",
+    operators: comparableOperators,
+    keyRequirement: "none",
+  },
+
   {
     field: "category_score",
     valueType: "number",

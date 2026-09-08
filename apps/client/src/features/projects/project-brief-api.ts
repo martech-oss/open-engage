@@ -17,7 +17,11 @@ export function projectBriefQueryOptions(id: string) {
 
 export function useProjectBriefInvalidator() {
   const queryClient = useQueryClient();
-  return () => invalidateProjectBriefQueries(queryClient);
+  return () =>
+    Promise.all([
+      invalidateProjectBriefQueries(queryClient),
+      queryClient.invalidateQueries({ queryKey: orpcQuery.projects.key() }),
+    ]);
 }
 
 export function useCreateProjectBrief() {

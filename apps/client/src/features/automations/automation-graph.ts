@@ -154,6 +154,23 @@ export function sourceConfig(
   formId: string,
   segmentId: string,
 ): Extract<AutomationNode, { type: "source" }>["config"] {
+  if (source === "batch")
+    return {
+      source,
+      reentry: "once",
+      audience: {
+        kind: "filter",
+        filter: { kind: "condition", field: "status", operator: "eq", value: "active" },
+      },
+      schedule: { kind: "now" },
+    };
+  if (source === "callable") return { source, reentry: "every_time" };
+  if (
+    source === "project_member_joined" ||
+    source === "project_member_progressed" ||
+    source === "project_member_succeeded"
+  )
+    return { source, projectId: "", reentry: "every_time" };
   if (source === "form_submitted") return { source, formId, reentry: "once" };
   if (source === "segment_joined") return { source, segmentId, reentry: "once" };
   if (source === "api_event") return { source, eventName: "custom_event", reentry: "every_time" };

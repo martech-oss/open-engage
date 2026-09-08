@@ -66,7 +66,7 @@ export function registerPublicLandingRoutes(publicApp: Hono<AppEnvironment>): vo
     );
     const dynamic = await new OptimizationRepository(database, page).dynamic(page.id);
     return context.html(
-      await renderLandingPage(version.document, {
+      await renderLandingPage(version.publishedDocument ?? version.document, {
         origin,
         workspaceSlug,
         pageSlug,
@@ -135,7 +135,7 @@ export function registerPublicLandingRoutes(publicApp: Hono<AppEnvironment>): vo
           : {}),
       },
     );
-    const html = await renderLandingPage(version.document, {
+    const html = await renderLandingPage(version.publishedDocument ?? version.document, {
       origin,
       workspaceSlug,
       pageSlug,

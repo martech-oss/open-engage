@@ -1,5 +1,6 @@
 import * as z from "zod";
 
+import { variableSnapshotSchema } from "../projects/variables";
 import { normalizeSlug } from "../shared/schema";
 import { contentDocumentSchema } from "./content";
 import { signupFormDefinitionSchema } from "./form-schema";
@@ -17,9 +18,11 @@ export const signupFormSchema = z.object({
   status: publishStatusSchema,
   version: z.number().int(),
   definition: signupFormDefinitionSchema,
+  variableProjectId: z.string().min(1).nullable().optional(),
   allowedDomains: z.array(z.string()),
   turnstileEnabled: z.boolean(),
   successMessage: z.string(),
+  variableSnapshot: variableSnapshotSchema.nullable().default(null),
   submissionCount: z.number().int().nonnegative(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -96,6 +99,7 @@ export const signupFormWriteSchema = z.object({
   slug: normalizedSlugSchema("signup-form"),
   status: publishStatusSchema.default("draft"),
   definition: signupFormDefinitionSchema,
+  variableProjectId: z.string().min(1).nullable().optional(),
   allowedDomains: z.array(z.string()).default([]),
   turnstileEnabled: z.boolean().default(true),
   successMessage: z.string().max(500).default("ありがとうございます。"),
@@ -163,6 +167,7 @@ export const customRedirectSchema = z.object({
   name: z.string(),
   slug: z.string(),
   destinationUrl: z.string(),
+  status: z.enum(["draft", "published"]).default("published"),
   clickCount: z.number().int().nonnegative(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -170,6 +175,7 @@ export const customRedirectSchema = z.object({
 export type CustomRedirect = z.infer<typeof customRedirectSchema>;
 
 export const customRedirectWriteSchema = z.object({
+  status: z.enum(["draft", "published"]).default("published"),
   name: z.string().trim().min(1).max(191),
   slug: normalizedSlugSchema("redirect"),
   /** Only http(s): the public route 302s here, so anything else is an open redirect. */
@@ -181,4 +187,4 @@ export const customRedirectWriteSchema = z.object({
     { message: "http(s) のURLを入力してください" },
   ),
 });
-export type CustomRedirectWrite = z.infer<typeof customRedirectWriteSchema>;
+export type CustomRedirectWrite = z.input<typeof customRedirectWriteSchema>;

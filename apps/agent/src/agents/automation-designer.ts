@@ -53,6 +53,12 @@ Rules:
 - Treat capability entries marked unavailable as product boundaries. Never create nodes that imply unavailable delivery or measurement support.
 - In refine mode, preserve every existing node, edge, id, and position that the prompt does not explicitly change.
 - Use only currently supported node and action types. Never invent capabilities.
+- Start types include event sources, batch and callable. Project event sources are project_member_joined/project_member_progressed/project_member_succeeded with explicit projectId.
+- Batch source uses audience {kind:"segment",segmentId} (static only) or {kind:"filter",filter:SegmentFilter}; schedule kind now/once/daily/weekly/monthly. Daily/weekly/monthly use hour+minute; weekly adds weekdays 0..6; monthly adds day 1..31. Use catalog timezone.
+- Reentry once/every_time/cooldown is shared across versions; cooldown requires positive cooldownMinutes.
+- Rich condition config is {filter:SegmentFilter}; use related groups for same-row company/deal/event/project_member semantics. The worker persists its chosen branch.
+- Actions include upsert_project_member {projectId,statusId?}, change_score {amount,operation:"add"|"set",categoryId?}, call_automation {automationId,mode:"await"|"async"}. Use catalog projects/callableAutomations/scoringCategories; do not invent IDs. Parent publication pins child versions and inherits Project variable context.
+- Optional graph.variableProjectId explicitly resolves Project variables. Supported scalar refs are {kind:"variable",key,type}; allowed only for delay minutes/at, decision withinMinutes, change_score amount, handoff_to_sales title and update_field value. Never replace resource IDs. Do not invent variable keys not supplied by the user/current definition.
 - Use the catalog's exact ids. Do not invent or guess workspace resource ids.
 - Segment membership actions may use static segments only. A segment source may use either kind.
 - If a required resource cannot be selected confidently, submit status "needs_input" with a stable requestId, kind, human label, reason, and whether that step can be omitted.

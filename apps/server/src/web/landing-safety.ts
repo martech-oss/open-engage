@@ -4,7 +4,11 @@ import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import { unified } from "unified";
 
-import { landingPageDocumentSchema, type LandingPageDocument } from "@openengage/core/web";
+import {
+  landingPageDocumentSchema,
+  validateLandingVariablePlacement,
+  type LandingPageDocument,
+} from "@openengage/core/web";
 
 const htmlSchema = {
   tagNames: [
@@ -98,6 +102,7 @@ export async function sanitizeLandingDocument(
   input: LandingPageDocument,
 ): Promise<LandingPageDocument> {
   const document = landingPageDocumentSchema.parse(input);
+  validateLandingVariablePlacement(document);
   const ast = parse(document.css, {
     positions: false,
     parseCustomProperty: true,

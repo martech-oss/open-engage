@@ -9,6 +9,7 @@ import {
   type SegmentResourceOption,
 } from "@openengage/core/segments";
 
+import { programStatusSelection } from "./program-segment-options";
 import { RichSegmentConditionValueEditor } from "./rich-segment-condition-value-editor";
 import {
   defaultSegmentRawValue,
@@ -94,9 +95,24 @@ export function SegmentConditionValueEditor({
   if (options.length > 0) {
     return (
       <NativeSelect
-        value={String(condition.value ?? "")}
+        value={programStatusSelection(condition)}
         aria-label="条件値"
-        onChange={(event) => onValueChange(event.target.value)}
+        onChange={(event) => {
+          if (condition.field !== "project_status") return onValueChange(event.target.value);
+          const selected = options.find(
+            (option) => option.value === event.target.value,
+          )?.programStatus;
+          onChange({
+            ...condition,
+            value:
+              condition.operator === "in"
+                ? [selected?.statusId ?? event.target.value]
+                : (selected?.statusId ?? event.target.value),
+            program: selected
+              ? { projectId: selected.projectId, definitionVersion: selected.definitionVersion }
+              : undefined,
+          });
+        }}
       >
         {options.map((option) => (
           <NativeSelectOption key={option.id} value={option.value}>

@@ -1,4 +1,4 @@
-import { and, asc, eq, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, notExists, isNull, sql } from "drizzle-orm";
 
 import { contactEvents, contacts } from "../contacts/schema";
 import { DatabaseRepository } from "../shared/repository-base";
@@ -22,9 +22,11 @@ export class AutomationInactivityRepository extends DatabaseRepository {
       reentry: string;
       workspaceId: string;
       contactId: string;
+      lastActivityAt: string;
     }>
   > {
     const orm = this.database.orm;
+    const lastActivity = sql<string>`COALESCE((SELECT MAX(${contactEvents.occurredAt}) FROM ${contactEvents} WHERE ${contactEvents.workspaceId}=${contacts.workspaceId} AND ${contactEvents.contactId}=${contacts.id}),${contacts.createdAt})`;
     return await orm
       .select({
         automationVersionId: automationTriggers.automationVersionId,
@@ -33,6 +35,7 @@ export class AutomationInactivityRepository extends DatabaseRepository {
         reentry: automationTriggers.reentry,
         workspaceId: contacts.workspaceId,
         contactId: contacts.id,
+        lastActivityAt: lastActivity,
       })
       .from(automationTriggers)
       .innerJoin(
@@ -63,7 +66,8 @@ export class AutomationInactivityRepository extends DatabaseRepository {
                   eq(automationEnrollments.workspaceId, automationTriggers.workspaceId),
                   eq(automationEnrollments.automationId, automationTriggers.automationId),
                   eq(automationEnrollments.contactId, contacts.id),
-                  eq(automationEnrollments.sourceEventId, "once"),
+                  isNull(automationEnrollments.parentJobId),
+                  sql`(${automationTriggers.reentry}='once' OR ${automationEnrollments.sourceEventId}=('inactive:' || ${automationTriggers.automationId} || ':' || ${contacts.id} || ':' || ${lastActivity}))`,
                 ),
               ),
           ),
