@@ -359,6 +359,7 @@ function toContact(row: ContactRow): Contact {
   return contactSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
+    acquisitionProjectId: row.acquisitionProjectId,
     visitorId: row.visitorId,
     email: row.email,
     firstName: row.firstName,

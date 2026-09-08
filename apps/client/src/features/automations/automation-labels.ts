@@ -8,11 +8,17 @@ export function nodeLabel(node: AutomationNode): string {
       : "指定日時まで待機";
   }
   if (node.type === "decision") return `${eventLabel(node.config.event)}を待つ`;
-  if (node.type === "condition") return `${node.config.field} を判定`;
+  if (node.type === "condition")
+    return "filter" in node.config ? "対象者条件を判定" : `${node.config.field} を判定`;
+  if (node.config.action === "call_automation")
+    return node.config.mode === "await" ? "子フロー完了を待つ" : "子フローを開始";
+  if (node.config.action === "upsert_project_member") return "施策に登録・進捗更新";
   if (node.config.action === "handoff_to_sales") return "営業へ引き継ぐ";
   if (node.config.action === "send_email") return "メールを送信";
   if (node.config.action === "change_score")
-    return `スコア ${node.config.amount >= 0 ? "+" : ""}${node.config.amount}`;
+    return typeof node.config.amount === "number"
+      ? `スコア ${node.config.operation === "set" ? "=" : node.config.amount >= 0 ? "+" : ""}${node.config.amount}`
+      : `スコア変数 ${node.config.amount.key}`;
   return node.config.action.replaceAll("_", " ");
 }
 
@@ -30,6 +36,11 @@ export function triggerLabel(source: string | null): string {
   if (!source) return "未公開";
   return (
     {
+      batch: "バッチ実行",
+      callable: "他のフローから呼び出し",
+      project_member_joined: "施策に参加",
+      project_member_progressed: "施策の進捗",
+      project_member_succeeded: "施策の成果",
       contact_created: "連絡先が登録されたとき",
       form_submitted: "フォームが送信されたとき",
       segment_joined: "セグメントに参加したとき",
@@ -53,7 +64,10 @@ function eventLabel(
   }[event];
 }
 
-export function formatDuration(minutes: number): string {
+export function formatDuration(
+  minutes: number | { kind: "variable"; key: string; type: "number" },
+): string {
+  if (typeof minutes !== "number") return `変数 ${minutes.key}`;
   if (minutes % 1_440 === 0) return `${minutes / 1_440}日`;
   if (minutes % 60 === 0) return `${minutes / 60}時間`;
   return `${minutes}分`;

@@ -3,6 +3,7 @@ import { and, eq, exists, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   automationDefinitionSchema,
   type AutomationDefinition,
+  type AutomationExecutionSnapshot,
 } from "@openengage/core/automations";
 
 import { conditionalAudit } from "../projects/project-brief-persistence";
@@ -18,6 +19,12 @@ import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { automations, automationTriggers, automationVersions } from "./schema";
+
+export class AutomationPublicationConflictError extends Error {
+  constructor() {
+    super("下書きが変更されました。最新の内容を確認して再公開してください");
+  }
+}
 
 const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
@@ -41,6 +48,7 @@ export class AutomationCommandRepository extends WorkspaceRepository {
       description: input.description,
       status: "draft",
       draftVersionId,
+      variableProjectId: input.graph.variableProjectId ?? null,
       createdAt: now,
       updatedAt: now,
     } as const;
@@ -66,13 +74,13 @@ export class AutomationCommandRepository extends WorkspaceRepository {
         orm.insert(automations).select(
           sql`SELECT
             ${id}, ${this.context.workspaceId}, ${input.name}, ${input.description}, 'draft',
-            ${draftVersionId}, NULL, ${now}, ${now}
+            ${draftVersionId}, NULL, ${now}, ${now}, ${input.graph.variableProjectId ?? null}
           WHERE ${exists(precondition)}`,
         ),
         orm.insert(automationVersions).select(
           sql`SELECT
             ${draftVersionId}, ${this.context.workspaceId}, ${id}, 1, 'draft',
-            ${input.timezone}, ${versionValues.graph}, NULL, ${now}
+            ${input.timezone}, ${versionValues.graph}, NULL, ${now}, NULL, '{}', NULL
           WHERE ${exists(precondition)}`,
         ),
         orm.insert(projectItems).select(
@@ -161,6 +169,7 @@ export class AutomationCommandRepository extends WorkspaceRepository {
       .set({
         name: input.name,
         description: input.description,
+        variableProjectId: input.graph.variableProjectId ?? null,
         updatedAt: nowIso(),
       })
       .where(and(eq(automations.workspaceId, workspaceId), eq(automations.id, automationId)));
@@ -178,12 +187,14 @@ export class AutomationCommandRepository extends WorkspaceRepository {
     currentVersion: number;
     timezone: string;
     graph: AutomationDefinition;
+    snapshot?: AutomationExecutionSnapshot;
+    expectedGraph?: string;
     trigger: {
       sourceNodeId: string;
       source: string;
       eventType: string | null;
       resourceId: string | null;
-      reentry: "once" | "every_time";
+      reentry: "once" | "every_time" | "cooldown";
       inactivityDays: number | null;
     };
   }): Promise<{ draftVersionId: string }> {
@@ -191,27 +202,66 @@ export class AutomationCommandRepository extends WorkspaceRepository {
     const nextDraftId = uuidv7();
     const now = nowIso();
     const orm = this.database.orm;
-    await orm.batch([
+    // The freshly generated draft ID is this publication's transaction token.
+    // Every following write requires it, so a failed source-graph CAS is a no-op.
+    const authority = exists(
+      orm
+        .select({ id: automationVersions.id })
+        .from(automationVersions)
+        .innerJoin(
+          automations,
+          and(
+            eq(automations.id, automationVersions.automationId),
+            eq(automations.workspaceId, automationVersions.workspaceId),
+          ),
+        )
+        .where(
+          and(
+            eq(automations.workspaceId, workspaceId),
+            eq(automations.id, input.automationId),
+            eq(automations.draftVersionId, input.draftVersionId),
+            eq(automationVersions.id, input.draftVersionId),
+            eq(automationVersions.status, "draft"),
+            eq(automationVersions.version, input.currentVersion),
+            eq(automationVersions.graph, input.expectedGraph ?? graphCodec.encode(input.graph)),
+          ),
+        ),
+    );
+    const committed = exists(
+      orm
+        .select({ id: automationVersions.id })
+        .from(automationVersions)
+        .where(
+          and(
+            eq(automationVersions.id, nextDraftId),
+            eq(automationVersions.workspaceId, workspaceId),
+          ),
+        ),
+    );
+    const [created] = await orm.batch([
+      orm
+        .insert(automationVersions)
+        .select(
+          sql`SELECT ${nextDraftId},${workspaceId},${input.automationId},${input.currentVersion + 1},'draft',${input.timezone},${graphCodec.encode(input.graph)},NULL,${now},NULL,'{}',NULL WHERE ${authority}`,
+        ),
       orm
         .update(automationVersions)
-        .set({ status: "published", publishedAt: now })
+        .set({
+          status: "published",
+          publishedAt: now,
+          resolvedGraph: input.snapshot ? graphCodec.encode(input.snapshot.graph) : null,
+          dependencies: JSON.stringify(input.snapshot?.dependencies ?? {}),
+          variableSnapshot: input.snapshot?.variableSnapshot
+            ? JSON.stringify(input.snapshot.variableSnapshot)
+            : null,
+        })
         .where(
           and(
             eq(automationVersions.workspaceId, workspaceId),
             eq(automationVersions.id, input.draftVersionId),
-            eq(automationVersions.status, "draft"),
+            committed,
           ),
         ),
-      orm.insert(automationVersions).values({
-        id: nextDraftId,
-        workspaceId,
-        automationId: input.automationId,
-        version: input.currentVersion + 1,
-        status: "draft",
-        timezone: input.timezone,
-        graph: graphCodec.encode(input.graph),
-        createdAt: now,
-      }),
       orm
         .update(automations)
         .set({
@@ -221,7 +271,11 @@ export class AutomationCommandRepository extends WorkspaceRepository {
           updatedAt: now,
         })
         .where(
-          and(eq(automations.workspaceId, workspaceId), eq(automations.id, input.automationId)),
+          and(
+            eq(automations.workspaceId, workspaceId),
+            eq(automations.id, input.automationId),
+            committed,
+          ),
         ),
       orm
         .delete(automationTriggers)
@@ -229,21 +283,16 @@ export class AutomationCommandRepository extends WorkspaceRepository {
           and(
             eq(automationTriggers.workspaceId, workspaceId),
             eq(automationTriggers.automationId, input.automationId),
+            committed,
           ),
         ),
-      orm.insert(automationTriggers).values({
-        automationVersionId: input.draftVersionId,
-        workspaceId,
-        automationId: input.automationId,
-        sourceNodeId: input.trigger.sourceNodeId,
-        source: input.trigger.source,
-        eventType: input.trigger.eventType,
-        resourceId: input.trigger.resourceId,
-        reentry: input.trigger.reentry,
-        inactivityDays: input.trigger.inactivityDays,
-        createdAt: now,
-      }),
+      orm
+        .insert(automationTriggers)
+        .select(
+          sql`SELECT ${input.draftVersionId},${workspaceId},${input.automationId},${input.trigger.sourceNodeId},${input.trigger.source},${input.trigger.eventType},${input.trigger.resourceId},${input.trigger.reentry},${input.trigger.inactivityDays},${now} WHERE ${committed}`,
+        ),
     ]);
+    if (created.meta.changes !== 1) throw new AutomationPublicationConflictError();
     return { draftVersionId: nextDraftId };
   }
 

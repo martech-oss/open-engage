@@ -209,7 +209,10 @@ export const automationAnalyticsProcedure = authed.automations.analytics.handler
     getAutomationAnalytics(context.database, context.workspace.workspaceId, input.id),
 );
 
+import { automationExecutionProcedures } from "./execution-router";
+
 export const automationProcedures = {
+  ...automationExecutionProcedures,
   list: listAutomationsProcedure,
   create: createAutomationProcedure,
   generate: generateAutomationProcedure,

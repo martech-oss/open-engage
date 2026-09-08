@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
+import { programBindingSchema, type ProgramBinding } from "@openengage/core/projects";
 import { stringArraySchema } from "@openengage/core/shared";
 import {
   contentDocumentSchema,
@@ -12,6 +13,7 @@ import { organization } from "../auth/schema";
 import { contacts } from "../contacts/schema";
 import { VisitorRepository } from "../contacts/visitor-repository";
 import { visitorBindings } from "../contacts/visitor-schema";
+import { isProgramWriteConflict } from "../projects/program-member-repository";
 import { isConstraintError } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
@@ -23,6 +25,7 @@ import {
 } from "./public-form-submission-writer";
 import {
   forms,
+  formVersions,
   formSubmissions,
   landingPages,
   landingPageVersions,
@@ -41,6 +44,8 @@ const trackingAllowedDomainsCodec = defineJsonCodec(
 );
 
 export interface PublicFormRecord {
+  /** Public lookups always supply a publication snapshot, including an explicitly unbound null. */
+  programBinding?: ProgramBinding | null;
   id: string;
   workspaceId: string;
   name: string;
@@ -84,9 +89,18 @@ export class PublicFormRepository extends DatabaseRepository {
         allowedDomains: forms.allowedDomains,
         turnstileEnabled: forms.turnstileEnabled,
         successMessage: forms.successMessage,
+        programBinding: formVersions.programBinding,
       })
       .from(forms)
       .innerJoin(organization, eq(organization.id, forms.workspaceId))
+      .leftJoin(
+        formVersions,
+        and(
+          eq(formVersions.workspaceId, forms.workspaceId),
+          eq(formVersions.formId, forms.id),
+          eq(formVersions.version, forms.version),
+        ),
+      )
       .where(
         and(
           eq(organization.slug, workspaceSlug),
@@ -104,6 +118,9 @@ export class PublicFormRepository extends DatabaseRepository {
       allowedDomains: formAllowedDomainsCodec.decode(row.allowedDomains),
       turnstileEnabled: row.turnstileEnabled,
       successMessage: row.successMessage,
+      programBinding: row.programBinding
+        ? programBindingSchema.parse(JSON.parse(row.programBinding))
+        : null,
     };
   }
 
@@ -145,6 +162,7 @@ export class PublicFormRepository extends DatabaseRepository {
         );
         return { kind: "accepted", ...result };
       } catch (error) {
+        if (isProgramWriteConflict(error)) continue;
         if (!isConstraintError(error)) throw error;
         const duplicate = await this.findSubmission(input);
         if (duplicate) return { kind: "duplicate", ...duplicate };

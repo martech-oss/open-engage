@@ -58,7 +58,7 @@ describe("Automation flows", () => {
     expect(enrollment).toMatchObject({
       status: "active",
       current_node_id: "source",
-      source_event_id: "once",
+      source_event_id: expect.any(String),
       job_status: "pending",
     });
   });

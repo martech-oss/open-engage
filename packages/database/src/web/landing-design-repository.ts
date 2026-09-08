@@ -1,6 +1,11 @@
 import { and, desc, eq, isNull, ne, or, sql, lt, inArray } from "drizzle-orm";
 
 import {
+  variableSnapshotSchema,
+  type ProgramBinding,
+  type VariableSnapshot,
+} from "@openengage/core/projects";
+import {
   landingPageDocumentSchema,
   landingFormBindingSchema,
   landingGenerationJobSchema,
@@ -8,7 +13,6 @@ import {
   type LandingFormBinding,
 } from "@openengage/core/web";
 
-import { organization } from "../auth/schema";
 import { GeneratedEmailImageRepository } from "../messaging/email-design-repository";
 import { generatedEmailImages } from "../messaging/schema";
 import { projects } from "../projects/schema";
@@ -53,6 +57,12 @@ export class LandingDesignRepository extends WorkspaceRepository {
       ? {
           ...row,
           document: landingPageDocumentSchema.parse(JSON.parse(row.document)),
+          publishedDocument: row.publishedDocument
+            ? landingPageDocumentSchema.parse(JSON.parse(row.publishedDocument))
+            : null,
+          variableSnapshot: row.variableSnapshot
+            ? variableSnapshotSchema.parse(JSON.parse(row.variableSnapshot))
+            : null,
           formBindings: landingFormBindingSchema.array().parse(JSON.parse(row.formBindings)),
         }
       : null;
@@ -69,6 +79,12 @@ export class LandingDesignRepository extends WorkspaceRepository {
       .map((row) => ({
         ...row,
         document: landingPageDocumentSchema.parse(JSON.parse(row.document!)),
+        publishedDocument: row.publishedDocument
+          ? landingPageDocumentSchema.parse(JSON.parse(row.publishedDocument))
+          : null,
+        variableSnapshot: row.variableSnapshot
+          ? variableSnapshotSchema.parse(JSON.parse(row.variableSnapshot))
+          : null,
         formBindings: landingFormBindingSchema.array().parse(JSON.parse(row.formBindings)),
       }));
   }
@@ -92,24 +108,51 @@ export class LandingDesignRepository extends WorkspaceRepository {
   }
 
   /** All form snapshots and the public pointer commit together. Failed CAS rolls the entire batch back. */
-  async publish(pageId: string, versionId: string, expectedDraftId: string) {
+  async publish(
+    pageId: string,
+    versionId: string,
+    expectedDraftId: string,
+    publication?: {
+      document: LandingPageDocument;
+      snapshot: VariableSnapshot;
+      formSnapshots?: Record<string, VariableSnapshot>;
+      programBindings?: Record<string, ProgramBinding | null>;
+    },
+  ) {
     const version = await this.version(pageId, versionId);
     if (!version) return false;
     const orm = this.database.orm,
       now = nowIso(),
       workspaceId = this.context.workspaceId;
-    const bindings: LandingFormBinding[] = version.formBindings.length
-      ? version.formBindings
-      : version.document.forms.map((form) => ({
-          refId: form.refId,
-          formId: uuidv7(),
-          formVersionId: uuidv7(),
-        }));
+    const publishedDocument =
+      version.publishedDocument ?? publication?.document ?? version.document;
+    const snapshot = version.variableSnapshot ?? publication?.snapshot ?? null;
+    const bindings: LandingFormBinding[] =
+      version.publishedAt && version.formBindings.length
+        ? version.formBindings
+        : version.document.forms.map((form) => ({
+            refId: form.refId,
+            formId: uuidv7(),
+            formVersionId: uuidv7(),
+          }));
     const writes = version.publishedAt
       ? []
-      : version.document.forms.flatMap((form) => {
+      : publishedDocument.forms.flatMap((form) => {
           const binding = bindings.find((item) => item.refId === form.refId)!;
           const definition = JSON.stringify(form.definition);
+          const sourceForm = version.document.forms.find((item) => item.refId === form.refId)!;
+          const variableFields = {
+            sourceDefinition: JSON.stringify(sourceForm.definition),
+            sourceSuccessMessage: sourceForm.successMessage,
+            variableProjectId:
+              publication?.formSnapshots?.[form.refId]?.projectId ??
+              (form.formId ? null : (version.document.variableProjectId ?? null)),
+            variableSnapshot: publication?.formSnapshots?.[form.refId]
+              ? JSON.stringify(publication.formSnapshots[form.refId])
+              : snapshot
+                ? JSON.stringify(snapshot)
+                : null,
+          };
           return [
             orm.insert(forms).values({
               id: binding.formId,
@@ -118,6 +161,7 @@ export class LandingDesignRepository extends WorkspaceRepository {
               slug: `lp-${binding.formId}`,
               status: "published",
               definition,
+              ...variableFields,
               allowedDomains: "[]",
               turnstileEnabled: form.turnstileEnabled,
               successMessage: form.successMessage,
@@ -128,8 +172,13 @@ export class LandingDesignRepository extends WorkspaceRepository {
               id: binding.formVersionId,
               workspaceId,
               formId: binding.formId,
+              publishedAt: now,
+              programBinding: publication?.programBindings?.[form.refId]
+                ? JSON.stringify(publication.programBindings[form.refId])
+                : null,
               version: 1,
               definition,
+              ...variableFields,
               allowedDomains: "[]",
               turnstileEnabled: form.turnstileEnabled,
               successMessage: form.successMessage,
@@ -156,7 +205,12 @@ export class LandingDesignRepository extends WorkspaceRepository {
       ...writes,
       orm
         .update(landingPageVersions)
-        .set({ formBindings: JSON.stringify(bindings), publishedAt: version.publishedAt ?? now })
+        .set({
+          formBindings: JSON.stringify(bindings),
+          publishedAt: version.publishedAt ?? now,
+          publishedDocument: JSON.stringify(publishedDocument),
+          variableSnapshot: snapshot ? JSON.stringify(snapshot) : null,
+        })
         .where(
           and(
             this.inWorkspace(landingPageVersions),
@@ -291,7 +345,7 @@ export class LandingDesignRepository extends WorkspaceRepository {
         id,
         workspaceId,
         pageId: sql`CASE WHEN EXISTS (SELECT 1 FROM landing_pages WHERE id = ${input.pageId} AND workspace_id = ${workspaceId} AND current_version_id = ${input.baseVersionId} AND status != 'archived') AND EXISTS (SELECT 1 FROM landing_generation_jobs WHERE id = ${input.jobId} AND workspace_id = ${workspaceId} AND lease_id = ${input.leaseId} AND status = 'running') THEN ${input.pageId} ELSE NULL END`,
-        version: base.version + 1,
+        version: sql`(SELECT COALESCE(MAX(version), 0) + 1 FROM landing_page_versions WHERE workspace_id = ${workspaceId} AND page_id = ${input.pageId})`,
         contentDocument: JSON.stringify({ schemaVersion: 1, blocks: [] }),
         document: JSON.stringify(input.document),
         formBindings: "[]",
@@ -414,51 +468,5 @@ export class LandingGenerationRepository extends DatabaseRepository {
         ),
       )
       .limit(20);
-  }
-}
-
-export class PublicLandingRepository extends DatabaseRepository {
-  async page(workspaceSlug: string, slug: string) {
-    return this.database.orm
-      .select({
-        id: landingPages.id,
-        workspaceId: landingPages.workspaceId,
-        publishedVersionId: landingPages.publishedVersionId,
-        currentVersionId: landingPages.currentVersionId,
-        workspaceName: organization.name,
-      })
-      .from(landingPages)
-      .innerJoin(organization, eq(organization.id, landingPages.workspaceId))
-      .where(
-        and(
-          eq(organization.slug, workspaceSlug),
-          eq(landingPages.slug, slug),
-          eq(landingPages.status, "published"),
-        ),
-      )
-      .get();
-  }
-  async pinnedForm(workspaceId: string, versionId: string) {
-    const row = await this.database.orm
-      .select()
-      .from(formVersions)
-      .where(and(eq(formVersions.workspaceId, workspaceId), eq(formVersions.id, versionId)))
-      .get();
-    if (!row) return null;
-    const form = await this.database.orm
-      .select({ name: forms.name })
-      .from(forms)
-      .where(and(eq(forms.workspaceId, workspaceId), eq(forms.id, row.formId)))
-      .get();
-    if (!form) return null;
-    return {
-      id: row.formId,
-      workspaceId,
-      name: form.name,
-      definition: JSON.parse(row.definition) as LandingPageDocument["forms"][number]["definition"],
-      allowedDomains: JSON.parse(row.allowedDomains) as string[],
-      turnstileEnabled: row.turnstileEnabled,
-      successMessage: row.successMessage,
-    };
   }
 }

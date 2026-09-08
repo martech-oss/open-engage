@@ -14,6 +14,8 @@ import {
   useSaveAutomationDraft,
   useSetAutomationStatus,
 } from "./automation-api";
+import { AutomationContextSettings } from "./automation-context-settings";
+import { AutomationRunsPanel } from "./automation-runs-panel";
 import { AutomationStatusBadge } from "./automation-status-badge";
 import type { AutomationDraft, AutomationOptions } from "./automation-types";
 
@@ -38,6 +40,7 @@ export function AutomationBuilder({
   const [status, setStatus] = useState(initialDraft.status);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [view, setView] = useState<"flow" | "runs">("flow");
   const [aiOpen, setAiOpen] = useState(false);
   const [undoDefinition, setUndoDefinition] = useState<typeof definition | null>(null);
   const templateIssues = useMemo(() => {
@@ -67,7 +70,7 @@ export function AutomationBuilder({
       if (publish) {
         await publishDraft.mutateAsync({ id });
         setStatus("active");
-        setNotice("公開しました。以降の行動イベントから自動登録されます。");
+        setNotice("公開しました。設定した開始方法で登録されます。");
         toast.success("オートメーションを公開しました");
       } else {
         setNotice("下書きを保存しました");
@@ -156,26 +159,44 @@ export function AutomationBuilder({
           </Button>
         </div>
       </div>
-      {blockingIssues.length > 0 ? (
-        <Alert variant="default" className="m-4 lg:mx-8">
-          <TriangleAlert />
-          <AlertTitle>公開前の対応が必要です</AlertTitle>
-          <AlertDescription>{blockingIssues.join(" / ")}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Suspense
-        fallback={
-          <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] place-items-center bg-muted/60">
-            <Spinner />
-          </div>
-        }
-      >
-        <AutomationFlowCanvas
-          definition={definition}
-          options={options}
-          onDefinitionChange={setDefinition}
+      <div className="flex gap-2 border-b px-5 py-2">
+        <Button variant={view === "flow" ? "secondary" : "ghost"} onClick={() => setView("flow")}>
+          フロー編集
+        </Button>
+        <Button variant={view === "runs" ? "secondary" : "ghost"} onClick={() => setView("runs")}>
+          実行履歴
+        </Button>
+      </div>
+      {view === "runs" ? (
+        <AutomationRunsPanel
+          id={id}
+          canStart={status === "active" && initialDraft.publishedTriggerSource === "batch"}
         />
-      </Suspense>
+      ) : (
+        <>
+          <AutomationContextSettings definition={definition} onChange={setDefinition} />
+          {blockingIssues.length > 0 ? (
+            <Alert variant="default" className="m-4 lg:mx-8">
+              <TriangleAlert />
+              <AlertTitle>公開前の対応が必要です</AlertTitle>
+              <AlertDescription>{blockingIssues.join(" / ")}</AlertDescription>
+            </Alert>
+          ) : null}
+          <Suspense
+            fallback={
+              <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] place-items-center bg-muted/60">
+                <Spinner />
+              </div>
+            }
+          >
+            <AutomationFlowCanvas
+              definition={definition}
+              options={options}
+              onDefinitionChange={setDefinition}
+            />
+          </Suspense>
+        </>
+      )}
       <Suspense fallback={null}>
         {aiOpen ? (
           <AutomationAiSheet

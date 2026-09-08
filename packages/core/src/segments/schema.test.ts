@@ -7,10 +7,15 @@ describe("segment condition schema", () => {
   it("defines every supported segment field exactly once", () => {
     const fields = segmentFieldDefinitions.map((definition) => definition.field);
 
-    expect(fields).toHaveLength(32);
+    expect(fields).toHaveLength(37);
     expect(new Set(fields).size).toBe(fields.length);
     expect(fields).toEqual(
       expect.arrayContaining([
+        "project_id",
+        "project_status",
+        "project_success",
+        "project_joined_at",
+        "project_success_at",
         "email",
         "score",
         "tag",

@@ -16,6 +16,7 @@ const redirectSelection = {
   name: customRedirects.name,
   slug: customRedirects.slug,
   destinationUrl: customRedirects.destinationUrl,
+  status: customRedirects.status,
   clickCount: customRedirects.clickCount,
   createdAt: customRedirects.createdAt,
   updatedAt: customRedirects.updatedAt,
@@ -41,6 +42,7 @@ export class CustomRedirectRepository extends WorkspaceRepository {
       name: input.name,
       slug: input.slug,
       destinationUrl: input.destinationUrl,
+      status: input.status,
       createdAt: now,
       updatedAt: now,
     });
@@ -54,6 +56,7 @@ export class CustomRedirectRepository extends WorkspaceRepository {
         name: input.name,
         slug: input.slug,
         destinationUrl: input.destinationUrl,
+        status: input.status,
         updatedAt: nowIso(),
       })
       .where(
@@ -108,6 +111,7 @@ export class PublicCustomRedirectRepository extends DatabaseRepository {
         and(
           eq(organization.slug, workspaceSlug),
           eq(customRedirects.slug, redirectSlug),
+          eq(customRedirects.status, "published"),
           isNull(customRedirects.archivedAt),
         ),
       )

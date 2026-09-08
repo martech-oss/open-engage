@@ -1,5 +1,6 @@
 import * as z from "zod";
 
+import { typedVariableRefSchema, variableSnapshotSchema } from "../projects/variables";
 import { signupFormDefinitionSchema } from "./form-schema";
 
 const refId = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/);
@@ -17,6 +18,7 @@ export const safeWebUrlSchema = z
 export const landingPageDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
+    variableProjectId: z.string().min(1).nullable().optional(),
     title: z.string().min(1).max(200),
     description: z.string().max(500),
     html: z.string().max(200_000),
@@ -34,7 +36,14 @@ export const landingPageDocumentSchema = z
       )
       .max(10),
     ctas: z
-      .array(z.object({ refId, href: safeWebUrlSchema, label: z.string().min(1).max(200) }))
+      .array(
+        z.object({
+          refId,
+          href: safeWebUrlSchema,
+          hrefVariable: typedVariableRefSchema("url").optional(),
+          label: z.string().min(1).max(200),
+        }),
+      )
       .max(30),
     images: z
       .array(z.object({ refId, assetId: z.string().min(1), alt: z.string().max(500) }))
@@ -65,6 +74,8 @@ export const landingPageVersionSchema = z.object({
   version: z.number().int(),
   document: landingPageDocumentSchema,
   formBindings: z.array(landingFormBindingSchema),
+  publishedDocument: landingPageDocumentSchema.nullable().default(null),
+  variableSnapshot: variableSnapshotSchema.nullable().default(null),
   publishedAt: z.string().nullable(),
   createdAt: z.string(),
 });

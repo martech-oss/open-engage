@@ -13,3 +13,8 @@ export * from "./repository";
 export * from "./workspace-command-repository";
 export * from "./workspace-query-repository";
 export * from "./workspace-repository";
+export * from "./run-repository";
+export * from "./call-repository";
+export * from "./catalog-repository";
+export * from "./execution-repository";
+export * from "./run-recovery-repository";

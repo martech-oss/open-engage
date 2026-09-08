@@ -67,8 +67,8 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
 
   function setSearch(patch: Partial<ProjectBriefSearch>): void {
     void navigate({
-      to: "/automations/briefs",
-      search: { ...search, ...patch },
+      to: "/projects",
+      search: { ...search, ...patch, view: "briefs" },
       replace: true,
     });
   }
@@ -118,7 +118,7 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
     try {
       const result = await create.mutateAsync(validation.data);
       setOpen(false);
-      await navigate({ to: "/automations/briefs/$id", params: { id: result.id } });
+      await navigate({ to: "/projects/$id", params: { id: result.id } });
     } catch (cause) {
       setError(getErrorMessage(cause, "施策ブリーフを作成できませんでした"));
     }
@@ -212,7 +212,7 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
               <Button
                 size="sm"
                 variant="outline"
-                render={<Link to="/automations/briefs/$id" params={{ id: brief.id }} />}
+                render={<Link to="/projects/$id" params={{ id: brief.id }} />}
               >
                 詳細
               </Button>

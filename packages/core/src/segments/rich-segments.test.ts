@@ -119,3 +119,18 @@ it("rejects ambiguous nested related scopes and arrays used as scalar custom val
     }).success,
   ).toBe(false);
 });
+
+it("accepts an explicit program member scope with status, outcome and cohort conditions", () => {
+  expect(
+    segmentFilterSchema.safeParse({
+      kind: "group",
+      combinator: "and",
+      relation: "project_member",
+      children: [
+        { kind: "condition", field: "project_id", operator: "eq", value: "p1" },
+        { kind: "condition", field: "project_status", operator: "eq", value: "attended" },
+        { kind: "condition", field: "project_success_at", operator: "exists", value: null },
+      ],
+    }).success,
+  ).toBe(true);
+});

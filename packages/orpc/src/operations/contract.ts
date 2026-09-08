@@ -2,7 +2,7 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { contactDataJobSchema, contactExportFilterSchema } from "@openengage/core/contacts";
-import { deadLetterRowSchema } from "@openengage/core/platform";
+import { deadLetterRowSchema, operationHealthSchema } from "@openengage/core/platform";
 import { dashboardSchema } from "@openengage/core/reports";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
@@ -61,6 +61,10 @@ export const contactDataContract = {
 };
 
 export const platformContract = {
+  operationHealth: oc
+    .route({ method: "GET", path: "/platform/operation-health" })
+    .errors(authedErrors)
+    .output(operationHealthSchema),
   listDeadLetters: oc
     .route({ method: "GET", path: "/platform/dead-letters" })
     .errors(authedErrors)

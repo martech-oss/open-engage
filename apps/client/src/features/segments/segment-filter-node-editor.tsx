@@ -10,7 +10,7 @@ import type { SegmentDefaultValues } from "./segment-builder-model";
 import { SegmentConditionEditor } from "./segment-condition-editor";
 
 type NodeEditorProps = {
-  inheritedRelation?: "company" | "deal" | "event" | undefined;
+  inheritedRelation?: "company" | "deal" | "event" | "project_member" | undefined;
   node: SegmentFilter;
   path: number[];
   catalog: SegmentGenerationCatalog;
@@ -54,7 +54,10 @@ export function SegmentFilterNodeEditor(props: NodeEditorProps): ReactNode {
               path,
               event.target.value === "contact"
                 ? rest
-                : { ...rest, relation: event.target.value as "company" | "deal" | "event" },
+                : {
+                    ...rest,
+                    relation: event.target.value as "company" | "deal" | "event" | "project_member",
+                  },
             );
           }}
         >
@@ -62,6 +65,9 @@ export function SegmentFilterNodeEditor(props: NodeEditorProps): ReactNode {
           <NativeSelectOption value="company">同じ会社</NativeSelectOption>
           <NativeSelectOption value="deal">同じ商談</NativeSelectOption>
           <NativeSelectOption value="event">同じイベント</NativeSelectOption>
+          <NativeSelectOption value="project_member">
+            同じ施策参加者（status・成果・日時）
+          </NativeSelectOption>
         </NativeSelect>
         <NativeSelect
           aria-label="一致の有無"

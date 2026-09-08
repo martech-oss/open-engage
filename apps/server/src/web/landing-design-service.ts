@@ -1,3 +1,4 @@
+import type { ProgramBinding } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { landingGenerationResultSchema, type LandingPageDocument } from "@openengage/core/web";
 import { AssetRepository } from "@openengage/database/assets";
@@ -6,6 +7,7 @@ import {
   EmailDesignRepository,
   GeneratedEmailImageRepository,
 } from "@openengage/database/messaging";
+import { FormProgramRepository } from "@openengage/database/projects";
 import { isConstraintError } from "@openengage/database/shared";
 import {
   LandingDesignRepository,
@@ -17,8 +19,10 @@ import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 import { generateEmailImage } from "../messaging/email-image-generation-service";
 import { logError } from "../observability";
+import { resolveProjectVariables } from "../projects/variable-service";
 import { hasTurnstileConfiguration } from "./config";
 import { sanitizeLandingDocument } from "./landing-safety";
+import { resolveLandingVariablePublication } from "./variable-publication-service";
 
 export async function validateLandingReferences(
   database: OpenEngageDatabase,
@@ -28,6 +32,8 @@ export async function validateLandingReferences(
   publishing = false,
 ): Promise<void> {
   const repository = new LandingDesignRepository(database, { workspaceId });
+  if (document.variableProjectId && !(await repository.validProject(document.variableProjectId)))
+    throw new Error("変数のProjectが見つかりません");
   if (
     document.measurement.projectId &&
     !(await repository.validProject(document.measurement.projectId))
@@ -66,9 +72,31 @@ export async function publishLandingPage(
     version = await repository.version(input.id, input.versionId);
   if (!page || !version) return "not_found" as const;
   if (page.currentVersionId !== input.baseVersionId) return "conflict" as const;
-  await sanitizeLandingDocument(version.document);
-  await validateLandingReferences(database, workspaceId, version.document, env, true);
-  await repository.publish(input.id, input.versionId, input.baseVersionId);
+  const { snapshot, formSnapshots, document } =
+    version.publishedDocument && version.variableSnapshot
+      ? {
+          snapshot: version.variableSnapshot,
+          formSnapshots: {},
+          document: version.publishedDocument,
+        }
+      : await resolveLandingVariablePublication(database, workspaceId, version.document);
+  await validateLandingReferences(database, workspaceId, document, env, true);
+  const programBindings: Record<string, ProgramBinding | null> = {};
+  if (!version.publishedAt) {
+    const programs = new FormProgramRepository(database, { workspaceId });
+    for (const form of version.document.forms) {
+      const binding = form.formId ? await programs.get(form.formId) : null;
+      programBindings[form.refId] = binding
+        ? await programs.validate(binding, document.measurement.projectId)
+        : null;
+    }
+  }
+  await repository.publish(input.id, input.versionId, input.baseVersionId, {
+    document,
+    snapshot,
+    formSnapshots,
+    programBindings,
+  });
   return "ok" as const;
 }
 
@@ -107,7 +135,14 @@ export async function processLandingGeneration(
       repository.jobs(job.pageId),
       new SignupFormRepository(database, workspace).listSignupForms(),
     ]);
+    const variables = await resolveProjectVariables(
+      database,
+      workspace.workspaceId,
+      base.document.variableProjectId ?? null,
+    );
     const initialData = {
+      variables: variables.values.map(({ key, type, value }) => ({ key, type, value })),
+      variableProjectId: base.document.variableProjectId ?? null,
       brand,
       publicImages,
       forms: forms.slice(0, 50).map((form) => ({
@@ -157,6 +192,7 @@ export async function processLandingGeneration(
       slot.alt = image.alt;
     }
     phase = "validation";
+    proposal.document.variableProjectId = base.document.variableProjectId ?? null;
     const document = await sanitizeLandingDocument(proposal.document);
     await validateLandingReferences(database, job.workspaceId, document, env);
     phase = "commit";

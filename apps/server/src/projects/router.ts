@@ -2,6 +2,7 @@ import { writeAuditLog } from "@openengage/database/platform";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import { projectCloneProcedures } from "./clone-router";
 import { costProcedures } from "./cost-router";
 import {
   generateMarketingBrief,
@@ -24,6 +25,7 @@ import {
   withdrawProjectBrief,
 } from "./project-brief-service";
 import { addProjectItem, createProject, listProjects } from "./service";
+import { variableProcedures } from "./variable-router";
 
 export const listProjectsProcedure = authed.projects.list.handler(({ context }) =>
   listProjects(context.database, context.workspace.workspaceId),
@@ -249,7 +251,12 @@ export const removeProjectBriefItemProcedure = authed.projects.briefRemoveItem.h
   },
 );
 
+import { programProcedures } from "./program-router";
+
 export const projectProcedures = {
+  ...projectCloneProcedures,
+  ...variableProcedures,
+  ...programProcedures,
   ...costProcedures,
   list: listProjectsProcedure,
   create: createProjectProcedure,

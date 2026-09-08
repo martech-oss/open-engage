@@ -22,6 +22,11 @@ export function customRedirectColumns({
 }): DataTableColumn<CustomRedirectRow>[] {
   return [
     {
+      key: "status",
+      header: "公開状態",
+      cell: (item) => (item.status === "draft" ? "下書き" : "公開"),
+    },
+    {
       key: "name",
       header: "名前",
       cell: (item) => (

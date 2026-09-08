@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, exists, inArray, lte, gte, isNull, sql } from "drizzle-orm";
 
 import { DatabaseRepository } from "../shared/repository-base";
 import { assertAutomationJobTransition, AUTOMATION_MAX_STARTS } from "./engine-support";
@@ -7,6 +7,24 @@ import { automationEnrollments, automationJobs } from "./schema";
 /** Lease recovery and terminal failure transitions for automation jobs. */
 export class AutomationJobRecoveryRepository extends DatabaseRepository {
   public async recoverExpiredJobs(now: string, limit = 500): Promise<void> {
+    // Repair waits parked by older workers with an exhausted pre-suspension budget.
+    const parked = this.database.orm
+      .select({ id: automationJobs.id })
+      .from(automationJobs)
+      .where(
+        and(
+          eq(automationJobs.status, "pending"),
+          isNull(automationJobs.leaseId),
+          gte(automationJobs.attempts, AUTOMATION_MAX_STARTS),
+          sql`json_extract(${automationJobs.payload},'$.waiting') = 1`,
+        ),
+      )
+      .orderBy(asc(automationJobs.dueAt))
+      .limit(limit);
+    await this.database.orm
+      .update(automationJobs)
+      .set({ attempts: 0, lastError: null, updatedAt: now })
+      .where(inArray(automationJobs.id, parked));
     const rows = await this.database.orm
       .select({
         id: automationJobs.id,

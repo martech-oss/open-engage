@@ -22,6 +22,7 @@ const doubles = vi.hoisted(() => ({
 const contact: ContactSummary = {
   id: "contact-a",
   workspaceId: "workspace-a",
+  acquisitionProjectId: null,
   visitorId: null,
   email: "a@example.com",
   firstName: "Alice",

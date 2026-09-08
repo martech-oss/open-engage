@@ -1,5 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
+import type { ProgramBinding } from "@openengage/core/projects";
+
 import type { OpenEngageDatabase } from "../client";
 import { contactEventProjectionRows } from "../contacts/event-repository";
 import {
@@ -10,6 +12,7 @@ import {
 } from "../contacts/schema";
 import { VisitorRepository } from "../contacts/visitor-repository";
 import { siteVisitors } from "../contacts/visitor-schema";
+import { ProjectMemberRepository } from "../projects/program-member-repository";
 import { uuidv7 } from "../shared/uuid";
 import { formSubmissions } from "./schema";
 
@@ -22,6 +25,7 @@ export interface PersistPublicFormSubmissionInput {
   requestFingerprint?: string;
   identityProofHash?: string | null;
   context?: Record<string, unknown>;
+  programBinding?: ProgramBinding;
   contactFields: {
     firstName: string | null;
     lastName: string | null;
@@ -44,6 +48,19 @@ export async function persistPublicFormSubmissionBatch(
 ): Promise<{ contactId: string; visitorId: string | null }> {
   const orm = database.orm;
   const contactId = existingContactId ?? uuidv7();
+  const programWork = input.programBinding
+    ? await new ProjectMemberRepository(database, {
+        workspaceId: input.workspaceId,
+      }).prepareMutation(
+        {
+          ...input.programBinding,
+          contactId,
+          source: "form",
+          idempotencyKey: `form:${input.submissionId}`,
+        },
+        input.occurredAt,
+      )
+    : null;
   const contactMutation = existingContactId
     ? orm
         .update(contacts)
@@ -63,6 +80,7 @@ export async function persistPublicFormSubmissionBatch(
         id: contactId,
         workspaceId: input.workspaceId,
         email: input.email,
+        acquisitionProjectId: input.programBinding?.projectId ?? null,
         firstName: input.contactFields.firstName,
         lastName: input.contactFields.lastName,
         phone: input.contactFields.phone,
@@ -138,6 +156,7 @@ export async function persistPublicFormSubmissionBatch(
       formSubmittedEvent,
       formSubmittedWork,
       formSubmittedProjections,
+      ...(programWork?.statements ?? []),
     ]);
     return { contactId, visitorId: input.visitorId ?? null };
   }
@@ -172,6 +191,7 @@ export async function persistPublicFormSubmissionBatch(
     formSubmittedEvent,
     formSubmittedWork,
     formSubmittedProjections,
+    ...(programWork?.statements ?? []),
   ]);
   return { contactId, visitorId: input.visitorId ?? null };
 }

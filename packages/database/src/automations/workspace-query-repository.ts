@@ -137,18 +137,32 @@ export class AutomationQueryRepository extends WorkspaceRepository {
       .limit(UNPAGINATED_LIST_LIMIT);
   }
 
-  /** The draft graph of one automation plus the automation status. */
-  public async getDraft(
-    automationId: string,
-  ): Promise<{ graph: AutomationDefinition; status: string } | null> {
+  /** The editable draft plus status and the current published trigger source. */
+  public async getDraft(automationId: string): Promise<{
+    graph: AutomationDefinition;
+    status: string;
+    publishedTriggerSource: string | null;
+  } | null> {
     const row = await this.database.orm
-      .select({ graph: automationVersions.graph, status: automations.status })
+      .select({
+        graph: automationVersions.graph,
+        status: automations.status,
+        publishedTriggerSource: automationTriggers.source,
+      })
       .from(automations)
       .innerJoin(
         automationVersions,
         and(
           eq(automationVersions.id, automations.draftVersionId),
           eq(automationVersions.workspaceId, automations.workspaceId),
+        ),
+      )
+      .leftJoin(
+        automationTriggers,
+        and(
+          eq(automationTriggers.automationVersionId, automations.publishedVersionId),
+          eq(automationTriggers.workspaceId, automations.workspaceId),
+          eq(automationTriggers.automationId, automations.id),
         ),
       )
       .where(and(this.inWorkspace(automations), eq(automations.id, automationId)))
@@ -162,9 +176,12 @@ export class AutomationQueryRepository extends WorkspaceRepository {
   }
 
   /** The automation's current draft version, if it is still publishable. */
-  public async findPublishableDraft(
-    automationId: string,
-  ): Promise<{ draftVersionId: string; version: number; graph: AutomationDefinition } | null> {
+  public async findPublishableDraft(automationId: string): Promise<{
+    draftVersionId: string;
+    version: number;
+    graph: AutomationDefinition;
+    rawGraph?: string;
+  } | null> {
     const row = await this.database.orm
       .select({
         draftVersionId: automationVersions.id,
@@ -191,6 +208,7 @@ export class AutomationQueryRepository extends WorkspaceRepository {
       ? {
           ...row,
           graph: graphCodec.decode(row.graph),
+          rawGraph: row.graph,
         }
       : null;
   }

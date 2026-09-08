@@ -11,6 +11,7 @@ import {
 const activeContact: Contact = {
   id: "contact-1",
   workspaceId: "workspace-1",
+  acquisitionProjectId: null,
   visitorId: null,
   email: "ada@example.com",
   firstName: "Ada",

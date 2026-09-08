@@ -77,7 +77,7 @@ export async function generateEmailSequence(
       context.automation.catalog,
     );
   }
-  validateReadyProposal(result.proposal, reserved, context);
+  await validateReadyProposal(result.proposal, reserved, context);
   return { status: "ready", proposal: result.proposal };
 }
 
@@ -88,7 +88,7 @@ export async function applyEmailSequence(
   projectLink?: { projectId: string; briefRevision: number; addedByUserId: string },
 ) {
   const context = await loadSequenceContext(database, workspace);
-  validateReadyProposal(proposal, null, context);
+  await validateReadyProposal(proposal, null, context);
   const repository = new EmailSequenceDraftRepository(database, workspace);
   try {
     return await repository.applyWithOutcome(proposal, projectLink);
@@ -138,11 +138,11 @@ function reservedIds(input: GenerateEmailSequenceInput): {
   };
 }
 
-function validateReadyProposal(
+async function validateReadyProposal(
   proposal: EmailSequenceProposal,
   reserved: ReturnType<typeof reservedIds> | null,
   context: SequenceContext,
-): void {
+): Promise<void> {
   if (new TextEncoder().encode(JSON.stringify(proposal)).byteLength > MAX_PROPOSAL_BYTES) {
     fail("Proposal exceeds 512 KiB");
   }
@@ -161,9 +161,13 @@ function validateReadyProposal(
       fail("Proposal uses ids outside the reserved bundle");
     }
   }
-  const resourceIssues = validateAutomationResources(proposal.definition, context.automation, {
-    additionalEmailTemplateIds: proposal.emails.map((email) => email.templateId),
-  });
+  const resourceIssues = await validateAutomationResources(
+    proposal.definition,
+    context.automation,
+    {
+      additionalEmailTemplateIds: proposal.emails.map((email) => email.templateId),
+    },
+  );
   if (resourceIssues.length > 0) {
     fail(resourceIssues.map((issue) => issue.message).join("; "));
   }

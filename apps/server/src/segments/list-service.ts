@@ -1,8 +1,8 @@
 import type { Contact } from "@openengage/core/contacts";
-import { compileSegmentFilter } from "@openengage/core/segments";
 import type { SegmentFilter, SegmentRow } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
+import { compileWorkspaceSegmentFilter } from "@openengage/database/segments";
 import { SegmentRepository, type SegmentRecord } from "@openengage/database/segments";
 
 import {
@@ -62,7 +62,7 @@ export async function previewSegment(
   normalizedFilter: SegmentFilter;
   warnings: string[];
 }> {
-  const compiled = compileSegmentFilter(workspace.workspaceId, filter);
+  const compiled = compileWorkspaceSegmentFilter(workspace.workspaceId, filter);
   const repository = new SegmentRepository(database, workspace);
   const [rows, matchedCount] = await Promise.all([
     repository.previewContacts(compiled, PREVIEW_LIMIT),
@@ -88,6 +88,7 @@ export function toPreviewContact(row: Record<string, unknown>): Contact {
   return {
     id: primitiveString(row["id"]),
     workspaceId: primitiveString(row["workspace_id"]),
+    acquisitionProjectId: nullablePrimitiveString(row["acquisition_project_id"]),
     visitorId: nullablePrimitiveString(row["visitor_id"]),
     email: nullablePrimitiveString(row["email"]),
     firstName: nullablePrimitiveString(row["first_name"]),

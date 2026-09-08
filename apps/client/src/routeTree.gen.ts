@@ -43,6 +43,8 @@ import { Route as AppEmailsTrackingRouteImport } from './routes/_app.emails.trac
 import { Route as AppEmailsVariablesRouteImport } from './routes/_app.emails.variables'
 import { Route as AppListsIndexRouteImport } from './routes/_app.lists.index'
 import { Route as AppListsIdRouteImport } from './routes/_app.lists.$id'
+import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as AppProjectsIdRouteImport } from './routes/_app.projects.$id'
 import { Route as AppScoringIndexRouteImport } from './routes/_app.scoring.index'
 import { Route as AppScoringGradingRouteImport } from './routes/_app.scoring.grading'
 import { Route as AppScoringRulesRouteImport } from './routes/_app.scoring.rules'
@@ -227,6 +229,16 @@ const AppListsIdRoute = AppListsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AppListsRoute,
 } as any)
+const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
+  id: '/projects/',
+  path: '/projects/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsIdRoute = AppProjectsIdRouteImport.update({
+  id: '/projects/$id',
+  path: '/projects/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppScoringIndexRoute = AppScoringIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -327,6 +339,7 @@ export interface FileRoutesByFullPath {
   '/emails/tracking': typeof AppEmailsTrackingRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
   '/lists/$id': typeof AppListsIdRoute
+  '/projects/$id': typeof AppProjectsIdRoute
   '/scoring/grading': typeof AppScoringGradingRoute
   '/scoring/rules': typeof AppScoringRulesRoute
   '/segments/$id': typeof AppSegmentsIdRoute
@@ -342,6 +355,7 @@ export interface FileRoutesByFullPath {
   '/deals/': typeof AppDealsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
   '/lists/': typeof AppListsIndexRoute
+  '/projects/': typeof AppProjectsIndexRoute
   '/scoring/': typeof AppScoringIndexRoute
   '/segments/': typeof AppSegmentsIndexRoute
   '/website/': typeof AppWebsiteIndexRoute
@@ -368,6 +382,7 @@ export interface FileRoutesByTo {
   '/emails/tracking': typeof AppEmailsTrackingRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
   '/lists/$id': typeof AppListsIdRoute
+  '/projects/$id': typeof AppProjectsIdRoute
   '/scoring/grading': typeof AppScoringGradingRoute
   '/scoring/rules': typeof AppScoringRulesRoute
   '/segments/$id': typeof AppSegmentsIdRoute
@@ -383,6 +398,7 @@ export interface FileRoutesByTo {
   '/deals': typeof AppDealsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
   '/lists': typeof AppListsIndexRoute
+  '/projects': typeof AppProjectsIndexRoute
   '/scoring': typeof AppScoringIndexRoute
   '/segments': typeof AppSegmentsIndexRoute
   '/website': typeof AppWebsiteIndexRoute
@@ -419,6 +435,7 @@ export interface FileRoutesById {
   '/_app/emails/tracking': typeof AppEmailsTrackingRoute
   '/_app/emails/variables': typeof AppEmailsVariablesRoute
   '/_app/lists/$id': typeof AppListsIdRoute
+  '/_app/projects/$id': typeof AppProjectsIdRoute
   '/_app/scoring/grading': typeof AppScoringGradingRoute
   '/_app/scoring/rules': typeof AppScoringRulesRoute
   '/_app/segments/$id': typeof AppSegmentsIdRoute
@@ -434,6 +451,7 @@ export interface FileRoutesById {
   '/_app/deals/': typeof AppDealsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
   '/_app/lists/': typeof AppListsIndexRoute
+  '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/scoring/': typeof AppScoringIndexRoute
   '/_app/segments/': typeof AppSegmentsIndexRoute
   '/_app/website/': typeof AppWebsiteIndexRoute
@@ -470,6 +488,7 @@ export interface FileRouteTypes {
     | '/emails/tracking'
     | '/emails/variables'
     | '/lists/$id'
+    | '/projects/$id'
     | '/scoring/grading'
     | '/scoring/rules'
     | '/segments/$id'
@@ -485,6 +504,7 @@ export interface FileRouteTypes {
     | '/deals/'
     | '/emails/'
     | '/lists/'
+    | '/projects/'
     | '/scoring/'
     | '/segments/'
     | '/website/'
@@ -511,6 +531,7 @@ export interface FileRouteTypes {
     | '/emails/tracking'
     | '/emails/variables'
     | '/lists/$id'
+    | '/projects/$id'
     | '/scoring/grading'
     | '/scoring/rules'
     | '/segments/$id'
@@ -526,6 +547,7 @@ export interface FileRouteTypes {
     | '/deals'
     | '/emails'
     | '/lists'
+    | '/projects'
     | '/scoring'
     | '/segments'
     | '/website'
@@ -561,6 +583,7 @@ export interface FileRouteTypes {
     | '/_app/emails/tracking'
     | '/_app/emails/variables'
     | '/_app/lists/$id'
+    | '/_app/projects/$id'
     | '/_app/scoring/grading'
     | '/_app/scoring/rules'
     | '/_app/segments/$id'
@@ -576,6 +599,7 @@ export interface FileRouteTypes {
     | '/_app/deals/'
     | '/_app/emails/'
     | '/_app/lists/'
+    | '/_app/projects/'
     | '/_app/scoring/'
     | '/_app/segments/'
     | '/_app/website/'
@@ -831,6 +855,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppListsIdRouteImport
       parentRoute: typeof AppListsRoute
     }
+    '/_app/projects/': {
+      id: '/_app/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AppProjectsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$id': {
+      id: '/_app/projects/$id'
+      path: '/projects/$id'
+      fullPath: '/projects/$id'
+      preLoaderRoute: typeof AppProjectsIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/scoring/': {
       id: '/_app/scoring/'
       path: '/'
@@ -1077,7 +1115,9 @@ interface AppRouteChildren {
   AppTasksRoute: typeof AppTasksRoute
   AppWebsiteRoute: typeof AppWebsiteRouteWithChildren
   AppAutomationsIdRoute: typeof AppAutomationsIdRoute
+  AppProjectsIdRoute: typeof AppProjectsIdRoute
   AppAutomationsIndexRoute: typeof AppAutomationsIndexRoute
+  AppProjectsIndexRoute: typeof AppProjectsIndexRoute
   AppAutomationsBriefsIdRoute: typeof AppAutomationsBriefsIdRoute
   AppAutomationsBriefsIndexRoute: typeof AppAutomationsBriefsIndexRoute
 }
@@ -1099,7 +1139,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppTasksRoute: AppTasksRoute,
   AppWebsiteRoute: AppWebsiteRouteWithChildren,
   AppAutomationsIdRoute: AppAutomationsIdRoute,
+  AppProjectsIdRoute: AppProjectsIdRoute,
   AppAutomationsIndexRoute: AppAutomationsIndexRoute,
+  AppProjectsIndexRoute: AppProjectsIndexRoute,
   AppAutomationsBriefsIdRoute: AppAutomationsBriefsIdRoute,
   AppAutomationsBriefsIndexRoute: AppAutomationsBriefsIndexRoute,
 }

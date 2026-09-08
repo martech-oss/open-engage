@@ -106,7 +106,7 @@ export class AutomationJobRepository extends DatabaseRepository {
         attempts: automationJobs.attempts,
         createdAt: automationJobs.createdAt,
         enteredAt: automationEnrollments.enteredAt,
-        graph: automationVersions.graph,
+        graph: sql<string>`coalesce(json_extract(${automationEnrollments.executionSnapshot},'$.graph'),${automationVersions.resolvedGraph},${automationVersions.graph})`,
         contactEmail: contacts.email,
         firstName: contacts.firstName,
         lastName: contacts.lastName,
@@ -142,6 +142,7 @@ export class AutomationJobRepository extends DatabaseRepository {
           eq(automationJobs.id, jobId),
           eq(automationJobs.leaseId, leaseId),
           inArray(automationJobs.status, ["leased", "running"]),
+          eq(automationEnrollments.status, "active"),
         ),
       )
       .get();
@@ -213,6 +214,8 @@ export class AutomationJobRepository extends DatabaseRepository {
       .update(automationJobs)
       .set({
         status: "pending",
+        attempts: 0,
+        lastError: null,
         dueAt: matchingEvent
           ? sql`CASE WHEN ${matchingEvent} THEN ${input.now} ELSE ${input.dueAt} END`
           : input.dueAt,

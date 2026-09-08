@@ -100,3 +100,35 @@ export const projectBriefDetailSchema = z.object({
   items: z.array(projectLinkedResourceSchema),
 });
 export type ProjectBriefDetail = z.infer<typeof projectBriefDetailSchema>;
+
+import { programBindingIntentSchema, projectProgramSchema, projectMemberSchema } from "./program";
+export const projectProgramDetailSchema = z.object({
+  project: projectRowSchema.omit({ itemCount: true }),
+  program: projectProgramSchema.nullable(),
+  brief: projectBriefDetailSchema.nullable(),
+  allowedActions: z.object({
+    manageMembers: z.boolean(),
+    editDefinition: z.boolean(),
+    publishDefinition: z.boolean(),
+  }),
+  formBindings: z.array(
+    programBindingIntentSchema.extend({ formId: z.string(), formName: z.string() }),
+  ),
+});
+export type ProjectProgramDetail = z.infer<typeof projectProgramDetailSchema>;
+export const projectMemberListSchema = z.object({
+  items: z.array(
+    z.object({
+      member: projectMemberSchema,
+      email: z.string().nullable(),
+      firstName: z.string().nullable(),
+      lastName: z.string().nullable(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+});
+
+export const projectProgramCatalogSchema = z.object({
+  projects: z.array(projectRowSchema),
+  allowedActions: z.object({ create: z.boolean() }),
+});

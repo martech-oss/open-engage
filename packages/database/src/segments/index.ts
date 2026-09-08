@@ -5,3 +5,4 @@ export * from "./maintenance-repository";
 export * from "./query-repository";
 export * from "./repository";
 export * from "./types";
+export * from "./program-filter-repository";

@@ -11,7 +11,9 @@ import {
 } from "@openengage/database/contacts";
 import { DeliveryRecoveryRepository } from "@openengage/database/messaging";
 
+import { recoverAutomationCalls } from "../automations/call-service";
 import { enrollInactiveContacts } from "../automations/enrollment";
+import { dispatchScheduledAutomationRuns, processAutomationRun } from "../automations/run-service";
 import { processAutomationJob } from "../automations/worker";
 import { PermanentChannelError } from "../channels";
 import {
@@ -24,6 +26,7 @@ import { processCloudflareEmailEvent } from "../messaging/cloudflare-events";
 import { processDelivery } from "../messaging/delivery-worker";
 import { logError } from "../observability";
 import { persistDeadLetter, runDailyMaintenance } from "../platform/maintenance-worker";
+import { processProjectClone, recoverProjectClones } from "../projects/clone-service";
 import {
   listDynamicSegmentsForCorrection,
   reconcileContactSegmentMemberships,
@@ -50,6 +53,27 @@ type JobsQueueHandlerMap = {
 };
 
 export const jobsQueueHandlers = {
+  automation_schedule: async (message, env) => {
+    await dispatchScheduledAutomationRuns(
+      createDatabase(env.DB),
+      new Date(message.now),
+      100,
+      env.JOBS_QUEUE,
+      message.afterAutomationId,
+    );
+  },
+  automation_run: async (message, env) => {
+    await processAutomationRun(
+      message.runId,
+      message.workspaceId,
+      createDatabase(env.DB),
+      100,
+      env.JOBS_QUEUE,
+    );
+  },
+  project_clone: async (message, env) => {
+    await processProjectClone(env, message.workspaceId, message.jobId);
+  },
   landing_generation: async (message, env) => {
     await processLandingGeneration(message.jobId, env);
   },
@@ -101,8 +125,11 @@ export async function scheduled(
   }
   await recoverVisitorHistories(env);
   await recoverLandingGenerations(env);
+  await recoverProjectClones(env);
   await enqueueSegmentCorrections(env);
   await enrollInactiveContacts(database);
+  await dispatchScheduledAutomationRuns(database, new Date(), 100, env.JOBS_QUEUE);
+  await recoverAutomationCalls(database);
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
   const engine = new AutomationEngineRepository(database);

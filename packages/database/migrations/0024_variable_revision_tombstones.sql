@@ -1,0 +1,1 @@
+ALTER TABLE `project_variables` ADD `deleted_at` text;

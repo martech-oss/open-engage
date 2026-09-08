@@ -1,4 +1,5 @@
 import type { OpenEngageDatabase } from "@openengage/database/client";
+import { FormProgramRepository, ProgramError } from "@openengage/database/projects";
 import { uuidv7 } from "@openengage/database/shared";
 import { PublicFormRepository, type PublicFormRecord } from "@openengage/database/web";
 
@@ -124,8 +125,11 @@ export class SubmitPublicFormUseCase {
       idempotencyKey,
     });
     if (duplicate) return await acknowledgeDuplicate();
+    // New visitors are persisted with the submission's atomic batch, after validation.
     const visitor =
-      body["consent"] === true ? await identity.ensure(form.workspaceId, body["oe_v"]) : null;
+      body["consent"] === true
+        ? (originalVisitor ?? { id: uuidv7(), contactId: null, email: null })
+        : null;
     // A newly supplied email never borrows another person's progressive answers.
     const sameEmail =
       visitor?.email?.toLowerCase() === primitiveString(body["email"]).trim().toLowerCase();
@@ -165,31 +169,52 @@ export class SubmitPublicFormUseCase {
         fields: [{ field: "email", reason: "required" }],
       };
     }
+    const programs = new FormProgramRepository(this.database, { workspaceId: form.workspaceId });
     const occurredAt = new Date().toISOString();
     const contactCreatedEventId = uuidv7();
     const formSubmittedEventId = uuidv7();
-    const outcome = await repository.persistSubmission({
-      workspaceId: form.workspaceId,
-      formId: form.id,
-      visitorId: visitor?.id ?? null,
-      email: submittedEmail.trim().toLowerCase(),
-      idempotencyKey,
-      requestFingerprint,
-      identityProofHash,
-      contactFields: {
-        firstName: stringOrNull(body["firstName"]),
-        lastName: stringOrNull(body["lastName"]),
-        phone: stringOrNull(body["phone"]),
-        customFields: readCustomFields(body),
-      },
-      payload: redactFormPayload(body),
-      ipHash: await hashIp(command.connectingIp),
-      occurredAt,
-      submissionId: uuidv7(),
-      contactCreatedEventId,
-      formSubmittedEventId,
-      ...(measurement ? { context: measurement.properties } : {}),
-    });
+    let outcome;
+    try {
+      // Verified LP records always carry the published snapshot (legacy means no binding).
+      const programBinding = measurement
+        ? (form.programBinding ?? null)
+        : form.programBinding === undefined
+          ? await programs.get(form.id)
+          : form.programBinding;
+      if (programBinding)
+        await programs.validate(
+          programBinding,
+          typeof measurement?.properties["projectId"] === "string"
+            ? measurement.properties["projectId"]
+            : null,
+        );
+      outcome = await repository.persistSubmission({
+        ...(programBinding ? { programBinding } : {}),
+        workspaceId: form.workspaceId,
+        formId: form.id,
+        visitorId: visitor?.id ?? null,
+        email: submittedEmail.trim().toLowerCase(),
+        idempotencyKey,
+        requestFingerprint,
+        identityProofHash,
+        contactFields: {
+          firstName: stringOrNull(body["firstName"]),
+          lastName: stringOrNull(body["lastName"]),
+          phone: stringOrNull(body["phone"]),
+          customFields: readCustomFields(body),
+        },
+        payload: redactFormPayload(body),
+        ipHash: await hashIp(command.connectingIp),
+        occurredAt,
+        submissionId: uuidv7(),
+        contactCreatedEventId,
+        formSubmittedEventId,
+        ...(measurement ? { context: measurement.properties } : {}),
+      });
+    } catch (error) {
+      if (error instanceof ProgramError) return { kind: "invalid_payload" };
+      throw error;
+    }
     if (outcome.kind === "duplicate") return await acknowledgeDuplicate();
     const visitorToken =
       body["consent"] === true && outcome.visitorId

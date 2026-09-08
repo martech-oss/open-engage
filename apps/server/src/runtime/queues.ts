@@ -62,7 +62,26 @@ export const visitorHistoryQueueMessageSchema = z.object({
 });
 
 /** Everything the jobs queue carries, dispatched on the kind discriminator. */
+export const projectCloneQueueMessageSchema = z.object({
+  kind: z.literal("project_clone"),
+  workspaceId: z.string().min(1),
+  jobId: z.string().min(1),
+});
+export const automationRunQueueMessageSchema = z.object({
+  kind: z.literal("automation_run"),
+  workspaceId: z.string().min(1),
+  runId: z.string().min(1),
+});
+export const automationScheduleQueueMessageSchema = z.object({
+  kind: z.literal("automation_schedule"),
+  now: z.iso.datetime(),
+  afterAutomationId: z.string().min(1),
+});
+
 export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
+  projectCloneQueueMessageSchema,
+  automationRunQueueMessageSchema,
+  automationScheduleQueueMessageSchema,
   visitorHistoryQueueMessageSchema,
   landingGenerationQueueMessageSchema,
   automationJobQueueMessageSchema,
@@ -76,6 +95,9 @@ export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
 export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
 
 export type QueueMessage =
+  | z.infer<typeof projectCloneQueueMessageSchema>
+  | z.infer<typeof automationRunQueueMessageSchema>
+  | z.infer<typeof automationScheduleQueueMessageSchema>
   | z.infer<typeof landingGenerationQueueMessageSchema>
   | z.infer<typeof visitorHistoryQueueMessageSchema>
   | AutomationJobQueueMessage

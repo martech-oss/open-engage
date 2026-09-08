@@ -4,6 +4,7 @@ export * from "./definition.js";
 export * from "./dto.js";
 export * from "./generation.js";
 export * from "./workflow.js";
+export * from "./clone.js";
 
 export const campaignCostInputSchema = z.object({
   bookedOn: z.iso.date(),
@@ -30,3 +31,7 @@ export const campaignCostSchema = campaignCostInputSchema.extend({
   updatedAt: z.string(),
 });
 export type CampaignCostInput = z.infer<typeof campaignCostInputSchema>;
+
+export * from "./variables.js";
+export * from "./program";
+export * from "./program-csv";

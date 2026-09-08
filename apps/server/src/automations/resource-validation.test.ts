@@ -49,9 +49,9 @@ function definition(action: AutomationDefinition["nodes"][number]): AutomationDe
 }
 
 describe("validateAutomationResources", () => {
-  it("accepts available resource references", () => {
+  it("accepts available resource references", async () => {
     expect(
-      validateAutomationResources(
+      await validateAutomationResources(
         definition({
           id: "email",
           type: "action",
@@ -63,8 +63,8 @@ describe("validateAutomationResources", () => {
     ).toEqual([]);
   });
 
-  it("rejects missing resources", () => {
-    const issues = validateAutomationResources(
+  it("rejects missing resources", async () => {
+    const issues = await validateAutomationResources(
       definition({
         id: "webhook",
         type: "action",
@@ -78,8 +78,8 @@ describe("validateAutomationResources", () => {
     ]);
   });
 
-  it("rejects dynamic segments for membership actions", () => {
-    const issues = validateAutomationResources(
+  it("rejects dynamic segments for membership actions", async () => {
+    const issues = await validateAutomationResources(
       definition({
         id: "segment",
         type: "action",

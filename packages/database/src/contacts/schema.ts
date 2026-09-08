@@ -40,6 +40,7 @@ export const contacts = sqliteTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    acquisitionProjectId: text("acquisition_project_id"),
     visitorId: text("visitor_id"),
     email: text(),
     firstName: text("first_name"),

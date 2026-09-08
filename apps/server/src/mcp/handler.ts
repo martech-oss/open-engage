@@ -1,9 +1,12 @@
+import { createRouterClient } from "@orpc/server";
 import type { Hono } from "hono";
 
 import { workspaceErrors } from "@openengage/orpc";
 
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import type { AppEnvironment } from "../env";
+import { orpcRequestContext } from "../orpc/request-context";
+import { orpcRouter } from "../orpc/router";
 import { handleMcpRequest } from "./server";
 
 export function registerMcpRoutes(app: Hono<AppEnvironment>): void {
@@ -29,6 +32,7 @@ export function registerMcpRoutes(app: Hono<AppEnvironment>): void {
         return apiError(context, 401, "api_key_required", "Workspace APIキーが必要です");
       }
       const response = await handleMcpRequest(request, {
+        rpc: createRouterClient(orpcRouter, { context: orpcRequestContext(context) }),
         database: context.get("database"),
         workspace: {
           ...access.workspace,

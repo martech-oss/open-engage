@@ -10,9 +10,12 @@ import {
 } from "@openengage/core/segments";
 import { formatIssuePath, type WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { SegmentRepository } from "@openengage/database/segments";
+import { SegmentCatalogRepository, SegmentRepository } from "@openengage/database/segments";
 
 const SYSTEM_EVENTS = [
+  "project_member_joined",
+  "project_member_progressed",
+  "project_member_succeeded",
   "contact_created",
   "form_submitted",
   "page_viewed",
@@ -53,6 +56,8 @@ export async function loadSegmentCatalog(
     });
   }
   return {
+    projects: rows.projects.map((row) => ({ id: row.id, name: row.name, value: row.id })),
+    projectStatuses: rows.projectStatuses,
     categories: rows.categories.map((row) => ({ id: row.id, name: row.name, value: row.id })),
     companyCustomFields: rows.companyCustomFields.map((row) => ({
       id: row.id,
@@ -91,6 +96,21 @@ export async function validateSegmentFilter(
   filter: unknown,
   providedCatalog?: SegmentGenerationCatalog,
 ): Promise<SegmentValidationResult> {
+  const catalog = providedCatalog ?? (await loadSegmentCatalog(database, workspace));
+  const parsed = segmentFilterSchema.safeParse(filter);
+  if (!parsed.success) return validateSegmentFilterWithCatalog(filter, catalog);
+  // Picker/generation catalogs are bounded; pinned versions must be resolved directly.
+  const projectStatuses = await new SegmentCatalogRepository(
+    database,
+    workspace,
+  ).loadReferencedProgramStatusOptions(parsed.data);
+  return validateSegmentFilterWithCatalog(parsed.data, { ...catalog, projectStatuses });
+}
+
+export function validateSegmentFilterWithCatalog(
+  filter: unknown,
+  catalog: SegmentGenerationCatalog,
+): SegmentValidationResult {
   const parsed = segmentFilterSchema.safeParse(filter);
   if (!parsed.success) {
     return {
@@ -103,7 +123,6 @@ export async function validateSegmentFilter(
       })),
     };
   }
-  const catalog = providedCatalog ?? (await loadSegmentCatalog(database, workspace));
   const issues: SegmentValidationIssue[] = [];
   validateNode(parsed.data, "$", catalog, issues);
   return issues.length > 0
@@ -122,6 +141,37 @@ function validateNode(
       validateNode(child, `${path}.children[${index}]`, catalog, issues),
     );
     return;
+  }
+  if (filter.program) {
+    const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+    if (
+      !values.every((value) =>
+        (catalog.projectStatuses ?? []).some(
+          (option) =>
+            option.programStatus?.projectId === filter.program!.projectId &&
+            option.programStatus.definitionVersion === filter.program!.definitionVersion &&
+            option.programStatus.statusId === value,
+        ),
+      )
+    )
+      issues.push({
+        phase: "resource",
+        code: "resource_not_found",
+        path,
+        message: "Program status/version does not exist in this workspace",
+      });
+  }
+  if (filter.field === "project_id" && !["exists", "not_exists"].includes(filter.operator)) {
+    const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+    if (
+      !values.every((value) => (catalog.projects ?? []).some((project) => project.value === value))
+    )
+      issues.push({
+        phase: "resource",
+        code: "resource_not_found",
+        path,
+        message: "Project does not exist in this workspace",
+      });
   }
   const richOptions =
     filter.field === "category_score"

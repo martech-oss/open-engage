@@ -25,6 +25,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - 行動スコアのルールエンジン、製品別のカテゴリスコア、属性で決まるA〜Fグレード
 - カスタムフィールドを収集し、既知の項目を出し分けるProgressive Profiling対応フォーム
 - Projectをキャンペーンとして扱い、関与・初回接点・最終接点で受注金額を配分するアトリビューション
+- 施策参加者の進捗・成果、Automationの定期バッチ・共通処理、公開時に固定する共通変数、施策一式の複製（[操作・設計・検証記録](docs/marketo-implementation.md)）
 - Topic別購読、グローバル配信停止、Suppressionを扱うPreference Center
 - Contact・Automation・Email・Deals・Site・キャンペーンを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
@@ -611,9 +612,12 @@ Authorization: Bearer openengage_xxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxx
 - オートメーション一覧とdraft取得
 - オートメーション enrollmentの準備
 - 明示確認後のオートメーション enrollment
+- バッチの対象プレビュー、実行準備、明示確認後の開始と実行履歴
 
 実配信につながるオートメーション enrollmentは二段階です。準備ToolがD1へ5分間有効な
 一回限りの確認Tokenを保存し、確認Toolで`CONFIRM SEND`を明示しない限り実行されません。
+
+バッチも `prepare_automation_run` で対象人数・サンプル・配信警告を確認し、ユーザーの明示確認後に `start_automation_run` へ `confirmationToken` と `confirmation: "CONFIRM SEND"` を渡します。TokenはWorkspace・APIキー・公開版・実行要求に固定され、5分で失効します。`preview_automation_run` の結果だけでは開始できません。
 
 ## セットアップCLI
 

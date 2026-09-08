@@ -52,15 +52,18 @@ export function SegmentConditionEditor({
   );
 
   function changeOperator(operator: SegmentOperator): void {
-    onChange(
-      createSegmentCondition(
+    onChange({
+      ...createSegmentCondition(
         condition.field,
         operator,
         rawSegmentConditionValue(condition),
         condition.key,
         customField?.dataType,
       ),
-    );
+      ...(condition.program && ["eq", "neq", "in"].includes(operator)
+        ? { program: condition.program }
+        : {}),
+    });
   }
 
   function changeValue(rawValue: string): void {

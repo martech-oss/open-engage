@@ -57,7 +57,7 @@ export const navigationSections: readonly NavSection[] = [
     label: "オートメーション",
     icon: Spline,
     tabs: linkOptions([
-      { to: "/automations/briefs", label: "施策ブリーフ" },
+      { to: "/projects", label: "施策" },
       { to: "/automations", label: "フロー" },
     ]),
   },

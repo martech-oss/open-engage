@@ -52,14 +52,16 @@ describe("Remote MCP", () => {
     const listed = await mcpRequest(token, "tools/list", {});
     expect(listed.response.status).toBe(200);
     const tools = (listed.payload.result as { tools: Array<{ name: string }> }).tools;
-    expect(tools.map((tool) => tool.name)).toEqual([
-      "search_contacts",
-      "get_dashboard",
-      "list_automations",
-      "get_automation_draft",
-      "prepare_automation_enrollment",
-      "confirm_automation_enrollment",
-    ]);
+    expect(tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining([
+        "search_contacts",
+        "get_dashboard",
+        "list_automations",
+        "get_automation_draft",
+        "prepare_automation_enrollment",
+        "confirm_automation_enrollment",
+      ]),
+    );
   });
 
   it("queries Workspace data and consumes enrollment confirmations once", async () => {

@@ -4,7 +4,9 @@ import type {
   AutomationResourceKind,
   AutomationResourceOption,
 } from "@openengage/core/automations";
+import type { SegmentValidationResult } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
+import { AutomationCatalogRepository } from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ConsentRepository } from "@openengage/database/consent";
 import { ContactResourceRepository } from "@openengage/database/contacts";
@@ -13,6 +15,8 @@ import { SegmentRepository } from "@openengage/database/segments";
 import { WebRepository } from "@openengage/database/web";
 import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
+import { loadSegmentCatalog, validateSegmentFilter } from "../segments/validation-service";
+
 interface ResourceReferences {
   emailTemplates: Set<string>;
   forms: Set<string>;
@@ -20,34 +24,50 @@ interface ResourceReferences {
   tags: Set<string>;
   webhookEndpoints: Set<string>;
   subscriptionTopics: Set<string>;
+  projects?: Map<string, Set<string>>;
+  callableAutomations?: Set<string>;
+  scoringCategories?: Set<string>;
 }
 
 export interface AutomationResourceContext {
   catalog: AutomationGenerationCatalog;
+  validateFilter?(filter: unknown): Promise<SegmentValidationResult>;
   references: ResourceReferences;
 }
 
 export interface AutomationResourceValidationIssue {
-  kind: AutomationResourceKind;
+  kind: AutomationResourceKind | "filter";
   resourceId: string;
   nodeId: string;
   message: string;
+  path?: string;
 }
 
 export async function loadAutomationResourceContext(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<AutomationResourceContext> {
-  const [templates, forms, segments, contactOptions, endpoints, topics, workspaceDetails] =
-    await Promise.all([
-      new MessagingRepository(database, workspace).listEmailTemplates(false),
-      new WebRepository(database, workspace).listSignupForms(),
-      new SegmentRepository(database, workspace).listSegments(),
-      new ContactResourceRepository(database, workspace).getContactOptionRows(),
-      new WorkspaceSettingsRepository(database, workspace).listWebhookEndpoints(),
-      new ConsentRepository(database, workspace).listTopics(),
-      new WorkspaceSettingsRepository(database, workspace).getWorkspace(),
-    ]);
+  const [
+    templates,
+    forms,
+    segments,
+    contactOptions,
+    endpoints,
+    topics,
+    workspaceDetails,
+    execution,
+    segmentCatalog,
+  ] = await Promise.all([
+    new MessagingRepository(database, workspace).listEmailTemplates(false),
+    new WebRepository(database, workspace).listSignupForms(),
+    new SegmentRepository(database, workspace).listSegments(),
+    new ContactResourceRepository(database, workspace).getContactOptionRows(),
+    new WorkspaceSettingsRepository(database, workspace).listWebhookEndpoints(),
+    new ConsentRepository(database, workspace).listTopics(),
+    new WorkspaceSettingsRepository(database, workspace).getWorkspace(),
+    new AutomationCatalogRepository(database, workspace).executionOptions(),
+    loadSegmentCatalog(database, workspace),
+  ]);
 
   const emailTemplates = templates
     .filter((template) => template.sendable && template.purpose === "transactional")
@@ -74,7 +94,11 @@ export async function loadAutomationResourceContext(
     .slice(0, 1_000);
 
   return {
+    validateFilter: (filter) => validateSegmentFilter(database, workspace, filter, segmentCatalog),
     catalog: {
+      projects: execution.projects,
+      callableAutomations: execution.callableAutomations,
+      scoringCategories: execution.scoringCategories,
       timezone: workspaceDetails?.timezone ?? "UTC",
       emailTemplates,
       forms: publishedForms,
@@ -84,6 +108,14 @@ export async function loadAutomationResourceContext(
       subscriptionTopics,
     },
     references: {
+      projects: new Map(
+        execution.projects.map((project) => [
+          project.id,
+          new Set(project.statuses.map((status) => status.id)),
+        ]),
+      ),
+      callableAutomations: ids(execution.callableAutomations),
+      scoringCategories: ids(execution.scoringCategories),
       emailTemplates: ids(emailTemplates),
       forms: ids(publishedForms),
       segments: new Map(
@@ -96,11 +128,11 @@ export async function loadAutomationResourceContext(
   };
 }
 
-export function validateAutomationResources(
+export async function validateAutomationResources(
   definition: AutomationDefinition,
   context: AutomationResourceContext,
   options?: { additionalEmailTemplateIds?: readonly string[] },
-): AutomationResourceValidationIssue[] {
+): Promise<AutomationResourceValidationIssue[]> {
   const issues: AutomationResourceValidationIssue[] = [];
   const { references } = context;
   const emailTemplateIds = new Set([
@@ -109,7 +141,41 @@ export function validateAutomationResources(
   ]);
 
   for (const node of definition.nodes) {
+    const filter =
+      node.type === "condition" && "filter" in node.config
+        ? node.config.filter
+        : node.type === "source" &&
+            node.config.source === "batch" &&
+            node.config.audience.kind === "filter"
+          ? node.config.audience.filter
+          : undefined;
+    if (filter) {
+      if (!context.validateFilter) throw new Error("Shared segment filter validator is required");
+      const result = await context.validateFilter(filter);
+      for (const issue of result.issues)
+        issues.push({
+          kind: "filter",
+          resourceId: "",
+          nodeId: node.id,
+          path: issue.path,
+          message: `ノード ${node.id} の条件 ${issue.path}: ${issue.message}`,
+        });
+    }
     if (node.type === "source") {
+      if ("projectId" in node.config)
+        requireResource(
+          issues,
+          new Set(references.projects?.keys()),
+          "project",
+          node.config.projectId,
+          node.id,
+        );
+      if (
+        node.config.source === "batch" &&
+        node.config.audience.kind === "segment" &&
+        references.segments.get(node.config.audience.segmentId) !== "static"
+      )
+        issues.push(missingIssue("segment", node.config.audience.segmentId, node.id));
       if (node.config.source === "form_submitted") {
         requireResource(issues, references.forms, "form", node.config.formId, node.id);
       }
@@ -180,7 +246,31 @@ export function validateAutomationResources(
         }
         break;
       }
+      case "upsert_project_member": {
+        const statuses = references.projects?.get(node.config.projectId);
+        if (!statuses?.size || (node.config.statusId && !statuses.has(node.config.statusId)))
+          issues.push(missingIssue("project", node.config.projectId, node.id));
+        break;
+      }
+      case "call_automation":
+        requireResource(
+          issues,
+          references.callableAutomations ?? new Set(),
+          "automation",
+          node.config.automationId,
+          node.id,
+        );
+        break;
       case "change_score":
+        if (node.config.categoryId)
+          requireResource(
+            issues,
+            references.scoringCategories ?? new Set(),
+            "scoring_category",
+            node.config.categoryId,
+            node.id,
+          );
+        break;
       case "update_field":
         break;
     }
@@ -193,6 +283,12 @@ export function optionsForResourceKind(
   kind: AutomationResourceKind,
 ): AutomationResourceOption[] {
   switch (kind) {
+    case "project":
+      return catalog.projects ?? [];
+    case "automation":
+      return catalog.callableAutomations ?? [];
+    case "scoring_category":
+      return catalog.scoringCategories ?? [];
     case "email_template":
       return catalog.emailTemplates;
     case "form":
@@ -243,6 +339,12 @@ function missingIssue(
 
 function resourceLabel(kind: AutomationResourceKind): string {
   switch (kind) {
+    case "project":
+      return "施策";
+    case "automation":
+      return "呼び出し可能なフロー";
+    case "scoring_category":
+      return "スコアカテゴリ";
     case "email_template":
       return "メールテンプレート";
     case "form":

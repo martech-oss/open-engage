@@ -26,3 +26,4 @@ export async function addProjectItem(
 ): Promise<ProjectItemOutcome> {
   return new ProjectRepository(database, { workspaceId }).addItem(input);
 }
+export { mutateProjectMember } from "./program-service";

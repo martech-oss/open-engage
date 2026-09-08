@@ -43,7 +43,7 @@ export async function getAutomationPublishability(
     };
   });
   const graphIssues = validateAutomation(graph).map((issue) => issue.message);
-  const resourceIssues = validateAutomationResources(graph, resources).map(
+  const resourceIssues = (await validateAutomationResources(graph, resources)).map(
     (issue) => issue.message,
   );
   const issues = [

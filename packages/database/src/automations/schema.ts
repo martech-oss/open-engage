@@ -26,6 +26,7 @@ export const automations = sqliteTable(
     publishedVersionId: text("published_version_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    variableProjectId: text("variable_project_id"),
   },
   (table) => [
     index("automations_workspace_status_updated_idx").on(
@@ -56,6 +57,9 @@ export const automationVersions = sqliteTable(
     graph: text().notNull(),
     publishedAt: text("published_at"),
     createdAt: text("created_at").notNull(),
+    resolvedGraph: text("resolved_graph"),
+    dependencies: text().default("{}").notNull(),
+    variableSnapshot: text("variable_snapshot"),
   },
   (table) => [
     uniqueIndex("automation_versions_workspace_automation_version_unique").on(
@@ -97,9 +101,12 @@ export const automationTriggers = sqliteTable(
     index("automation_triggers_source_idx").on(table.source, table.workspaceId),
     check(
       "automation_triggers_source_check",
-      sql`${table.source} IN ('segment_joined', 'form_submitted', 'contact_created', 'api_event', 'webhook_event', 'contact_inactive')`,
+      sql`${table.source} IN ('segment_joined', 'form_submitted', 'contact_created', 'api_event', 'webhook_event', 'contact_inactive', 'batch', 'callable', 'project_member_joined', 'project_member_progressed', 'project_member_succeeded')`,
     ),
-    check("automation_triggers_reentry_check", sql`${table.reentry} IN ('once', 'every_time')`),
+    check(
+      "automation_triggers_reentry_check",
+      sql`${table.reentry} IN ('once', 'every_time', 'cooldown')`,
+    ),
   ],
 );
 
@@ -125,8 +132,21 @@ export const automationEnrollments = sqliteTable(
     enteredAt: text("entered_at").notNull(),
     completedAt: text("completed_at"),
     updatedAt: text("updated_at").notNull(),
+    parentJobId: text("parent_job_id"),
+    projectId: text("project_id"),
+    executionSnapshot: text("execution_snapshot"),
   },
   (table) => [
+    uniqueIndex("automation_enrollments_parent_job_unique").on(
+      table.workspaceId,
+      table.parentJobId,
+    ),
+    index("automation_enrollments_reentry_idx").on(
+      table.workspaceId,
+      table.automationId,
+      table.contactId,
+      table.enteredAt,
+    ),
     index("automation_enrollments_workspace_status_idx").on(
       table.workspaceId,
       table.status,
@@ -244,3 +264,70 @@ export const automationActionEffects = sqliteTable(
 // tables (publish already does a 3-row transaction across them); enforcing
 // it store-side isn't worth that complexity when application code is the
 // only writer of these two columns.
+
+/** A scheduled or manual slot and its immutable contact set. */
+export const automationRuns = sqliteTable(
+  "automation_runs",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    automationId: text("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    automationVersionId: text("automation_version_id")
+      .notNull()
+      .references(() => automationVersions.id, { onDelete: "cascade" }),
+    slot: text().notNull(),
+    status: text().notNull().default("enrolling"),
+    createdAt: text("created_at").notNull(),
+    enrollmentCompletedAt: text("enrollment_completed_at"),
+    completedAt: text("completed_at"),
+    updatedAt: text("updated_at").notNull(),
+    lastError: text("last_error"),
+  },
+  (table) => [
+    uniqueIndex("automation_runs_slot_unique").on(
+      table.workspaceId,
+      table.automationId,
+      table.slot,
+    ),
+    index("automation_runs_recovery_idx").on(table.status, table.updatedAt),
+    check(
+      "automation_runs_status_check",
+      sql`${table.status} IN ('enrolling','running','completed','cancelled','failed')`,
+    ),
+  ],
+);
+export const automationRunTargets = sqliteTable(
+  "automation_run_targets",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => automationRuns.id, { onDelete: "cascade" }),
+    contactId: text("contact_id").notNull(), // Historical snapshot survives contact archival/deletion.
+    status: text().notNull().default("pending"),
+    enrollmentId: text("enrollment_id"),
+    reason: text(),
+    lastError: text("last_error"),
+    attempts: integer().notNull().default(0),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.runId, table.contactId] }),
+    index("automation_run_targets_pending_idx").on(
+      table.workspaceId,
+      table.runId,
+      table.status,
+      table.contactId,
+    ),
+    check(
+      "automation_run_targets_status_check",
+      sql`${table.status} IN ('pending','enrolled','skipped','failed')`,
+    ),
+  ],
+);

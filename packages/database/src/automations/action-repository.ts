@@ -1,7 +1,7 @@
-import { and, eq, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, exists, ne, notExists, isNull, sql } from "drizzle-orm";
 
 import { contacts } from "../contacts/schema";
-import { scoreEvents } from "../scoring/schema";
+import { scoreEvents, contactCategoryScores, scoringCategories } from "../scoring/schema";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { runningActionLeaseExists } from "./action-authority";
@@ -15,6 +15,7 @@ export class AutomationActionRepository extends DatabaseRepository {
     leaseId: string,
     amount: number,
     now: string,
+    options: { operation?: "add" | "set" | undefined; categoryId?: string | undefined } = {},
   ): Promise<void> {
     const orm = this.database.orm;
     const authority = runningActionLeaseExists(this.database, {
@@ -34,35 +35,87 @@ export class AutomationActionRepository extends DatabaseRepository {
           ),
         ),
     );
-    await orm.batch([
+    const categoryId = options.categoryId;
+    if (categoryId) {
+      const category = await orm
+        .select({ id: scoringCategories.id })
+        .from(scoringCategories)
+        .where(
+          and(
+            eq(scoringCategories.workspaceId, job.workspaceId),
+            eq(scoringCategories.id, categoryId),
+            isNull(scoringCategories.archivedAt),
+          ),
+        )
+        .get();
+      if (!category) throw new Error("Scoring category unavailable");
+    }
+    const current = categoryId
+      ? sql`coalesce((SELECT score FROM ${contactCategoryScores} WHERE workspace_id=${job.workspaceId} AND contact_id=${job.contactId} AND category_id=${categoryId}),0)`
+      : sql`(SELECT score FROM ${contacts} WHERE workspace_id=${job.workspaceId} AND id=${job.contactId})`;
+    const delta = options.operation === "set" ? sql`${amount}-${current}` : sql`${amount}`;
+    const activeContact = exists(
       orm
-        .update(contacts)
-        .set({ score: sql`${contacts.score} + ${amount}`, updatedAt: now })
+        .select({ id: contacts.id })
+        .from(contacts)
         .where(
           and(
             eq(contacts.workspaceId, job.workspaceId),
             eq(contacts.id, job.contactId),
             ne(contacts.status, "archived"),
-            unapplied,
-            authority,
           ),
         ),
-      orm.insert(scoreEvents).select(
-        sql`SELECT ${uuidv7()}, ${job.workspaceId}, ${job.contactId}, ${amount}, 'automation',
-                   ${job.enrollmentId}, NULL, NULL, ${now}
-            WHERE ${unapplied} AND ${authority}
-              AND EXISTS (
-                SELECT 1 FROM ${contacts}
-                WHERE ${contacts.workspaceId} = ${job.workspaceId}
-                  AND ${contacts.id} = ${job.contactId}
-                  AND ${contacts.status} != 'archived'
-              )`,
-      ),
+    );
+    const guard = and(unapplied, authority, activeContact)!;
+    await orm.batch([
+      // Capture the delta before changing the score, in the same atomic transaction.
+      orm
+        .insert(scoreEvents)
+        .select(
+          sql`SELECT ${uuidv7()},${job.workspaceId},${job.contactId},${delta},${categoryId ? `automation:category:${categoryId}` : "automation"},${job.enrollmentId},NULL,NULL,${now} WHERE ${guard}`,
+        ),
+      ...(categoryId
+        ? [
+            orm
+              .insert(contactCategoryScores)
+              .select(
+                sql`SELECT ${job.workspaceId},${job.contactId},${categoryId},${amount},${now} WHERE ${guard}`,
+              )
+              .onConflictDoUpdate({
+                target: [
+                  contactCategoryScores.workspaceId,
+                  contactCategoryScores.contactId,
+                  contactCategoryScores.categoryId,
+                ],
+                set: {
+                  score:
+                    options.operation === "set"
+                      ? sql`${amount}`
+                      : sql`${contactCategoryScores.score}+${amount}`,
+                  updatedAt: now,
+                },
+              }),
+          ]
+        : [
+            orm
+              .update(contacts)
+              .set({
+                score:
+                  options.operation === "set" ? sql`${amount}` : sql`${contacts.score}+${amount}`,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(contacts.workspaceId, job.workspaceId),
+                  eq(contacts.id, job.contactId),
+                  guard,
+                ),
+              ),
+          ]),
       orm
         .insert(automationActionEffects)
         .select(
-          sql`SELECT ${job.workspaceId}, ${job.id}, ${job.nodeId}, 'change_score', ${now}
-              WHERE ${unapplied} AND ${authority}`,
+          sql`SELECT ${job.workspaceId},${job.id},${job.nodeId},'change_score',${now} WHERE ${guard}`,
         )
         .onConflictDoNothing(),
     ]);

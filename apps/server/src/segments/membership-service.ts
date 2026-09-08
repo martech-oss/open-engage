@@ -1,5 +1,5 @@
-import { compileSegmentFilter } from "@openengage/core/segments";
 import { type OpenEngageDatabase } from "@openengage/database/client";
+import { compileWorkspaceSegmentFilter } from "@openengage/database/segments";
 import { SegmentMaintenanceRepository, SegmentRepository } from "@openengage/database/segments";
 
 /** These helpers are called from flows that only carry a workspace id (bulk contact actions, membership refreshes). */
@@ -35,7 +35,7 @@ export async function refreshSegmentMemberships(
     return true;
   }
   if (!segment.filterAst) return false;
-  const compiled = compileSegmentFilter(workspaceId, segment.filterAst);
+  const compiled = compileWorkspaceSegmentFilter(workspaceId, segment.filterAst);
   const definition = { kind: "dynamic" as const, filterVersion: segment.filterVersion };
   await repository.setEvaluationState(segmentId, "running", null, definition);
   try {
@@ -63,7 +63,7 @@ export async function reconcileContactSegmentMemberships(
   // stored definition must not leave earlier segments partially reconciled.
   const evaluations = definitions.map((definition) => ({
     ...definition,
-    compiled: compileSegmentFilter(workspaceId, definition.filterAst),
+    compiled: compileWorkspaceSegmentFilter(workspaceId, definition.filterAst),
   }));
   const updates: Array<{
     segmentId: string;

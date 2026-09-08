@@ -26,7 +26,7 @@ import { FieldGroup } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { useWorkspaceFormatters } from "@/lib/workspace-time";
+import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 import type { AutomationRow } from "@openengage/core/automations";
 
 import {
@@ -35,7 +35,12 @@ import {
   useSetAutomationStatus,
 } from "./automation-api";
 import { triggerLabel } from "./automation-labels";
-import { createPresetAutomation, type PresetId, presets } from "./automation-presets";
+import {
+  createBlankAutomation,
+  createPresetAutomation,
+  type PresetId,
+  presets,
+} from "./automation-presets";
 import { AutomationStatusBadge } from "./automation-status-badge";
 
 const AutomationAiSheet = lazy(async () => ({
@@ -46,6 +51,7 @@ const EmailSequenceAiSheet = lazy(async () => ({
 }));
 
 export function AutomationsPage(): ReactNode {
+  const { timeZone } = useWorkspaceTime();
   const { formatDateTime } = useWorkspaceFormatters();
   const navigate = useNavigate();
   const { data: automations } = useSuspenseQuery(automationsQueryOptions());
@@ -57,28 +63,32 @@ export function AutomationsPage(): ReactNode {
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [sequenceOpen, setSequenceOpen] = useState(false);
-  const [preset, setPreset] = useState<PresetId>("welcome");
-  const [name, setName] = useState("ウェルカムシリーズ");
+  const [preset, setPreset] = useState<PresetId | "blank">("blank");
+  const [name, setName] = useState("新しいフロー");
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
   const createAutomation = useCreateAutomation();
   const setAutomationStatus = useSetAutomationStatus();
 
-  function selectPreset(value: PresetId): void {
+  function selectPreset(value: PresetId | "blank"): void {
     setPreset(value);
-    setName(presets.find((item) => item.id === value)?.name ?? "");
+    setName(
+      value === "blank" ? "新しいフロー" : (presets.find((item) => item.id === value)?.name ?? ""),
+    );
   }
 
   async function createAutomationFlow(): Promise<void> {
     const template = templates.find((item) => item.id === templateId);
-    if (!template) {
+    if (!template && preset !== "blank") {
       toast.error("使用するメールテンプレートを選択してください");
       return;
     }
     setCreating(true);
     try {
       const created = await createAutomation.mutateAsync(
-        createPresetAutomation(name.trim(), preset, template),
+        preset === "blank"
+          ? createBlankAutomation(name.trim(), timeZone)
+          : { ...createPresetAutomation(name.trim(), preset, template!), timezone: timeZone },
       );
       setCreateOpen(false);
       await navigate({ to: "/automations/$id", params: { id: created.id } });
@@ -179,12 +189,19 @@ export function AutomationsPage(): ReactNode {
         <ToggleGroup
           value={[preset]}
           onValueChange={(values) => {
-            const nextPreset = values[0] as PresetId | undefined;
+            const nextPreset = values[0] as PresetId | "blank" | undefined;
             if (nextPreset) selectPreset(nextPreset);
           }}
           variant="outline"
           className="grid w-full gap-3 sm:grid-cols-2"
         >
+          <ToggleGroupItem
+            value="blank"
+            aria-label="空のフロー"
+            className="h-auto justify-start p-4"
+          >
+            空のフロー（バッチ・施策・共通フロー）
+          </ToggleGroupItem>
           {presets.map((item) => (
             <ToggleGroupItem
               key={item.id}
@@ -207,22 +224,24 @@ export function AutomationsPage(): ReactNode {
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
-          <FormNativeSelect
-            name="templateId"
-            label="送信するメール"
-            value={templateId}
-            onChange={(event) => setTemplateId(event.target.value)}
-          >
-            <FormSelectOption value="">選択してください</FormSelectOption>
-            {templates.map((template) => (
-              <FormSelectOption key={template.id} value={template.id}>
-                {template.name}
-                {template.subject ? ` · ${template.subject}` : ""}
-              </FormSelectOption>
-            ))}
-          </FormNativeSelect>
+          {preset !== "blank" ? (
+            <FormNativeSelect
+              name="templateId"
+              label="送信するメール"
+              value={templateId}
+              onChange={(event) => setTemplateId(event.target.value)}
+            >
+              <FormSelectOption value="">選択してください</FormSelectOption>
+              {templates.map((template) => (
+                <FormSelectOption key={template.id} value={template.id}>
+                  {template.name}
+                  {template.subject ? ` · ${template.subject}` : ""}
+                </FormSelectOption>
+              ))}
+            </FormNativeSelect>
+          ) : null}
         </FieldGroup>
-        {templates.length === 0 ? (
+        {templates.length === 0 && preset !== "blank" ? (
           <p className="text-sm text-destructive">
             先に「メール → テンプレート」で送信内容を作成してください。
           </p>
@@ -232,7 +251,7 @@ export function AutomationsPage(): ReactNode {
             キャンセル
           </Button>
           <Button
-            disabled={creating || !name.trim() || !templateId}
+            disabled={creating || !name.trim() || (preset !== "blank" && !templateId)}
             onClick={() => void createAutomationFlow()}
           >
             {creating ? "作成中..." : "このテンプレートで作成"}

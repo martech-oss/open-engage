@@ -10,3 +10,4 @@ export * from "./workspace-repository";
 export * from "./landing-design-repository";
 export * from "./form-handler-repository";
 export * from "./optimization-repository";
+export * from "./public-landing-repository";

@@ -1,4 +1,9 @@
-import { computeDueAt, outgoingEdges } from "@openengage/core/automations";
+import {
+  computeDueAt,
+  outgoingEdges,
+  automationNumber,
+  automationString,
+} from "@openengage/core/automations";
 import {
   type AutomationDefinition,
   type AutomationEdge,
@@ -6,6 +11,7 @@ import {
 } from "@openengage/core/automations";
 import {
   AutomationActionRepository,
+  AutomationCallRepository,
   AutomationEngineRepository,
   AutomationJobRecoveryRepository,
   AUTOMATION_MAX_STARTS,
@@ -19,6 +25,7 @@ import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
 import { createEmailDelivery, createWebhookDelivery } from "../messaging/delivery-worker";
 import { primitiveString } from "../platform/values";
+import { mutateProjectMember } from "../projects/program-service";
 import { recordContactEvent } from "../runtime/contact-event-service";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 import { dispatchAutomationAction, type AutomationActionExecutorRegistry } from "./action-dispatch";
@@ -34,12 +41,34 @@ interface AutomationActionExecutionContext {
 }
 
 const automationActionExecutors = {
+  call_automation: async () => {
+    throw new PermanentChannelError("Callable actions require parent/child execution");
+  },
+  upsert_project_member: async (action, context) => {
+    await mutateProjectMember(
+      context.database,
+      { workspaceId: context.job.workspaceId },
+      {
+        projectId: action.projectId,
+        contactId: context.job.contactId,
+        ...(action.statusId ? { statusId: action.statusId } : {}),
+        source: "automation",
+        idempotencyKey: `automation:${context.job.enrollmentId}:${context.job.nodeId}`,
+        authority: {
+          jobId: context.job.id,
+          leaseId: context.leaseId,
+          enrollmentId: context.job.enrollmentId,
+        },
+      },
+    );
+  },
   handoff_to_sales: async (action, context) => {
     await new SalesRepository(context.database, {
       workspaceId: context.job.workspaceId,
     }).handoffForAutomation(
       {
         ...action,
+        title: automationString(action.title),
         contactId: context.job.contactId,
         executionKey: `automation:${context.job.enrollmentId}:${context.job.nodeId}`,
       },
@@ -91,8 +120,9 @@ const automationActionExecutors = {
     await context.actionRepository.adjustContactScoreForJob(
       context.job,
       context.leaseId,
-      action.amount,
+      automationNumber(action.amount),
       context.now,
+      { operation: action.operation, categoryId: action.categoryId },
     );
   },
   update_field: async (action, context) => {
@@ -134,6 +164,7 @@ export async function processAutomationJob(
     const node = definition.nodes.find((candidate) => candidate.id === job.nodeId);
     if (!node) throw new PermanentChannelError(`Automation node ${job.nodeId} is missing`);
     const result = await executeNode(node, definition, job, leaseId, env, database, engine);
+    if (result.parked) return;
     if (result.waitUntil) {
       await engine.parkJobUntil(job.id, leaseId, {
         dueAt: result.waitUntil,
@@ -167,6 +198,7 @@ export async function executeNode(
   database: OpenEngageDatabase,
   engine: AutomationEngineRepository,
 ): Promise<{
+  parked?: boolean;
   branch?: AutomationEdge["branch"];
   waitUntil?: string;
   waitEventType?: string;
@@ -175,13 +207,20 @@ export async function executeNode(
 }> {
   if (node.type === "source") return { branch: "next" };
   if (node.type === "delay") {
+    if (job.payload["waiting"] === true) return { branch: "next" };
     return {
       branch: "next",
       waitUntil: computeDueAt(node, new Date(), definition.timezone).toISOString(),
     };
   }
   if (node.type === "condition") {
-    return { branch: (await evaluateCondition(node, job, engine)) ? "yes" : "no" };
+    return {
+      branch: await engine.captureCondition(
+        job,
+        leaseId,
+        "filter" in node.config ? node.config.filter : await evaluateCondition(node, job, engine),
+      ),
+    };
   }
   if (node.type === "decision") {
     const eventType = {
@@ -201,7 +240,7 @@ export async function executeNode(
     );
     if (found) return { branch: "yes" };
     const deadline = new Date(
-      new Date(job.createdAt).getTime() + node.config.withinMinutes * 60_000,
+      new Date(job.createdAt).getTime() + automationNumber(node.config.withinMinutes) * 60_000,
     );
     if (job.payload["waiting"] === true || Date.now() >= deadline.getTime()) {
       return { branch: "timeout" };
@@ -215,6 +254,18 @@ export async function executeNode(
   }
 
   const action = node.config;
+  if (action.action === "call_automation") {
+    const child = await new AutomationCallRepository(database).startChild(
+      job,
+      leaseId,
+      action.mode,
+      new Date().toISOString(),
+    );
+    if (child.parked) return { parked: true };
+    if (action.mode === "await" && child.status !== "completed")
+      throw new PermanentChannelError(`Child automation ${child.id} ${child.status}`);
+    return { branch: "next" };
+  }
   const now = new Date().toISOString();
   const actionRepository = new AutomationActionRepository(database);
   await dispatchAutomationAction(automationActionExecutors, action, {
@@ -253,6 +304,7 @@ export async function evaluateCondition(
   job: AutomationJobRow,
   engine: AutomationEngineRepository,
 ): Promise<boolean> {
+  if ("filter" in node.config) throw new Error("Rich conditions require durable evaluation");
   const fieldMap: Record<string, unknown> = {
     email: job.contactEmail,
     first_name: job.firstName,

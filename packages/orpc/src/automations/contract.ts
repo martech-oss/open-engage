@@ -16,8 +16,10 @@ import { projectBriefReferenceSchema } from "@openengage/core/projects";
 
 import { authedErrors, briefContextErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
+import { automationExecutionContract } from "./execution-contract";
 
 export const automationsContract = {
+  ...automationExecutionContract,
   list: oc
     .route({ method: "GET", path: "/automations" })
     .errors(workspaceErrors)

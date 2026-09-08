@@ -2,6 +2,8 @@ import { type FormEvent, type ReactNode } from "react";
 
 import { FormInput } from "@/components/app-ui";
 import { FormDialog } from "@/components/app-ui/dialogs";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
@@ -35,6 +37,7 @@ export function CustomRedirectEditorDialog({
       name: getFormString(formData, "name"),
       slug: getFormString(formData, "slug"),
       destinationUrl: getFormString(formData, "destinationUrl"),
+      status: getFormString(formData, "status") === "draft" ? "draft" : "published",
     } as const;
     await run(() =>
       saveResource({
@@ -59,6 +62,13 @@ export function CustomRedirectEditorDialog({
       error={error}
       submitLabel={item ? "変更を保存" : "リンクを作成"}
     >
+      <Field>
+        <FieldLabel htmlFor="redirect-status">公開状態</FieldLabel>
+        <NativeSelect id="redirect-status" name="status" defaultValue={item?.status ?? "published"}>
+          <NativeSelectOption value="draft">下書き</NativeSelectOption>
+          <NativeSelectOption value="published">公開</NativeSelectOption>
+        </NativeSelect>
+      </Field>
       <FormInput
         label="管理用の名前"
         name="name"

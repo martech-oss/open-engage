@@ -27,6 +27,28 @@ function keyOf(options: { queryKey: readonly unknown[] }): string {
 }
 
 describe("initial route loaders", () => {
+  it("redirects legacy brief URLs to canonical project routes with their filters", async () => {
+    const detail = await import("./_app.automations.briefs.$id");
+    const list = await import("./_app.automations.briefs.index");
+    const beforeDetail = detail.Route.options.beforeLoad as (input: unknown) => unknown;
+    const beforeList = list.Route.options.beforeLoad as (input: unknown) => unknown;
+    await expect(
+      Promise.resolve().then(() => beforeDetail({ params: { id: "project-1" } })),
+    ).rejects.toMatchObject({
+      options: { to: "/projects/$id", params: { id: "project-1" }, replace: true },
+    });
+    await expect(
+      Promise.resolve().then(() =>
+        beforeList({ search: { status: "approved", owner: "owner-1", overdue: true } }),
+      ),
+    ).rejects.toMatchObject({
+      options: {
+        to: "/projects",
+        search: { status: "approved", owner: "owner-1", overdue: true, view: "briefs" },
+        replace: true,
+      },
+    });
+  });
   it("prefetches the company list and enrichment capability once", async () => {
     const cache = new PrefetchCache();
     const loader = CompaniesRoute.options.loader as (input: unknown) => Promise<unknown>;
@@ -76,8 +98,8 @@ describe("initial route loaders", () => {
 
   const preloadOnlyRoutes = [
     ["automation detail", () => import("./_app.automations.$id")],
-    ["automation brief detail", () => import("./_app.automations.briefs.$id")],
-    ["automation briefs", () => import("./_app.automations.briefs.index")],
+    ["project detail", () => import("./_app.projects.$id")],
+    ["projects", () => import("./_app.projects.index")],
     ["automations", () => import("./_app.automations.index")],
     ["company detail", () => import("./_app.companies.$id")],
     ["companies", () => import("./_app.companies.index")],

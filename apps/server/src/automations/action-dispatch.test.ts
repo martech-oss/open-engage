@@ -25,12 +25,14 @@ function registry(): AutomationActionExecutorRegistry<TestContext> {
     remove_segment: async (action, context) => {
       context.calls.push(`remove-segment:${action.segmentId}`);
     },
+    call_automation: async () => {},
+    upsert_project_member: async () => {},
     handoff_to_sales: async () => {},
     change_score: async (action, context) => {
-      context.calls.push(`score:${action.amount}`);
+      context.calls.push(`score:${JSON.stringify(action.amount)}`);
     },
     update_field: async (action, context) => {
-      context.calls.push(`field:${action.field}=${String(action.value)}`);
+      context.calls.push(`field:${action.field}=${JSON.stringify(action.value)}`);
     },
   };
 }

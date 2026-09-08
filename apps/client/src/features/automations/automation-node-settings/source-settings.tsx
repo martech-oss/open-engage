@@ -4,6 +4,7 @@ import type { AutomationNode } from "@openengage/core/automations";
 
 import { sourceConfig } from "../automation-graph";
 import type { AutomationOptions } from "../automation-types";
+import { BatchSourceSettings, ProjectSourceSettings } from "./batch-settings";
 import { SettingInput, SettingSelect } from "./fields";
 import { patchNodeConfig, sourceIs, type NodeUpdate } from "./node-config";
 
@@ -37,6 +38,11 @@ export function SourceSettings({
           )
         }
         options={[
+          ["batch", "バッチ（対象者をまとめて登録）"],
+          ["callable", "他のフローから呼び出す"],
+          ["project_member_joined", "施策に参加した"],
+          ["project_member_progressed", "施策のステータスが進んだ"],
+          ["project_member_succeeded", "施策の成果に到達した"],
           ["contact_created", "連絡先が登録された"],
           ["form_submitted", "フォームが送信された"],
           ["segment_joined", "セグメントに参加した"],
@@ -95,35 +101,70 @@ export function SourceSettings({
           }
         />
       ) : null}
-      {"reentry" in node.config &&
-      node.config.source !== "contact_created" &&
-      node.config.source !== "contact_inactive" ? (
-        <SettingSelect
-          label="再登録"
-          value={node.config.reentry}
-          onChange={(value) =>
-            onUpdate((current) => {
-              if (
-                current.type !== "source" ||
-                current.config.source === "contact_created" ||
-                current.config.source === "contact_inactive"
-              )
-                return current;
-              return {
-                ...current,
-                config: {
-                  ...current.config,
-                  reentry: value === "every_time" ? "every_time" : "once",
-                },
-              };
-            })
+      {source === "batch" ? <BatchSourceSettings config={node.config} onUpdate={onUpdate} /> : null}
+      {"projectId" in node.config ? (
+        <ProjectSourceSettings
+          projectId={node.config.projectId}
+          onChange={(projectId) =>
+            onUpdate((current) =>
+              current.type === "source" && "projectId" in current.config
+                ? { ...current, config: { ...current.config, projectId } }
+                : current,
+            )
           }
-          options={[
-            ["once", "連絡先ごとに1回"],
-            ["every_time", "イベントのたびに登録"],
-          ]}
         />
       ) : null}
+      {source !== "callable" ? (
+        <>
+          <SettingSelect
+            label="再登録"
+            value={node.config.reentry}
+            options={[
+              ["once", "連絡先ごとに1回"],
+              ["every_time", "イベントのたびに登録"],
+              ["cooldown", "一定時間後に再登録"],
+            ]}
+            onChange={(value) =>
+              onUpdate((current) =>
+                current.type === "source"
+                  ? {
+                      ...current,
+                      config: {
+                        ...current.config,
+                        reentry: value as typeof current.config.reentry,
+                        ...(value === "cooldown"
+                          ? { cooldownMinutes: current.config.cooldownMinutes ?? 60 }
+                          : {}),
+                      },
+                    }
+                  : current,
+              )
+            }
+          />
+          {node.config.reentry === "cooldown" ? (
+            <SettingInput
+              label="再登録までの時間（分）"
+              type="number"
+              min={1}
+              value={node.config.cooldownMinutes ?? 60}
+              onChange={(value) =>
+                onUpdate((current) =>
+                  current.type === "source"
+                    ? { ...current, config: { ...current.config, cooldownMinutes: Number(value) } }
+                    : current,
+                )
+              }
+            />
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            最後の参加開始から数え、公開版を変更しても引き継ぎます。
+          </p>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          親の連絡先・施策文脈を継承し、呼び出しごとに1回実行します。
+        </p>
+      )}
     </>
   );
 }

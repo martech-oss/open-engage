@@ -162,6 +162,20 @@
       "when": 1788796936770,
       "tag": "0022_landing_optimization",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1788841030381,
+      "tag": "0023_marketo_programs_automation_variables_clone",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1788842892460,
+      "tag": "0024_variable_revision_tombstones",
+      "breakpoints": true
     }
   ]
 }

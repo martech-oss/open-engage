@@ -6,6 +6,7 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 import type { FormField } from "@openengage/core/web";
 
+import { SignupFormVariableFields } from "./form-variable-fields";
 import { SignupFormFields, type OptionalSignupField } from "./signup-form-fields";
 import {
   type SignupFormDefinition,
@@ -31,6 +32,7 @@ export function SignupFormEditorDialog({
   createMutation: Pick<ReturnType<typeof useCreateSignupForm>, "mutateAsync">;
   updateMutation: Pick<ReturnType<typeof useUpdateSignupForm>, "mutateAsync">;
 }): ReactNode {
+  const [variableProjectId, setVariableProjectId] = useState(item?.variableProjectId ?? null);
   const initialKeys = new Set(item?.definition.fields?.map((field) => field.key) ?? []);
   const { busy, error, run } = useFormSubmission("保存できませんでした");
   const [turnstileEnabled, setTurnstileEnabled] = useState(item?.turnstileEnabled ?? true);
@@ -61,6 +63,7 @@ export function SignupFormEditorDialog({
       type,
       required: key === "email",
       progressive: false,
+      label: getFormString(formData, `label-${key}`) || undefined,
     });
     const fields: FormField[] = [standard("email", "email")];
     if (optionalFields.has("firstName")) fields.push(standard("firstName", "text"));
@@ -73,6 +76,7 @@ export function SignupFormEditorDialog({
       .filter(Boolean);
     const payload = {
       name,
+      variableProjectId,
       status: getFormString(formData, "status") === "published" ? "published" : "draft",
       definition: {
         style: readFormStyle(formData),
@@ -107,6 +111,13 @@ export function SignupFormEditorDialog({
       error={error}
       submitLabel={item ? "変更を保存" : "フォームを作成"}
     >
+      <SignupFormVariableFields
+        item={item}
+        optionalFields={optionalFields}
+        projectId={variableProjectId}
+        onProjectChange={setVariableProjectId}
+        disabled={busy}
+      />
       <SignupFormFields
         item={item}
         optionalFields={optionalFields}
