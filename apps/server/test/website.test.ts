@@ -145,21 +145,29 @@ describe("Website center", () => {
       endsAt: null,
     });
     expect(message.id).toBeTruthy();
-    const visitorId = crypto.randomUUID();
+    const assertion = await client.website.issueIdentityToken({ contactId: contact.id });
     const trackResponse = await publicCall(`/api/public/track/${workspaceSlug}`, {
       method: "POST",
       body: JSON.stringify({
         consent: true,
-        visitorId,
-        email: "known@example.com",
+        identityToken: assertion.token,
         type: "page_viewed",
         resourceId: "https://example.com/pricing/pro",
         properties: { title: "Pricing" },
       }),
     });
     expect(trackResponse.status).toBe(202);
-    expect(await trackResponse.json()).toMatchObject({
-      data: { accepted: true, identified: true, visitorId },
+    const trackData = (await trackResponse.json()) as {
+      data: { visitorId: string; visitorToken: string };
+    };
+    const { visitorToken } = trackData.data;
+    expect(trackData).toMatchObject({
+      data: {
+        accepted: true,
+        identified: true,
+        visitorId: expect.any(String),
+        visitorToken: expect.any(String),
+      },
     });
     await expect(
       env.DB.prepare(
@@ -170,7 +178,7 @@ describe("Website center", () => {
     ).resolves.toEqual({ resourceType: "landing_page" });
     const messages = (await (
       await publicCall(
-        `/api/public/site-messages/${workspaceSlug}?visitorId=${visitorId}` +
+        `/api/public/site-messages/${workspaceSlug}?consent=true&visitorToken=${encodeURIComponent(visitorToken)}` +
           `&url=${encodeURIComponent("https://example.com/pricing/pro")}`,
       )
     ).json()) as { data: Array<{ id: string }> };
@@ -179,7 +187,7 @@ describe("Website center", () => {
       (
         await publicCall(`/api/public/site-messages/${workspaceSlug}/${message.id}/events`, {
           method: "POST",
-          body: JSON.stringify({ visitorId, type: "impression" }),
+          body: JSON.stringify({ visitorToken, consent: true, type: "impression" }),
         })
       ).status,
     ).toBe(202);

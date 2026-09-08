@@ -38,6 +38,8 @@ export const contactSchema = z.object({
   phone: z.string().nullable(),
   externalId: z.string().nullable(),
   stage: z.string(),
+  ownerUserId: z.string().nullable().default(null),
+  lifecycleStage: z.enum(["lead", "mql", "sql", "customer"]).default("lead"),
   score: z.number().int(),
   /** Thirds of a letter from the D baseline; render with gradeLetter(). */
   gradePoints: z.number().int(),

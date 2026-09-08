@@ -739,7 +739,7 @@ Pardotと同じ2軸で連絡先を評価します。行動を測る**スコア**
 `GET /r/:workspaceSlug/:slug`は遷移先へ302で転送し、クリックを記録します。
 広告、SNS、PDFなど、OpenEngageの外に置くリンクの効果測定に使います。
 
-サイトトラッキング済みのページから遷移した場合、埋め込みスクリプトが`?oe_v=`に訪問者IDを付与するため、
+サイトトラッキング済みのページから遷移した場合、埋め込みスクリプトが同意取得後に`?oe_v=`へ署名付き訪問者トークンを付与するため、
 連絡先が特定できればタイムライン・セグメント・スコア・アトリビューションに反映されます。
 IDが無い場合はクリック数だけが増えます。
 
@@ -777,6 +777,28 @@ Projectがキャンペーンです。Projectにメール・フォーム・セグ
 
 脆弱性を発見した場合は、公開Issueへ機密情報を書き込まず、RepositoryのSecurity Advisoryから報告してください。
 
+## 訪問者識別と営業進捗
+
+サイトの `openengageSettings.consent` を同意状態に合わせて設定します。後から許可する場合は `openengage.consent()`、撤回する場合は `openengage.consent(false)` を呼びます。署名付き訪問者トークンはワークスペースごとに保存され、フォーム送信で連絡先に紐付きます。別のメールアドレスの送信ではブラウザの識別子を切り替え、既存履歴を別人へ移しません。同意しなくてもフォーム送信はできます。
+
+外部アプリのサーバーは認証済み `POST /api/v1/website/identity-tokens` に `contactId` を渡して10分有効な識別トークンを発行し、ブラウザの `openengage.identify(token)` に渡せます。公開APIへメールアドレスを直接渡しても識別されません。訪問者トークンは認証には使えません。
+
+フォーム送信以前の匿名履歴はQueueとCronで復旧し、スコア・グレード・キャンペーン接点だけを補完します。過去の自動化や待機条件は再実行しません。処理失敗は `visitor.history_failed` で追跡できます。
+
+## LP・営業連携・成果測定
+
+- LPはプロンプトと会話から生成し、PC/スマートフォンの隔離プレビューで確認して公開します。下書きと公開版は分かれ、フォームの版も公開時に固定されます。生成ジョブは画面を閉じても保持されます。
+- 連絡先の到達段階は見込み客・MQL・SQL・顧客です。営業引き渡しは担当者・タスク・アプリ内通知を一括保存し、商談作成・受注から実際の到達日時を記録します。
+- 比較テストは2〜5案・配分合計100%。表示日のコホートを使い、初回表示から30日以内のフォーム送信成功を訪問者ごとに1回数えます。テストの終了と採用は手動です。同意なしの閲覧は個人単位の比較集計に入りません。
+- キャンペーン費用はプロジェクトごとに登録します。ROIは選択期間の配賦売上と計上費用から計算し、初期設定は最終接点です。費用ゼロは算出不可、異なる通貨は合算・自動換算しません。
+- 外部フォームはForm HandlerのJSON/HTML送信、フィールドマッピング、許可ドメイン、成功・失敗URLを設定できます。
+
+管理APIは共通oRPC契約からREST・SDK・MCPに公開されます。主な追加経路は `/website/identity-tokens`、`/sales/handoff`、`/website/pages/{id}/design`・`generate`・`publish`、`/website/pages/{pageId}/experiments`・`dynamic-content`、`/projects/{id}/costs`、`/reports/lifecycle` です。
+
+この変更は開発DBの再作成を前提とし、既存データの移行には対応していません。新しい開発DBに `pnpm db:migrate:local` でマイグレーションを適用してください。開発用サンプルは、ローカルの管理APIキーを `OPENENGAGE_DEMO_API_KEY` に設定して `node scripts/seed-marketing-demo.mjs` で作成できます。`OPENENGAGE_DEMO_BASE_URL` の既定値は `http://localhost:8787` です。同名デモがある場合は追加しません。このスクリプトはlocalhost以外への書き込みを拒否します。
+
+運用時は `visitor.history_failed`、`landing.generation_failed`、`public_form.event_enqueue_failed` と既存のQueue/outboxログから処理失敗を追跡できます。失敗した生成は直前の有効な下書きを保持します。動的セグメントはイベント・関連レコードの変更時に再評価し、1分Cronによる定期補正で時間条件の変化を回収します。
+
 ## テスト
 
 全体:
@@ -811,6 +833,10 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 - Dealのステージ移動、獲得・失注、タスク状態遷移
 - Idempotency Keyの重複予約
 - Worker healthとD1 migration
+- 匿名訪問・フォーム送信・再訪・共有ブラウザ切替と履歴補完の再試行
+- セグメントから営業引き渡し、商談・受注、ROI・進捗レポートまでのE2E
+- AI生成の版競合・ジョブ復旧、並行公開とフォーム版の固定
+- LP比較テストの重複排除、30日境界、動的表示と通貨別ROI
 
 ## 現在の制約
 

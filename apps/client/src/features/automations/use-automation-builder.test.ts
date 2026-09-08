@@ -123,3 +123,14 @@ describe("useAutomationBuilder", () => {
     expect(result.current.builder.selectedNodeId).toBe("replacement-source");
   });
 });
+
+it("adds a configured sales handoff action from the canvas", () => {
+  const { result } = renderHook(() => useControlledBuilder(definition));
+  act(() => {
+    result.current.builder.addNode("handoff", options);
+  });
+  expect(result.current.definition.nodes[1]).toMatchObject({
+    type: "action",
+    config: { action: "handoff_to_sales", preserveOwner: true },
+  });
+});

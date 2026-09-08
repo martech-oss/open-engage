@@ -101,9 +101,10 @@ export async function listWorkspaceDealTasks(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   status: DealTaskStatus | "all",
+  assignedUserId?: string,
 ): Promise<DealTaskListItem[]> {
   const repository = new DealRepository(database, workspace);
-  const rows = await repository.listWorkspaceTasks(status);
+  const rows = await repository.listWorkspaceTasks(status, assignedUserId);
   return rows;
 }
 

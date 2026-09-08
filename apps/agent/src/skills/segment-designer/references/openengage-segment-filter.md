@@ -53,3 +53,11 @@ Supported operators are `eq`, `neq`, `contains`, `starts_with`, `in`, `gt`, `gte
 - A `subscription` condition can require membership in a supplied topic slug with subscribed status.
 - Global suppression and delivery frequency are enforced outside `SegmentFilter`. Record them as delivery guardrails and unresolved checks, never as unsupported fields.
 - Structural validation does not prove that a tag, segment, company, topic, event type, or custom-field key exists in a workspace.
+
+## Sales and related rows
+
+Groups may specify `relation: "company" | "deal" | "event"`. All child conditions in that group match the SAME related row. Use `negated: true` on a deal group with `deal_status eq "open"` to require NO open deal. Do not express absence with a scalar `deal_status neq "open"`: that means a different existing deal. `minimumCount` on an event group requires at least that many matching events; combining it with `negated` expresses fewer than that count.
+
+Additional fields: `category_score` (number, key = ID from catalog.categories; missing score is zero), `owner_user_id`, `lifecycle_stage`, `company_name`, `company_custom_field` (key from catalog.companyCustomFields), `deal_status` (open/won/lost), `deal_stage_id` (from catalog.dealStages), `deal_owner_user_id`, `deal_value` (number). Archived deals are excluded. Event fields are `event_type`, `event_resource_type`, `event_resource_id`, `event_occurred_at` (ISO date), `event_age_minutes` (number relative to current database time), and `event_property` (safe JSON-path key). Text/date/numeric operators follow the same rules as contact fields. Use a single event group for a recent form submission: event_type eq form_submitted AND event_resource_id eq the form ID AND event_age_minutes lte 1440. Category thresholds are chosen explicitly by the user; there is no universal MQL score threshold. Lifecycle stage is independent of the legacy free-text stage.
+
+Related groups cannot nest another explicit relation scope. Nested AND/OR groups inherit the enclosing same-row scope; counts apply only on the outer relation group. Deal stage IDs support eq/neq/in/exists/not_exists. Arrays are valid only with in.

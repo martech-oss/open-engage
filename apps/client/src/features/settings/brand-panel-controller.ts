@@ -6,7 +6,7 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 
 export function useBrandPanelController(initialProfile: EmailBrandProfile) {
   const updateBrand = useUpdateEmailBrandProfile();
-  const submission = useFormSubmission("メールブランドを保存できませんでした");
+  const submission = useFormSubmission("ブランドを保存できませんでした");
   const [profile, setProfile] = useState(initialProfile);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -25,7 +25,7 @@ export function useBrandPanelController(initialProfile: EmailBrandProfile) {
         postalAddress: profile.postalAddress,
       });
       setProfile(saved);
-      toast.success("メールブランドを保存しました");
+      toast.success("ブランドを保存しました");
     });
   }
 

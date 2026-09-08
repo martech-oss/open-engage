@@ -3,12 +3,15 @@ import { and, asc, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import {
   dealTaskListItemSchema,
   dealTaskSchema,
+  type ContactTaskCreate,
   type DealTaskCreate,
+  type DealTaskUpdate,
   type DealTaskStatus,
   type DealTaskType,
 } from "@openengage/core/deals";
 
 import { user } from "../auth/schema";
+import { contacts } from "../contacts/schema";
 import { didChange, ensureLoaded, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
@@ -29,15 +32,26 @@ export class DealTaskRepository extends WorkspaceRepository {
   }
 
   /** Open and completed tasks across non-archived deals in this workspace. */
-  public async listWorkspaceTasks(status: DealTaskStatus | "all"): Promise<DealTaskListItemRow[]> {
+  public async listWorkspaceTasks(
+    status: DealTaskStatus | "all",
+    assignedUserId?: string,
+  ): Promise<DealTaskListItemRow[]> {
     const filters: SQL[] = [this.inWorkspace(dealTasks), isNull(deals.archivedAt)];
+    if (assignedUserId) filters.push(eq(dealTasks.assignedUserId, assignedUserId));
     if (status !== "all") filters.push(eq(dealTasks.status, status));
     const rows = await this.database.orm
-      .select({ ...this.taskSelection(), dealName: deals.name })
+      .select({
+        ...this.taskSelection(),
+        dealName: sql<string>`COALESCE(${deals.name}, ${contacts.email}, 'Contact')`,
+      })
       .from(dealTasks)
-      .innerJoin(
+      .leftJoin(
         deals,
         and(eq(deals.workspaceId, dealTasks.workspaceId), eq(deals.id, dealTasks.dealId)),
+      )
+      .leftJoin(
+        contacts,
+        and(eq(contacts.workspaceId, dealTasks.workspaceId), eq(contacts.id, dealTasks.contactId)),
       )
       .leftJoin(user, eq(user.id, dealTasks.assignedUserId))
       .where(and(...filters))
@@ -121,10 +135,92 @@ export class DealTaskRepository extends WorkspaceRepository {
     return didChange(result);
   }
 
+  async getTaskById(taskId: string): Promise<DealTaskRow | null> {
+    const row = await this.taskQuery()
+      .where(and(this.inWorkspace(dealTasks), eq(dealTasks.id, taskId)))
+      .get();
+    return row ? dealTaskSchema.parse(row) : null;
+  }
+  async listContactTasks(contactId: string): Promise<DealTaskRow[]> {
+    const rows = await this.taskQuery()
+      .leftJoin(
+        deals,
+        and(eq(deals.workspaceId, dealTasks.workspaceId), eq(deals.id, dealTasks.dealId)),
+      )
+      .where(
+        and(
+          this.inWorkspace(dealTasks),
+          sql`(${dealTasks.contactId}=${contactId} OR ${deals.contactId}=${contactId})`,
+        ),
+      )
+      .orderBy(desc(dealTasks.createdAt));
+    return rows.map((row) => dealTaskSchema.parse(row));
+  }
+  async createContactTask(input: ContactTaskCreate): Promise<DealTaskRow> {
+    const id = uuidv7(),
+      now = nowIso();
+    await this.database.orm.insert(dealTasks).values({
+      id,
+      workspaceId: this.context.workspaceId,
+      dealId: input.dealId ?? null,
+      contactId: input.contactId ?? null,
+      type: input.type,
+      title: input.title,
+      notes: input.notes,
+      dueAt: input.dueAt ?? null,
+      assignedUserId: input.assignedUserId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return ensureLoaded(await this.getTaskById(id), "Created task");
+  }
+  async updateTaskById(taskId: string, input: DealTaskUpdate) {
+    const now = nowIso();
+    await this.database.orm
+      .update(dealTasks)
+      .set({
+        ...input,
+        updatedAt: now,
+        ...(input.status
+          ? {
+              completedAt:
+                input.status === "completed"
+                  ? sql`CASE WHEN ${dealTasks.status} = 'completed' THEN coalesce(${dealTasks.completedAt}, ${now}) ELSE ${now} END`
+                  : null,
+            }
+          : {}),
+      })
+      .where(and(this.inWorkspace(dealTasks), eq(dealTasks.id, taskId)));
+    return this.getTaskById(taskId);
+  }
+  async deleteTaskById(taskId: string) {
+    return didChange(
+      await this.database.orm
+        .delete(dealTasks)
+        .where(and(this.inWorkspace(dealTasks), eq(dealTasks.id, taskId))),
+    );
+  }
+  async setTaskStatus(taskId: string, status: "open" | "completed") {
+    const now = nowIso();
+    await this.database.orm
+      .update(dealTasks)
+      .set({
+        status,
+        completedAt:
+          status === "completed"
+            ? sql`CASE WHEN ${dealTasks.status} = 'completed' THEN coalesce(${dealTasks.completedAt}, ${now}) ELSE ${now} END`
+            : null,
+        updatedAt: now,
+      })
+      .where(and(this.inWorkspace(dealTasks), eq(dealTasks.id, taskId)));
+    return this.getTaskById(taskId);
+  }
+
   private taskSelection() {
     return {
       id: dealTasks.id,
       dealId: dealTasks.dealId,
+      contactId: dealTasks.contactId,
       type: dealTasks.type,
       title: dealTasks.title,
       notes: dealTasks.notes,

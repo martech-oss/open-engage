@@ -2,6 +2,7 @@ import { writeAuditLog } from "@openengage/database/platform";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import { costProcedures } from "./cost-router";
 import {
   generateMarketingBrief,
   MarketingBriefGenerationError,
@@ -249,6 +250,7 @@ export const removeProjectBriefItemProcedure = authed.projects.briefRemoveItem.h
 );
 
 export const projectProcedures = {
+  ...costProcedures,
   list: listProjectsProcedure,
   create: createProjectProcedure,
   addItem: addProjectItemProcedure,

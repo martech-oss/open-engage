@@ -15,10 +15,29 @@ export async function recordCampaignTouches(
     type: string;
     resourceId: string | null;
     occurredAt: string;
+    properties?: Record<string, unknown>;
   },
 ): Promise<number> {
   if (!input.resourceId) return 0;
   const repository = new CampaignTouchRepository(database);
+  const context = input.properties;
+  if (
+    context &&
+    typeof context.pageId === "string" &&
+    typeof context.pageVersionId === "string" &&
+    typeof context.projectId === "string"
+  ) {
+    return repository.recordMeasuredTouch({
+      workspaceId: input.workspaceId,
+      sourceEventId: input.id,
+      contactId: input.contactId,
+      pageId: context.pageId,
+      pageVersionId: context.pageVersionId,
+      projectId: context.projectId,
+      eventType: input.type,
+      occurredAt: input.occurredAt,
+    });
+  }
   const candidate = await toCandidate(repository, input);
   if (!candidate) return 0;
   return repository.recordTouches({

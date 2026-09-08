@@ -184,7 +184,8 @@ export type DealSummary = z.infer<typeof dealSummarySchema>;
 
 export const dealTaskSchema = z.object({
   id: z.string(),
-  dealId: z.string(),
+  dealId: z.string().nullable(),
+  contactId: z.string().nullable().default(null),
   type: dealTaskTypeSchema,
   title: z.string(),
   notes: z.string(),
@@ -223,3 +224,54 @@ export const dealDetailDataSchema = z.object({
   tasks: z.array(dealTaskSchema),
 });
 export type DealDetailData = z.infer<typeof dealDetailDataSchema>;
+
+/** Same task resource for contact detail, deal detail and workspace task lists. */
+export const contactTaskCreateSchema = dealTaskCreateSchema
+  .extend({
+    contactId: nullableIdSchema,
+    dealId: nullableIdSchema,
+  })
+  .refine((input) => Boolean(input.contactId || input.dealId), "A contact or deal is required");
+export type ContactTaskCreate = z.infer<typeof contactTaskCreateSchema>;
+export const salesHandoffSchema = z.object({
+  contactId: z.string().min(1),
+  executionKey: z.string().min(1).max(191),
+  ownerUserId: z.string().min(1).optional(),
+  groupId: z.string().min(1).optional(),
+  preserveOwner: z.boolean().default(true),
+  title: z.string().trim().min(1).max(191).default("Follow up with qualified lead"),
+  dueAt: z.iso.datetime().nullable().optional(),
+});
+export type SalesHandoff = z.infer<typeof salesHandoffSchema>;
+export const assignmentGroupWriteSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z.string().trim().min(1).max(191),
+    mode: z.enum(["fixed", "round_robin"]),
+    userIds: z.array(z.string().min(1)).min(1, "少なくとも1人の担当者が必要です").max(100),
+  })
+  .refine(
+    (input) => input.mode !== "fixed" || input.userIds.length === 1,
+    "Fixed groups require one user",
+  );
+export type AssignmentGroupWrite = z.infer<typeof assignmentGroupWriteSchema>;
+export const assignmentGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  mode: z.enum(["fixed", "round_robin"]),
+  userIds: z.array(z.string()),
+});
+export const salesHandoffResultSchema = z.object({
+  id: z.string(),
+  contactId: z.string(),
+  ownerUserId: z.string(),
+  taskId: z.string(),
+  createdAt: z.string(),
+});
+export const appNotificationSchema = z.object({
+  id: z.string(),
+  contactId: z.string(),
+  title: z.string(),
+  readAt: z.string().nullable(),
+  createdAt: z.string(),
+});

@@ -154,7 +154,13 @@ describe("public form definition validation", () => {
         fields: [
           { key: "email", kind: "standard", type: "email", required: true },
           { key: "role", kind: "custom", type: "text", progressive: true },
-          { key: "industry", kind: "custom", type: "text", progressive: true },
+          {
+            key: "industry",
+            kind: "custom",
+            type: "text",
+            progressive: true,
+            required: true,
+          },
         ],
       },
       allowedDomains: [],
@@ -164,17 +170,18 @@ describe("public form definition validation", () => {
     const first = await publicCall(`/f/${slug}/progressive-form`, {
       email: "progressive@example.com",
       "custom:role": "Director",
+      consent: true,
       idempotencyKey: crypto.randomUUID(),
     });
     expect(first.status).toBe(202);
-    await env.DB.prepare("UPDATE contacts SET visitor_id = ? WHERE email = ?")
-      .bind("visitor-progressive", "progressive@example.com")
-      .run();
+    const accepted = await first.json<{ data: { visitorToken: string } }>();
+    expect(accepted.data.visitorToken).toEqual(expect.any(String));
 
     const staleField = await publicCall(`/f/${slug}/progressive-form`, {
       email: "progressive@example.com",
       "custom:role": "VP",
-      oe_v: "visitor-progressive",
+      oe_v: accepted.data.visitorToken,
+      consent: true,
       idempotencyKey: crypto.randomUUID(),
     });
     expect(staleField.status).toBe(422);
@@ -182,9 +189,18 @@ describe("public form definition validation", () => {
     const nextField = await publicCall(`/f/${slug}/progressive-form`, {
       email: "progressive@example.com",
       "custom:industry": "Manufacturing",
-      oe_v: "visitor-progressive",
+      "custom:role": "VP",
+      oe_v: accepted.data.visitorToken,
+      consent: true,
       idempotencyKey: crypto.randomUUID(),
     });
     expect(nextField.status).toBe(202);
+    const contact = await env.DB.prepare("SELECT custom_fields FROM contacts WHERE email = ?")
+      .bind("progressive@example.com")
+      .first<{ custom_fields: string }>();
+    expect(JSON.parse(contact!.custom_fields)).toMatchObject({
+      role: "Director",
+      industry: "Manufacturing",
+    });
   });
 });

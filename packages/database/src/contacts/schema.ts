@@ -10,7 +10,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-import { organization } from "../auth/schema";
+import { user, organization } from "../auth/schema";
 
 export const companies = sqliteTable(
   "companies",
@@ -47,6 +47,8 @@ export const contacts = sqliteTable(
     phone: text(),
     externalId: text("external_id"),
     stage: text().default("lead").notNull(),
+    ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "set null" }),
+    lifecycleStage: text("lifecycle_stage").default("lead").notNull(),
     score: integer().default(0).notNull(),
     /** Thirds of a letter away from the D baseline; see core's gradeLetter(). */
     gradePoints: integer("grade_points").default(0).notNull(),
@@ -61,6 +63,15 @@ export const contacts = sqliteTable(
       table.workspaceId,
       table.status,
       table.updatedAt,
+    ),
+    check(
+      "contacts_lifecycle_check",
+      sql`${table.lifecycleStage} IN ('lead','mql','sql','customer')`,
+    ),
+    index("contacts_workspace_owner_lifecycle_idx").on(
+      table.workspaceId,
+      table.ownerUserId,
+      table.lifecycleStage,
     ),
     index("contacts_workspace_stage_idx").on(table.workspaceId, table.stage),
     index("contacts_workspace_score_idx").on(table.workspaceId, table.score),
@@ -196,6 +207,7 @@ export const contactEvents = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     contactId: text("contact_id").references(() => contacts.id, { onDelete: "set null" }),
     visitorId: text("visitor_id"),
+    replayMode: text("replay_mode").default("live").notNull(),
     type: text().notNull(),
     resourceType: text("resource_type"),
     resourceId: text("resource_id"),

@@ -9,7 +9,11 @@ import type {
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
+import {
+  LifecycleRepository,
+  ContactRepository,
+  ContactResourceRepository,
+} from "@openengage/database/contacts";
 import { isConstraintError, uuidv7 } from "@openengage/database/shared";
 
 import { resourceSlug } from "../platform/values";
@@ -64,8 +68,19 @@ export async function getContactProfile(
   const rows = await new ContactResourceRepository(database, workspace).getContactProfileRows(
     contactId,
   );
+  const lifecycle = new LifecycleRepository(database, workspace);
+  const [owner, lifecycleHistory] = await Promise.all([
+    lifecycle.owner(contactId),
+    lifecycle.list(contactId),
+  ]);
   return {
     contact,
+    owner,
+    lifecycleHistory: lifecycleHistory.map(({ stage, reachedAt, source }) => ({
+      stage: stage as "mql" | "sql" | "customer",
+      reachedAt,
+      source,
+    })),
     tags: rows.tags,
     segments: rows.segments.map((row) => ({
       id: row.id,

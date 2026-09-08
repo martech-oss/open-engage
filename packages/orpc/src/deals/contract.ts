@@ -2,6 +2,12 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import {
+  contactTaskCreateSchema,
+  assignmentGroupWriteSchema,
+  assignmentGroupSchema,
+  salesHandoffSchema,
+  salesHandoffResultSchema,
+  appNotificationSchema,
   dealCreateSchema,
   dealDetailDataSchema,
   dealListDataSchema,
@@ -35,6 +41,65 @@ const badStage = {
 const base = authedErrors;
 
 export const dealsContract = {
+  salesMembers: oc
+    .route({ method: "GET", path: "/sales/members" })
+    .errors(workspaceErrors)
+    .output(z.array(z.object({ id: z.string(), name: z.string(), email: z.string() }))),
+  handoff: oc
+    .route({ method: "POST", path: "/sales/handoff" })
+    .errors({ ...base, ...badReference })
+    .input(salesHandoffSchema)
+    .output(salesHandoffResultSchema),
+  assignmentGroups: oc
+    .route({ method: "GET", path: "/sales/groups" })
+    .errors(workspaceErrors)
+    .output(z.array(assignmentGroupSchema)),
+  saveAssignmentGroup: oc
+    .route({ method: "POST", path: "/sales/groups" })
+    .errors({ ...base, ...badReference })
+    .input(assignmentGroupWriteSchema)
+    .output(assignmentGroupSchema),
+  deleteAssignmentGroup: oc
+    .route({ method: "DELETE", path: "/sales/groups/{id}" })
+    .errors(base)
+    .input(z.object({ id: z.string() }))
+    .output(ackSchema),
+  notifications: oc
+    .route({ method: "GET", path: "/sales/notifications" })
+    .errors(workspaceErrors)
+    .input(z.object({}))
+    .output(z.array(appNotificationSchema)),
+  readNotification: oc
+    .route({ method: "POST", path: "/sales/notifications/{id}/read" })
+    .errors(base)
+    .input(z.object({ id: z.string() }))
+    .output(ackSchema),
+  contactTasks: oc
+    .route({ method: "GET", path: "/contacts/{contactId}/tasks" })
+    .errors(workspaceErrors)
+    .input(z.object({ contactId: z.string().min(1) }))
+    .output(z.array(dealTaskSchema)),
+  createContactTask: oc
+    .route({ method: "POST", path: "/tasks" })
+    .errors({ ...base, ...badReference })
+    .input(contactTaskCreateSchema)
+    .output(dealTaskSchema),
+  updateTaskResource: oc
+    .route({ method: "PATCH", path: "/tasks/{taskId}" })
+    .errors({ ...base, ...taskNotFound, ...badReference })
+    .input(dealTaskUpdateSchema.extend({ taskId: z.string().min(1) }))
+    .output(dealTaskSchema),
+  deleteTaskResource: oc
+    .route({ method: "DELETE", path: "/tasks/{taskId}" })
+    .errors({ ...base, ...taskNotFound })
+    .input(z.object({ taskId: z.string().min(1) }))
+    .output(ackSchema),
+  setTaskStatus: oc
+    .route({ method: "PATCH", path: "/tasks/{taskId}/status" })
+    .errors({ ...base, ...taskNotFound })
+    .input(z.object({ taskId: z.string().min(1), status: z.enum(["open", "completed"]) }))
+    .output(dealTaskSchema),
+
   options: oc
     .route({ method: "GET", path: "/deals/options" })
     .errors(workspaceErrors)
@@ -59,6 +124,7 @@ export const dealsContract = {
     .input(
       z.object({
         status: z.enum(["open", "completed", "all"]).default("open"),
+        mine: z.boolean().optional(),
       }),
     )
     .output(z.array(dealTaskListItemSchema)),

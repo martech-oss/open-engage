@@ -177,6 +177,19 @@ describe("public form Turnstile", () => {
     });
     expect(accepted.status).toBe(202);
 
+    const identicalReplay = await appCall(form.path, runtime, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "replay@example.com",
+        firstName: "Original",
+        "cf-turnstile-response": "single-use-token",
+        idempotencyKey,
+      }),
+    });
+    expect(identicalReplay.status).toBe(202);
+    expect(await identicalReplay.json()).toEqual({ data: { accepted: true, duplicate: true } });
+
     const replay = await appCall(form.path, runtime, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -186,8 +199,8 @@ describe("public form Turnstile", () => {
         idempotencyKey,
       }),
     });
-    expect(replay.status).toBe(202);
-    expect(await replay.json()).toEqual({ data: { accepted: true, duplicate: true } });
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
     expect(verificationKeys).toHaveLength(1);
     expect(verificationKeys[0]).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,

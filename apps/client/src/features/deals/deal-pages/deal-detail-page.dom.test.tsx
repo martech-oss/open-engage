@@ -54,6 +54,7 @@ const detail: DealDetailData = {
     {
       id: "task-a",
       dealId: "deal-a",
+      contactId: null,
       type: "call",
       title: "Call buyer",
       notes: "",

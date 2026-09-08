@@ -21,6 +21,25 @@ export interface TouchCandidate {
  * asset to a project is the single switch that starts attribution for it.
  */
 export class CampaignTouchRepository extends DatabaseRepository {
+  public async recordMeasuredTouch(input: {
+    workspaceId: string;
+    sourceEventId: string;
+    contactId: string;
+    pageId: string;
+    pageVersionId: string;
+    projectId: string;
+    eventType: string;
+    occurredAt: string;
+  }): Promise<number> {
+    const result = await this.database.orm
+      .run(sql`INSERT INTO campaign_touches(id,workspace_id,project_id,contact_id,resource_type,resource_id,event_type,source_event_id,occurred_at,created_at)
+      SELECT ${uuidv7()},${input.workspaceId},p.id,${input.contactId},'page',v.page_id,${input.eventType},${input.sourceEventId},${input.occurredAt},${nowIso()}
+      FROM landing_page_versions v JOIN projects p ON p.workspace_id=v.workspace_id AND p.id=json_extract(v.document,'$.measurement.projectId')
+      WHERE v.workspace_id=${input.workspaceId} AND v.id=${input.pageVersionId} AND v.page_id=${input.pageId} AND v.published_at IS NOT NULL AND p.id=${input.projectId} AND p.archived_at IS NULL
+      ON CONFLICT DO NOTHING`);
+    return result.meta.changes;
+  }
+
   /**
    * Email events name a delivery, not the template the project lists, so the
    * template id is resolved here rather than at every call site.
@@ -85,6 +104,7 @@ export interface CampaignAttributionRow {
   influencedValue: number;
   firstTouchValue: number;
   lastTouchValue: number;
+  cost: number;
 }
 
 /**
@@ -97,6 +117,7 @@ export class CampaignReportRepository extends DatabaseRepository {
   public async attribution(
     workspaceId: string,
     range: ReportDateRange,
+    currency: string,
   ): Promise<CampaignAttributionRow[]> {
     const rows = await this.database.orm.all<{
       project_id: string;
@@ -108,6 +129,7 @@ export class CampaignReportRepository extends DatabaseRepository {
       influenced_value: number;
       first_touch_value: number;
       last_touch_value: number;
+      cost: number;
     }>(sql`
       WITH won AS (
         SELECT ${deals.id} AS deal_id, ${deals.contactId} AS contact_id,
@@ -115,14 +137,16 @@ export class CampaignReportRepository extends DatabaseRepository {
         FROM ${deals}
         WHERE ${deals.workspaceId} = ${workspaceId}
           AND ${deals.status} = 'won'
+          AND ${deals.archivedAt} IS NULL
+          AND ${deals.currency} = ${currency}
           AND ${deals.contactId} IS NOT NULL
           AND ${deals.wonAt} >= ${range.fromTimestamp}
           AND ${deals.wonAt} < ${range.toExclusiveTimestamp}
       ),
       deal_touch AS (
         SELECT w.deal_id, w.value, t.project_id, t.occurred_at,
-               ROW_NUMBER() OVER (PARTITION BY w.deal_id ORDER BY t.occurred_at ASC) AS first_rank,
-               ROW_NUMBER() OVER (PARTITION BY w.deal_id ORDER BY t.occurred_at DESC) AS last_rank
+               ROW_NUMBER() OVER (PARTITION BY w.deal_id ORDER BY t.occurred_at ASC, t.id ASC) AS first_rank,
+               ROW_NUMBER() OVER (PARTITION BY w.deal_id ORDER BY t.occurred_at DESC, t.id DESC) AS last_rank
         FROM won w
         JOIN ${campaignTouches} t
           ON t.workspace_id = ${workspaceId}
@@ -160,7 +184,10 @@ export class CampaignReportRepository extends DatabaseRepository {
              COALESCE(influence.deals, 0) AS influenced_deals,
              COALESCE(influence.value, 0) AS influenced_value,
              COALESCE(first_touch.value, 0) AS first_touch_value,
-             COALESCE(last_touch.value, 0) AS last_touch_value
+             COALESCE(last_touch.value, 0) AS last_touch_value,
+             COALESCE((SELECT SUM(cost.amount) FROM campaign_costs cost
+               WHERE cost.workspace_id = ${workspaceId} AND cost.project_id = ${projects.id}
+               AND cost.currency = ${currency} AND cost.booked_on >= ${range.from} AND cost.booked_on <= ${range.to}), 0) AS cost
       FROM ${projects}
       LEFT JOIN touch_stats ON touch_stats.project_id = ${projects.id}
       LEFT JOIN influence ON influence.project_id = ${projects.id}
@@ -168,7 +195,6 @@ export class CampaignReportRepository extends DatabaseRepository {
       LEFT JOIN last_touch ON last_touch.project_id = ${projects.id}
       WHERE ${projects.workspaceId} = ${workspaceId} AND ${projects.archivedAt} IS NULL
       ORDER BY influenced_value DESC, touches DESC
-      LIMIT 200
     `);
     return rows.map((row) => ({
       projectId: row.project_id,
@@ -180,6 +206,7 @@ export class CampaignReportRepository extends DatabaseRepository {
       influencedValue: Number(row.influenced_value) || 0,
       firstTouchValue: Number(row.first_touch_value) || 0,
       lastTouchValue: Number(row.last_touch_value) || 0,
+      cost: Number(row.cost) || 0,
     }));
   }
 }

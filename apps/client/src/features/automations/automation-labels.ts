@@ -9,6 +9,7 @@ export function nodeLabel(node: AutomationNode): string {
   }
   if (node.type === "decision") return `${eventLabel(node.config.event)}を待つ`;
   if (node.type === "condition") return `${node.config.field} を判定`;
+  if (node.config.action === "handoff_to_sales") return "営業へ引き継ぐ";
   if (node.config.action === "send_email") return "メールを送信";
   if (node.config.action === "change_score")
     return `スコア ${node.config.amount >= 0 ? "+" : ""}${node.config.amount}`;

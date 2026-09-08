@@ -161,6 +161,9 @@ export const segmentGenerationResultSchema = z.discriminatedUnion("status", [
 export type SegmentGenerationResult = z.infer<typeof segmentGenerationResultSchema>;
 
 export const segmentGenerationCatalogSchema = z.object({
+  categories: z.array(segmentResourceOptionSchema).max(1_000).optional(),
+  companyCustomFields: z.array(segmentResourceOptionSchema).max(1_000).optional(),
+  dealStages: z.array(segmentResourceOptionSchema).max(1_000).optional(),
   tags: z.array(segmentResourceOptionSchema).max(1_000),
   staticSegments: z.array(segmentResourceOptionSchema).max(1_000),
   companies: z.array(segmentResourceOptionSchema).max(1_000),

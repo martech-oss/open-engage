@@ -8,6 +8,7 @@ import { contactReport } from "./contacts-report";
 import { getDashboard } from "./dashboard-service";
 import { dealReport } from "./deals-report";
 import { emailReport } from "./emails-report";
+import { lifecycleReport } from "./lifecycle-report";
 import { reportsOverview } from "./overview-report";
 import { toReportRange } from "./shared";
 import { siteReport } from "./site-report";
@@ -90,6 +91,23 @@ export const campaignsReportProcedure = authed.reports.campaigns.handler(
       context.workspace.workspaceId,
       toReportRange(input.from, input.to, timeZone),
       input.currency ?? "JPY",
+      input.attributionModel,
+    );
+  },
+);
+
+export const lifecycleReportProcedure = authed.reports.lifecycle.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
+    return lifecycleReport(
+      context.database,
+      context.workspace.workspaceId,
+      toReportRange(input.from, input.to, timeZone),
+      {
+        ...(input.projectId ? { projectId: input.projectId } : {}),
+        ...(input.ownerUserId ? { ownerUserId: input.ownerUserId } : {}),
+      },
     );
   },
 );
@@ -99,6 +117,7 @@ export const dashboardProcedure = authed.dashboard.get.handler(async ({ context 
 });
 
 export const reportProcedures = {
+  lifecycle: lifecycleReportProcedure,
   overview: reportsOverviewProcedure,
   contacts: contactsReportProcedure,
   automations: automationsReportProcedure,

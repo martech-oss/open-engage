@@ -68,5 +68,25 @@ export function reportExport(
       })),
     };
   }
+  if (data.view === "campaigns" && data.campaigns)
+    return {
+      filename: "campaign-roi.csv",
+      rows: data.campaigns.campaigns.map((row) => ({
+        campaign: row.name,
+        currency: data.campaigns!.currency,
+        attribution_model: data.campaigns!.attributionModel,
+        cost: row.cost,
+        attributed_revenue: row.attributedValue,
+        roi_percent: row.roi ?? "算出不可",
+        influenced_revenue_reference: row.influencedValue,
+      })),
+    };
+  if (data.view === "lifecycle" && data.lifecycle)
+    return {
+      filename: "lifecycle-cohorts.csv",
+      rows: data.lifecycle.cohorts.map((row) =>
+        Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value ?? "算出不可"])),
+      ),
+    };
   return null;
 }

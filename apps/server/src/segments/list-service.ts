@@ -95,6 +95,13 @@ export function toPreviewContact(row: Record<string, unknown>): Contact {
     phone: nullablePrimitiveString(row["phone"]),
     externalId: nullablePrimitiveString(row["external_id"]),
     stage: primitiveString(row["stage"]),
+    ownerUserId: nullablePrimitiveString(row["owner_user_id"]),
+    lifecycleStage:
+      row["lifecycle_stage"] === "mql" ||
+      row["lifecycle_stage"] === "sql" ||
+      row["lifecycle_stage"] === "customer"
+        ? row["lifecycle_stage"]
+        : "lead",
     score: toFiniteNumber(row["score"]),
     gradePoints: toFiniteNumber(row["grade_points"]),
     status,

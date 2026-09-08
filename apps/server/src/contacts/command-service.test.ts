@@ -18,6 +18,8 @@ const activeContact: Contact = {
   phone: null,
   externalId: null,
   stage: "lead",
+  ownerUserId: null,
+  lifecycleStage: "lead",
   score: 0,
   gradePoints: 0,
   status: "active",

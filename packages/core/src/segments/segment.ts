@@ -7,6 +7,8 @@ export interface CompiledSegment {
 }
 
 const contactColumns: Partial<Record<SegmentCondition["field"], string>> = {
+  owner_user_id: "c.owner_user_id",
+  lifecycle_stage: "c.lifecycle_stage",
   email: "c.email",
   first_name: "c.first_name",
   last_name: "c.last_name",
@@ -29,10 +31,65 @@ export function compileSegmentFilter(workspaceId: string, filter: SegmentFilter)
   };
 }
 
-function compileNode(filter: SegmentFilter, params: Array<string | number | null>): string {
+type Relation = "company" | "deal" | "event";
+const relatedColumns: Record<string, [Relation, string]> = {
+  company_name: ["company", "co.name"],
+  company_custom_field: ["company", "co.custom_fields"],
+  deal_status: ["deal", "d.status"],
+  deal_stage_id: ["deal", "d.stage_id"],
+  deal_owner_user_id: ["deal", "d.owner_user_id"],
+  deal_value: ["deal", "d.value"],
+  event_type: ["event", "ce.type"],
+  event_resource_type: ["event", "ce.resource_type"],
+  event_resource_id: ["event", "ce.resource_id"],
+  event_occurred_at: ["event", "ce.occurred_at"],
+  event_age_minutes: ["event", "((julianday('now') - julianday(ce.occurred_at)) * 1440)"],
+  event_property: ["event", "ce.properties"],
+};
+function relatedQuery(relation: Relation): string {
+  if (relation === "company")
+    return "FROM company_contacts cc JOIN companies co ON co.id = cc.company_id AND co.workspace_id = c.workspace_id WHERE cc.workspace_id = c.workspace_id AND cc.contact_id = c.id";
+  if (relation === "deal")
+    return "FROM deals d WHERE d.workspace_id = c.workspace_id AND d.contact_id = c.id AND d.archived_at IS NULL";
+  return "FROM contact_events ce WHERE ce.workspace_id = c.workspace_id AND ce.contact_id = c.id";
+}
+function compileNode(
+  filter: SegmentFilter,
+  params: Array<string | number | null>,
+  scope?: Relation,
+): string {
   if (filter.kind === "group") {
-    const joiner = filter.combinator === "and" ? " AND " : " OR ";
-    return `(${filter.children.map((child) => compileNode(child, params)).join(joiner)})`;
+    if (scope && filter.relation)
+      throw new Error("Nested explicit related scopes are not supported");
+    const relation = filter.relation ?? scope;
+    const expression = `(${filter.children.map((child) => compileNode(child, params, relation)).join(filter.combinator === "and" ? " AND " : " OR ")})`;
+    if (filter.relation) {
+      const query = relatedQuery(filter.relation);
+      if (filter.minimumCount !== undefined) {
+        params.push(filter.minimumCount);
+        return `${filter.negated ? "NOT " : ""}((SELECT COUNT(*) ${query} AND ${expression}) >= ?)`;
+      }
+      return `${filter.negated ? "NOT " : ""}EXISTS (SELECT 1 ${query} AND ${expression})`;
+    }
+    return filter.negated ? `NOT ${expression}` : expression;
+  }
+  const related = relatedColumns[filter.field];
+  if (related) {
+    let column = related[1];
+    if (filter.field === "company_custom_field" || filter.field === "event_property") {
+      params.push(`$.${sanitizeJsonPath(filter.key ?? "")}`);
+      column = `json_extract(${column}, ?)`;
+    }
+    if (scope === related[0]) return scalarExpression(column, filter, params);
+    // An unscoped absence condition means no related row has a value. Inside
+    // an explicit relation it instead tests the nullable field of that row.
+    const absent = filter.operator === "not_exists";
+    const expression = scalarExpression(
+      column,
+      absent ? { ...filter, operator: "exists" } : filter,
+      params,
+    );
+    return `${absent ? "NOT " : ""}EXISTS (SELECT 1 ${relatedQuery(related[0])} AND ${expression})`;
   }
   return compileCondition(filter, params);
 }
@@ -53,6 +110,13 @@ function compileCondition(
   }
 
   switch (condition.field) {
+    case "category_score":
+      params.push(condition.key ?? "");
+      return scalarExpression(
+        "COALESCE((SELECT ccs.score FROM contact_category_scores ccs WHERE ccs.workspace_id = c.workspace_id AND ccs.contact_id = c.id AND ccs.category_id = ?), 0)",
+        condition,
+        params,
+      );
     case "tag":
       params.push(String(condition.value ?? ""));
       return `${existsPrefix(condition.operator)} EXISTS (
@@ -112,7 +176,7 @@ function scalarExpression(
   condition: SegmentCondition,
   params: Array<string | number | null>,
 ): string {
-  const value = normalizeValue(condition.value);
+  const value = condition.operator === "in" ? null : normalizeValue(condition.value);
   switch (condition.operator) {
     case "eq":
       params.push(value);

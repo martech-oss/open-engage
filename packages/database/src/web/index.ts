@@ -7,3 +7,6 @@ export * from "./site-message-repository";
 export * from "./tracking-repository";
 export * from "./visitor-message-repository";
 export * from "./workspace-repository";
+export * from "./landing-design-repository";
+export * from "./form-handler-repository";
+export * from "./optimization-repository";

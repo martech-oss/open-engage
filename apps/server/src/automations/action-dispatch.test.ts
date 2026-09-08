@@ -25,6 +25,7 @@ function registry(): AutomationActionExecutorRegistry<TestContext> {
     remove_segment: async (action, context) => {
       context.calls.push(`remove-segment:${action.segmentId}`);
     },
+    handoff_to_sales: async () => {},
     change_score: async (action, context) => {
       context.calls.push(`score:${action.amount}`);
     },

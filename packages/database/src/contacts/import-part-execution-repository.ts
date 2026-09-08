@@ -103,7 +103,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
         .select(
           sql`SELECT
             ${id}, ${input.workspaceId}, NULL, ${row.email}, ${row.firstName}, ${row.lastName},
-            ${row.phone}, ${row.externalId}, ${row.stage}, 0, 0, 'active',
+            ${row.phone}, ${row.externalId}, ${row.stage}, NULL, 'lead', 0, 0, 'active',
             ${JSON.stringify(row.customFields)}, ${input.now}, ${input.now}, NULL
           WHERE ${phaseIsOwned}`,
         )

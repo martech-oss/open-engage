@@ -5,6 +5,7 @@ import { type CompiledSegment } from "@openengage/core/segments";
 
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
+import { membershipEventStatements } from "./membership-event-statements";
 import { segmentMemberships, segments } from "./schema";
 import { compiledFilterSql, memberCountExpression } from "./support";
 
@@ -70,7 +71,19 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
     const now = nowIso();
     const orm = this.database.orm;
     const currentDefinition = this.currentDynamicDefinition(segmentId, filterVersion);
+    const matched = sql`SELECT matched.id FROM (${compiledFilterSql(compiled)}) matched WHERE matched.status != 'archived'`;
+    const changes = sql`SELECT c.id,'segment_joined' AS type FROM (${matched}) c WHERE ${exists(currentDefinition)} AND NOT EXISTS (SELECT 1 FROM segment_memberships m WHERE m.workspace_id=${this.context.workspaceId} AND m.segment_id=${segmentId} AND m.contact_id=c.id)
+      UNION ALL SELECT m.contact_id AS id,'segment_left' AS type FROM segment_memberships m WHERE m.workspace_id=${this.context.workspaceId} AND m.segment_id=${segmentId} AND m.source='dynamic' AND ${exists(currentDefinition)} AND NOT EXISTS (SELECT 1 FROM (${matched}) c WHERE c.id=m.contact_id)`;
+    // Persist the delta before emitting outbox work, then use that exact set for
+    // membership mutations: the event itself may change an event-based filter.
+    const events = membershipEventStatements(this.database, {
+      workspaceId: this.context.workspaceId,
+      segmentId,
+      now,
+      candidates: changes,
+    });
     await orm.batch([
+      ...events.statements,
       orm
         .delete(segmentMemberships)
         .where(
@@ -79,6 +92,7 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
             eq(segmentMemberships.segmentId, segmentId),
             eq(segmentMemberships.source, "dynamic"),
             exists(currentDefinition),
+            sql`EXISTS(SELECT 1 FROM (${events.candidates}) c WHERE c.id=${segmentMemberships.contactId} AND c.type='segment_left')`,
           ),
         ),
       // insert-from-select: drizzle emits the full column list in declaration
@@ -88,8 +102,8 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
         .insert(segmentMemberships)
         .select(
           sql`SELECT ${this.context.workspaceId}, ${segmentId}, matched.id, 'dynamic', ${now}
-              FROM (${compiledFilterSql(compiled)}) matched
-              WHERE matched.status != 'archived'
+              FROM (${events.candidates}) matched
+              WHERE matched.type = 'segment_joined'
                 AND ${exists(currentDefinition)}`,
         )
         .onConflictDoNothing(),
@@ -228,6 +242,12 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
             updatedAt: now,
           })
           .where(and(definitionConditions, sql`changes() > 0`)),
+        ...membershipEventStatements(this.database, {
+          workspaceId: this.context.workspaceId,
+          segmentId: update.segmentId,
+          now,
+          candidates: sql`SELECT ${update.contactId} AS id,'segment_joined' AS type WHERE changes()>0`,
+        }).statements,
       ];
     }
     return [
@@ -252,6 +272,12 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
           updatedAt: now,
         })
         .where(and(definitionConditions, sql`changes() > 0`)),
+      ...membershipEventStatements(this.database, {
+        workspaceId: this.context.workspaceId,
+        segmentId: update.segmentId,
+        now,
+        candidates: sql`SELECT ${update.contactId} AS id,'segment_left' AS type WHERE changes()>0`,
+      }).statements,
     ];
   }
 }

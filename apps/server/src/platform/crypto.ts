@@ -5,7 +5,7 @@ interface SignedTokenPayload {
   resourceId: string;
   contactId?: string;
   expiresAt: number;
-  purpose: "tracking" | "unsubscribe" | "reply" | "click";
+  purpose: "tracking" | "unsubscribe" | "reply" | "click" | "visitor" | "identify" | "page_context";
   /** Click tokens carry the original destination; every other purpose omits it. */
   url?: string;
 }

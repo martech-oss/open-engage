@@ -36,6 +36,58 @@ export function landingPagesQueryOptions() {
   return orpcQuery.website.listPages.queryOptions();
 }
 
+export function landingPageDesignQueryOptions(id: string) {
+  return orpcQuery.website.getPageDesign.queryOptions({ input: { id } });
+}
+export function formHandlersQueryOptions() {
+  return orpcQuery.website.listFormHandlers.queryOptions();
+}
+export function useCreateFormHandler() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.createFormHandler.mutationOptions(),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: orpcQuery.website.listFormHandlers.key() }),
+  });
+}
+export function useUpdateFormHandler() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.updateFormHandler.mutationOptions(),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: orpcQuery.website.listFormHandlers.key() }),
+  });
+}
+export function useDeleteFormHandler() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.deleteFormHandler.mutationOptions(),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: orpcQuery.website.listFormHandlers.key() }),
+  });
+}
+export function useGenerateLandingPage() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.generatePage.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
+  });
+}
+export function useRetryLandingGeneration() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.retryPageGeneration.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
+  });
+}
+export function usePublishLandingPage() {
+  const client = useQueryClient();
+  return useMutation({
+    ...orpcQuery.website.publishPage.mutationOptions(),
+    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
+  });
+}
+
 export function siteMessagesQueryOptions() {
   return orpcQuery.website.listMessages.queryOptions();
 }

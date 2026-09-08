@@ -10,9 +10,12 @@ import {
 
 import { organization } from "../auth/schema";
 import { contacts } from "../contacts/schema";
+import { VisitorRepository } from "../contacts/visitor-repository";
+import { visitorBindings } from "../contacts/visitor-schema";
 import { isConstraintError } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
+import { uuidv7 } from "../shared/uuid";
 import { isContactEmailConstraintError } from "./public-form-persistence";
 import {
   persistPublicFormSubmissionBatch,
@@ -57,6 +60,16 @@ export type { PersistPublicFormSubmissionInput } from "./public-form-submission-
  * after that.
  */
 export class PublicFormRepository extends DatabaseRepository {
+  /** Resolve the URL identity before choosing a mutable form or a signed snapshot. */
+  public async findFormReference(workspaceSlug: string, formSlug: string) {
+    return this.database.orm
+      .select({ id: forms.id, workspaceId: forms.workspaceId, status: forms.status })
+      .from(forms)
+      .innerJoin(organization, eq(organization.id, forms.workspaceId))
+      .where(and(eq(organization.slug, workspaceSlug), eq(forms.slug, formSlug)))
+      .get();
+  }
+
   /** Resolves a published form from its public workspace-slug/form-slug pair. */
   public async findPublishedForm(
     workspaceSlug: string,
@@ -110,30 +123,67 @@ export class PublicFormRepository extends DatabaseRepository {
    */
   public async persistSubmission(
     input: PersistPublicFormSubmissionInput,
-  ): Promise<"accepted" | "duplicate"> {
-    if (await this.submissionExists(input)) return "duplicate";
-    let retriedEmailRace = false;
-
-    for (;;) {
+  ): Promise<
+    | { kind: "accepted"; contactId: string; visitorId: string | null }
+    | { kind: "duplicate"; contactId: string | null; visitorId: string | null }
+  > {
+    const duplicate = await this.findSubmission(input);
+    if (duplicate) return { kind: "duplicate", ...duplicate };
+    let visitorId = input.visitorId ?? null;
+    const visitors = new VisitorRepository(this.database);
+    for (let attempt = 0; attempt < 3; attempt++) {
       const existingContactId = await this.findContactIdByEmail(input.workspaceId, input.email);
+      if (visitorId) {
+        const binding = await visitors.binding(input.workspaceId, visitorId);
+        if (binding && binding.contactId !== existingContactId) visitorId = uuidv7();
+      }
       try {
-        await persistPublicFormSubmissionBatch(this.database, input, existingContactId);
-        return "accepted";
+        const result = await persistPublicFormSubmissionBatch(
+          this.database,
+          { ...input, visitorId },
+          existingContactId,
+        );
+        return { kind: "accepted", ...result };
       } catch (error) {
         if (!isConstraintError(error)) throw error;
-        if (await this.submissionExists(input)) return "duplicate";
+        const duplicate = await this.findSubmission(input);
+        if (duplicate) return { kind: "duplicate", ...duplicate };
+        const binding = visitorId ? await visitors.binding(input.workspaceId, visitorId) : null;
+        if (binding && binding.contactId !== existingContactId) {
+          visitorId = uuidv7();
+          continue;
+        }
         if (
-          !retriedEmailRace &&
           existingContactId === null &&
           isContactEmailConstraintError(error) &&
           (await this.findContactIdByEmail(input.workspaceId, input.email))
-        ) {
-          retriedEmailRace = true;
+        )
           continue;
-        }
         throw error;
       }
     }
+    throw new Error("Concurrent form submission could not be reconciled");
+  }
+
+  public async findSubmission(
+    input: Pick<PersistPublicFormSubmissionInput, "workspaceId" | "formId" | "idempotencyKey">,
+  ) {
+    return await this.database.orm
+      .select({
+        contactId: formSubmissions.contactId,
+        visitorId: formSubmissions.visitorId,
+        requestFingerprint: formSubmissions.requestFingerprint,
+        identityProofHash: formSubmissions.identityProofHash,
+      })
+      .from(formSubmissions)
+      .where(
+        and(
+          eq(formSubmissions.workspaceId, input.workspaceId),
+          eq(formSubmissions.formId, input.formId),
+          eq(formSubmissions.idempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .get();
   }
 
   /**
@@ -153,10 +203,17 @@ export class PublicFormRepository extends DatabaseRepository {
         customFields: contacts.customFields,
       })
       .from(contacts)
+      .innerJoin(
+        visitorBindings,
+        and(
+          eq(visitorBindings.workspaceId, contacts.workspaceId),
+          eq(visitorBindings.contactId, contacts.id),
+        ),
+      )
       .where(
         and(
           eq(contacts.workspaceId, workspaceId),
-          eq(contacts.visitorId, visitorId),
+          eq(visitorBindings.visitorId, visitorId),
           eq(contacts.status, "active"),
         ),
       )
@@ -209,7 +266,7 @@ export class PublicWebRepository extends DatabaseRepository {
       .innerJoin(
         landingPageVersions,
         and(
-          eq(landingPageVersions.id, landingPages.currentVersionId),
+          eq(landingPageVersions.id, landingPages.publishedVersionId),
           eq(landingPageVersions.workspaceId, landingPages.workspaceId),
         ),
       )

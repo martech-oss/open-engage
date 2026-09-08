@@ -87,25 +87,38 @@ describe("form custom fields and progressive profiling", () => {
       turnstileEnabled: false,
       successMessage: "ありがとうございます。",
     });
-    await publicCall(`/f/${slug}/profiling`, {
+    const submission = await publicCall(`/f/${slug}/profiling`, {
       method: "POST",
       body: JSON.stringify({
         email: "returning@example.com",
+        consent: true,
         "custom:job_title": "課長",
         idempotencyKey: crypto.randomUUID(),
       }),
     });
-    await env.DB.prepare("UPDATE contacts SET visitor_id = ? WHERE email = ?")
-      .bind("visitor-form", "returning@example.com")
-      .run();
+    const {
+      data: { visitorToken },
+    } = (await submission.json()) as { data: { visitorToken: string } };
 
     const anonymous = await (await publicCall(`/f/${slug}/profiling`)).text();
     expect(anonymous).toContain('name="custom:job_title"');
 
-    const known = await (await publicCall(`/f/${slug}/profiling?oe_v=visitor-form`)).text();
-    expect(known).not.toContain('name="custom:job_title"');
+    const known = await (
+      await publicCall(`/f/${slug}/profiling?consent=true&oe_v=${encodeURIComponent(visitorToken)}`)
+    ).text();
+    expect(known).toContain('name="custom:job_title"');
+    const fieldsResponse = await publicCall(`/f/${slug}/profiling/fields`, {
+      method: "POST",
+      body: JSON.stringify({ email: "returning@example.com", consent: true, visitorToken }),
+    });
+    expect(await fieldsResponse.json()).toEqual({ data: { answered: ["job_title"] } });
+    const otherResponse = await publicCall(`/f/${slug}/profiling/fields`, {
+      method: "POST",
+      body: JSON.stringify({ email: "other@example.com", consent: true, visitorToken }),
+    });
+    expect(await otherResponse.json()).toEqual({ data: { answered: [] } });
     expect(known).toContain('name="custom:industry"');
-    expect(known).toContain('name="oe_v" value="visitor-form"');
+    expect(known).toContain(`name="oe_v" value="${visitorToken}"`);
   });
 
   it("hands the visitor id from the embed script to the hosted form", async () => {

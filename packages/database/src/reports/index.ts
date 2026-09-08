@@ -7,3 +7,4 @@ export * from "./emails-repository";
 export * from "./repository";
 export * from "./site-repository";
 export * from "./types";
+export * from "./lifecycle-repository";

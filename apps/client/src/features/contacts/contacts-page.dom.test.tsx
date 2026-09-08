@@ -29,6 +29,8 @@ const contact: ContactSummary = {
   phone: null,
   externalId: null,
   stage: "lead",
+  ownerUserId: null,
+  lifecycleStage: "lead",
   score: 10,
   gradePoints: 0,
   status: "active",

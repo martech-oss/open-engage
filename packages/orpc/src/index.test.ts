@@ -45,6 +45,7 @@ describe("oRPC contract schemas", () => {
         from: "2026-01-01",
         to: "2026-12-31",
         currency: "JPY",
+        ...(endpoint === "campaigns" ? { attributionModel: "last_touch" } : {}),
       });
     },
   );

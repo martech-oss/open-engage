@@ -12,7 +12,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
 import {
   tasksQueryOptions,
-  useUpdateDealTask,
   type DealTaskListItem,
   type TaskSearch,
 } from "@/features/deals/deal-api";
@@ -21,18 +20,19 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 
 import { taskTypeName } from "../deal-labels";
+import { useSetTaskStatus } from "../sales-api";
+import { SalesManagement } from "../sales-management";
 
 export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
   const { formatMonthDayTime } = useWorkspaceFormatters();
   const { renderedAt } = useWorkspaceTime();
   const navigate = useNavigate();
   const { data: tasks } = useSuspenseQuery(tasksQueryOptions(search));
-  const updateDealTask = useUpdateDealTask();
+  const updateDealTask = useSetTaskStatus();
 
   async function toggleStatus(task: DealTaskListItem): Promise<void> {
     try {
       await updateDealTask.mutateAsync({
-        dealId: task.dealId,
         taskId: task.id,
         status: task.status === "open" ? "completed" : "open",
       });
@@ -94,16 +94,21 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
       key: "deal",
       header: "取引",
       sortValue: (task) => task.dealName.toLocaleLowerCase(),
-      cell: (task) => (
-        <Link
-          to="/deals/$id"
-          params={{ id: task.dealId }}
-          className="font-medium hover:underline"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {task.dealName}
-        </Link>
-      ),
+      cell: (task) =>
+        task.dealId ? (
+          <Link
+            to="/deals/$id"
+            params={{ id: task.dealId }}
+            className="font-medium hover:underline"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {task.dealName}
+          </Link>
+        ) : (
+          <Link to="/contacts" search={{ q: task.dealName }}>
+            {task.dealName}
+          </Link>
+        ),
     },
     {
       key: "dueAt",
@@ -140,8 +145,19 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
 
   return (
     <PageLayout title="タスク">
+      <SalesManagement />
       <Card>
         <CardContent>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={search.mine ?? false}
+              onChange={(event) =>
+                void navigate({ to: "/tasks", search: { ...search, mine: event.target.checked } })
+              }
+            />
+            自分の担当タスクのみ
+          </label>
           <FieldGroup className="max-w-52">
             <FormNativeSelect
               label="ステータス"
@@ -150,7 +166,7 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
               onChange={(event) =>
                 void navigate({
                   to: "/tasks",
-                  search: { status: event.target.value as TaskSearch["status"] },
+                  search: { ...search, status: event.target.value as TaskSearch["status"] },
                 })
               }
             >
@@ -182,7 +198,9 @@ export function DealTasksPage({ search }: { search: TaskSearch }): ReactNode {
                 パイプラインを開く
               </Button>
             }
-            onRowClick={(task) => void navigate({ to: "/deals/$id", params: { id: task.dealId } })}
+            onRowClick={(task) => {
+              if (task.dealId) void navigate({ to: "/deals/$id", params: { id: task.dealId } });
+            }}
           />
         </CardContent>
       </Card>

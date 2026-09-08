@@ -136,6 +136,72 @@ export function FormFieldBuilder({
                 placeholder="1〜10名, 11〜50名, 51名以上"
               />
             ) : null}
+            {(["visibleWhen", "requiredWhen"] as const).map((kind) => (
+              <div key={kind} className="grid gap-2 sm:grid-cols-3">
+                <NativeSelect
+                  aria-label={`${field.label || field.key}の${kind === "visibleWhen" ? "表示条件" : "必須条件"}`}
+                  value={field[kind]?.field ?? ""}
+                  onChange={(event) =>
+                    update(index, {
+                      [kind]: event.currentTarget.value
+                        ? { field: event.currentTarget.value, operator: "not_empty" }
+                        : undefined,
+                    })
+                  }
+                >
+                  <NativeSelectOption value="">
+                    {kind === "visibleWhen" ? "常に表示" : "必須条件なし"}
+                  </NativeSelectOption>
+                  {[
+                    "email",
+                    ...fields
+                      .filter((candidate) => candidate.key !== field.key)
+                      .map((candidate) => candidate.key),
+                  ]
+                    .filter(Boolean)
+                    .map((key) => (
+                      <NativeSelectOption key={key} value={key}>
+                        {key}
+                      </NativeSelectOption>
+                    ))}
+                </NativeSelect>
+                {field[kind] && (
+                  <>
+                    <NativeSelect
+                      aria-label={`${field.label || field.key}の条件演算子`}
+                      value={field[kind].operator}
+                      onChange={(event) =>
+                        update(index, {
+                          [kind]: {
+                            ...field[kind],
+                            operator: event.currentTarget.value,
+                            ...(["equals", "not_equals"].includes(event.currentTarget.value)
+                              ? { value: field[kind]?.value ?? "" }
+                              : {}),
+                          },
+                        })
+                      }
+                    >
+                      <NativeSelectOption value="not_empty">入力あり</NativeSelectOption>
+                      <NativeSelectOption value="empty">未入力</NativeSelectOption>
+                      <NativeSelectOption value="equals">等しい</NativeSelectOption>
+                      <NativeSelectOption value="not_equals">等しくない</NativeSelectOption>
+                    </NativeSelect>
+                    {["equals", "not_equals"].includes(field[kind].operator) && (
+                      <Input
+                        aria-label={`${field.label || field.key}の条件値`}
+                        value={field[kind].value ?? ""}
+                        onChange={(event) =>
+                          update(index, {
+                            [kind]: { ...field[kind], value: event.currentTarget.value },
+                          })
+                        }
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         ))}
         <Button type="button" variant="outline" size="sm" onClick={add}>

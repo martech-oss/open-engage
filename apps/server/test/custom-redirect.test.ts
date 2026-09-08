@@ -1,8 +1,12 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
+import { createDatabase } from "@openengage/database/client";
+import { VisitorRepository } from "@openengage/database/contacts";
 import { ContactRepository, CustomRedirectRepository } from "@openengage/database/testing";
 
+import type { RuntimeEnv } from "../src/env";
+import { VisitorIdentityService } from "../src/web/visitor-identity-service";
 import { seedWorkspace } from "./factory";
 
 const DESTINATION = "https://example.com/campaign/spring?utm_source=oe";
@@ -68,11 +72,16 @@ describe("custom redirect", () => {
       userId: "redirect-owner",
       role: "owner",
     }).createContact({ email: "visitor@example.com", customFields: {} });
-    await env.DB.prepare("UPDATE contacts SET visitor_id = ? WHERE id = ?")
-      .bind("visitor-abc", contact.id)
-      .run();
-
-    const response = await call(`/r/${seeded.workspaceSlug}/summer?oe_v=visitor-abc`);
+    const identity = new VisitorIdentityService(
+      createDatabase(env.DB),
+      env as unknown as RuntimeEnv,
+    );
+    const visitor = await identity.ensure(seeded.workspaceId, undefined);
+    await new VisitorRepository(env.DB).bind(seeded.workspaceId, visitor.id, contact.id);
+    const token = await identity.token(seeded.workspaceId, visitor.id);
+    const response = await call(
+      `/r/${seeded.workspaceSlug}/summer?consent=true&oe_v=${encodeURIComponent(token)}`,
+    );
     expect(response.status).toBe(302);
     await expect(settled(() => eventCount(contact.id))).resolves.toBe(1);
     await expect(clickCount(seeded.redirectId)).resolves.toBe(1);

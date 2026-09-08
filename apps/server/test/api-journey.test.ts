@@ -174,7 +174,8 @@ describe("workspace API journey", () => {
     expect(dashboard.contacts.count).toBe(1);
     expect(dashboard.automations.count).toBe(1);
     expect(dashboard.recentEvents).toEqual([
-      expect.objectContaining({ contactId: contact.id, properties: {} }),
+      expect.objectContaining({ contactId: contact.id, type: "segment_joined", properties: {} }),
+      expect.objectContaining({ contactId: contact.id, type: "contact_created", properties: {} }),
     ]);
 
     const to = new Date().toISOString().slice(0, 10);

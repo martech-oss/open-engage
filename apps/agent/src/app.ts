@@ -6,6 +6,7 @@ import { CompanyEnrichment } from "./agents/company-enrichment.ts";
 import { EmailDesigner } from "./agents/email-designer.ts";
 import { EmailSequenceDesigner } from "./agents/email-sequence-designer.ts";
 import { Hello } from "./agents/hello.ts";
+import { LandingPageDesigner } from "./agents/landing-page-designer.ts";
 import { MarketingAutomationDesigner } from "./agents/marketing-automation-designer.ts";
 import { SegmentDesigner } from "./agents/segment-designer.ts";
 
@@ -27,5 +28,6 @@ app.route(
   createAgentRouter(MarketingAutomationDesigner),
 );
 app.route("/internal/segment-designer", createAgentRouter(SegmentDesigner));
+app.route("/internal/landing-page-designer", createAgentRouter(LandingPageDesigner));
 
 export default app;

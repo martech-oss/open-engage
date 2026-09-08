@@ -17,6 +17,21 @@ export const workspaceContract = {
     .route({ method: "GET", path: "/workspace" })
     .errors(workspaceErrors)
     .output(workspaceSchema),
+  getBrand: oc
+    .route({ method: "GET", path: "/workspace/brand" })
+    .errors(workspaceErrors)
+    .output(emailBrandProfileSchema),
+  updateBrand: oc
+    .route({ method: "PUT", path: "/workspace/brand" })
+    .errors({
+      ...authedErrors,
+      BRAND_LOGO_INVALID: {
+        status: 422,
+        message: "ロゴには公開中の画像アセットを指定してください",
+      },
+    })
+    .input(emailBrandProfileWriteSchema)
+    .output(emailBrandProfileSchema),
   getEmailBrand: oc
     .route({ method: "GET", path: "/workspace/email-brand" })
     .errors(workspaceErrors)

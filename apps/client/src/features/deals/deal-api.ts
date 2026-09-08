@@ -73,7 +73,7 @@ export function dealDetailQueryOptions(dealId: string) {
   return orpcQuery.deals.get.queryOptions({ input: { id: dealId } });
 }
 
-export type TaskSearch = { status: DealTaskStatus | "all" };
+export type TaskSearch = { status: DealTaskStatus | "all"; mine?: boolean };
 
 export const taskSearchDefaults: TaskSearch = { status: "open" };
 
@@ -82,11 +82,16 @@ function isTaskStatus(value: unknown): value is TaskSearch["status"] {
 }
 
 export function parseTaskSearch(search: Record<string, unknown>): TaskSearch {
-  return { status: isTaskStatus(search.status) ? search.status : "open" };
+  return {
+    status: isTaskStatus(search.status) ? search.status : "open",
+    mine: search.mine === true || search.mine === "true",
+  };
 }
 
 export function tasksQueryOptions(search: TaskSearch) {
-  return orpcQuery.deals.listTasks.queryOptions({ input: { status: search.status } });
+  return orpcQuery.deals.listTasks.queryOptions({
+    input: { status: search.status, ...(search.mine ? { mine: true } : {}) },
+  });
 }
 
 function invalidateDealQueries(queryClient: ReturnType<typeof useQueryClient>, dealId?: string) {

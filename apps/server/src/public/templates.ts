@@ -1,4 +1,5 @@
-import { isRecord } from "../platform/values";
+import { resolveFormFields, signupFormDefinitionSchema } from "@openengage/core/web";
+
 import { escapeHtml } from "../rendering/html";
 
 export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: string): string {
@@ -6,21 +7,38 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
   if (window.openengage) return;
   const endpoint = ${JSON.stringify(trackingEndpoint)};
   const messagesEndpoint = ${JSON.stringify(messagesEndpoint)};
-  const settings = window.openengageSettings || {};
+  const settings = window.openengageSettings ||= {};
+  let identityGeneration = 0;
   const visitorKey = "openengage_visitor_" + endpoint.split("/").pop();
-  let email = typeof settings.email === "string" ? settings.email : undefined;
-  let visitorId = localStorage.getItem(visitorKey) || undefined;
+  let identityToken = typeof settings.identityToken === "string" ? settings.identityToken : undefined;
+  let visitorToken;
+  try { if (settings.consent === true) visitorToken = localStorage.getItem(visitorKey) || undefined; } catch {}
+  function acceptIdentity(token) {
+    if (settings.consent !== true || typeof token !== "string") return;
+    identityGeneration += 1;
+    visitorToken = token;
+    stampRedirectLinks();
+    try { localStorage.setItem(visitorKey, token); } catch {}
+    window.dispatchEvent(new CustomEvent("openengage:identity", { detail: { visitorToken: token, consent: true } }));
+  }
+  let recording = Promise.resolve();
+  function record(type, resourceId, properties = {}) {
+    const next = recording.then(() => recordNow(type, resourceId, properties));
+    recording = next.catch(() => null);
+    return next;
+  }
 
-  async function record(type, resourceId, properties = {}) {
+  async function recordNow(type, resourceId, properties = {}) {
     if (settings.consent !== true) return null;
+    const generation = identityGeneration;
     try {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           consent: true,
-          visitorId,
-          email,
+          visitorToken,
+          identityToken,
           type,
           resourceId,
           properties,
@@ -28,9 +46,9 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
         keepalive: true,
       });
       const payload = await response.json();
-      if (payload?.data?.visitorId) {
-        visitorId = payload.data.visitorId;
-        localStorage.setItem(visitorKey, visitorId);
+      if (payload?.data?.visitorToken && generation === identityGeneration && settings.consent === true) {
+        acceptIdentity(payload.data.visitorToken);
+        identityToken = undefined;
       }
       return payload?.data || null;
     } catch {
@@ -39,10 +57,11 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
   }
 
   async function loadMessage() {
-    if (!visitorId) return;
+    if (!visitorToken) return;
     try {
       const url = new URL(messagesEndpoint);
-      url.searchParams.set("visitorId", visitorId);
+      url.searchParams.set("visitorToken", visitorToken);
+      url.searchParams.set("consent", "true");
       url.searchParams.set("url", window.location.href);
       const response = await fetch(url);
       const payload = await response.json();
@@ -92,7 +111,7 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
     return fetch(messagesEndpoint + "/" + encodeURIComponent(messageId) + "/events", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ visitorId, type }),
+      body: JSON.stringify({ visitorToken, type, consent: settings.consent === true }),
       keepalive: true,
     });
   }
@@ -110,27 +129,37 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
   // only way a click made from this page can name the visitor is if we stamp
   // the id we already hold onto the link before they follow it.
   function stampRedirectLinks() {
-    if (!visitorId) return;
     const origin = new URL(endpoint).origin;
     for (const anchor of document.querySelectorAll('a[href]')) {
       try {
         const url = new URL(anchor.href, window.location.href);
         if (url.origin !== origin || !url.pathname.startsWith("/r/")) continue;
-        if (url.searchParams.get("oe_v") === visitorId) continue;
-        url.searchParams.set("oe_v", visitorId);
+        if (settings.consent === true && visitorToken) { url.searchParams.set("oe_v", visitorToken); url.searchParams.set("consent", "true"); }
+        else { url.searchParams.delete("oe_v"); url.searchParams.delete("consent"); }
         anchor.href = url.toString();
       } catch {}
     }
   }
 
+  document.addEventListener("click", stampRedirectLinks, true);
+
   window.openengage = {
-    consent() {
-      settings.consent = true;
-      void page();
+    consent(value = true) {
+      identityGeneration += 1;
+      settings.consent = value === true;
+      if (settings.consent) void page();
+      else {
+        visitorToken = undefined; identityToken = undefined;
+        try { localStorage.removeItem(visitorKey); } catch {}
+        stampRedirectLinks();
+        window.dispatchEvent(new CustomEvent("openengage:identity", { detail: { consent: false } }));
+      }
     },
+    acceptIdentity,
     identify(value) {
-      email = value;
-      void page();
+      identityGeneration += 1;
+      identityToken = value;
+      return page();
     },
     track(name, properties) {
       return record("custom_event", name, properties);
@@ -142,6 +171,7 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
 }
 
 export interface PublicFormRenderOptions {
+  measurementToken?: string;
   /** Field keys the identified visitor has already answered, for Progressive Profiling. */
   answered?: ReadonlySet<string>;
   /** Visitor transport used to derive the same Progressive Profiling view on POST. */
@@ -174,10 +204,20 @@ export function renderPublicForm(
   actionUrl: string,
   options: PublicFormRenderOptions = {},
 ): string {
-  const fields = selectPublicFormFields(definition, options.answered ?? new Set());
+  const parsedDefinition = signupFormDefinitionSchema.parse(definition);
+  const allDefinition = {
+    ...parsedDefinition,
+    fields: parsedDefinition.fields?.map((field) => ({
+      ...field,
+      progressive: false,
+      visibleWhen: undefined,
+      requiredWhen: undefined,
+    })),
+  };
+  const fields = selectPublicFormFields(allDefinition, new Set());
   const controls = fields.map(renderControl).join("");
   const visitorTransport = options.visitorId
-    ? `<input type="hidden" name="oe_v" value="${escapeHtml(options.visitorId)}">`
+    ? `<input type="hidden" name="oe_v" value="${escapeHtml(options.visitorId)}"><input type="hidden" name="consent" value="true">`
     : "";
   const turnstile = options.turnstileSiteKey
     ? `<div class="cf-turnstile" data-sitekey="${escapeHtml(options.turnstileSiteKey)}"></div>`
@@ -200,7 +240,7 @@ export function renderPublicForm(
     input,select{width:100%;height:42px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font:inherit}
     textarea{width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px 12px;font:inherit}
     button{height:42px;border:0;border-radius:8px;background:#111827;color:#fff;font:inherit;font-weight:700;cursor:pointer}
-    p{margin:0;color:#4b5563;font-size:14px}.hidden{position:absolute;left:-9999px}
+    [hidden]{display:none!important}p{margin:0;color:#4b5563;font-size:14px}.hidden{position:absolute;left:-9999px}
   </style>
 </head>
 <body>
@@ -208,13 +248,63 @@ export function renderPublicForm(
     <h1>${escapeHtml(name)}</h1>
     ${controls}
     ${visitorTransport}
+    ${options.measurementToken ? `<input type="hidden" name="measurementToken" value="${escapeHtml(options.measurementToken)}">` : ""}
     <label class="hidden" aria-hidden="true">Website<input name="_website" tabindex="-1" autocomplete="off"></label>
     ${turnstile}
     <button type="submit">送信する</button>
     <p id="result" role="status"></p>
   </form>
   <script>
-    document.getElementById("signup-form").addEventListener("submit", async (event) => {
+    const signup = document.getElementById("signup-form");
+    const definition = ${JSON.stringify(parsedDefinition).replaceAll("<", "\\u003c")};
+    const resolveFields = ${resolveFormFields.toString()};
+    let answered = new Set();
+    let profileRequest = 0;
+    let parentOrigin = null;
+    function reconcileControls() {
+      const values = Object.fromEntries([...signup.querySelectorAll("input,select,textarea")].map(input => [input.name.replace(/^custom:/, ""), input.value]));
+      const visible = new Map(resolveFields(definition, values, answered).map(field => [field.key, field]));
+      for (const input of signup.querySelectorAll("input,select,textarea")) {
+        if (["_website", "oe_v", "consent", "cf-turnstile-response", "measurementToken"].includes(input.name)) continue;
+        const key = input.name.replace(/^custom:/, "");
+        const field = visible.get(key);
+        const hidden = key !== "email" && !field;
+        input.disabled = hidden;
+        input.required = !hidden && (key === "email" || field?.required === true);
+        input.closest("label").hidden = hidden;
+      }
+    }
+    async function refreshProfile() {
+      const request = ++profileRequest;
+      answered = new Set(); reconcileControls();
+      const email = signup.querySelector('[name="email"]')?.value;
+      const token = signup.querySelector('[name="oe_v"]')?.value;
+      const consent = signup.querySelector('[name="consent"]')?.value === "true";
+      if (!email || !token || !consent) return;
+      try {
+        const response = await fetch("${endpoint}/fields", {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,visitorToken:token,consent,measurementToken:signup.querySelector('[name="measurementToken"]')?.value})});
+        if (!response.ok) return;
+        const data = await response.json();
+        if (request !== profileRequest) return;
+        answered = new Set(data.data?.answered ?? []); reconcileControls();
+      } catch {}
+    }
+    signup.addEventListener("input", event => { delete signup.dataset.submissionKey; if (event.target.name === "email") void refreshProfile(); else reconcileControls(); });
+    reconcileControls();
+    window.addEventListener("message", (event) => {
+      if (window.parent === window || event.source !== window.parent || event.data?.type !== "openengage:identity") return;
+      const sender = URL.parse(event.origin);
+      if (!sender || !["http:", "https:"].includes(sender.protocol)) return;
+      parentOrigin = sender.origin;
+      for (const name of ["oe_v", "consent"]) signup.querySelector('input[name="' + name + '"]')?.remove();
+      if (event.data.consent === true && typeof event.data.visitorToken === "string") {
+        for (const [name, value] of [["oe_v", event.data.visitorToken], ["consent", "true"]]) {
+          const input = document.createElement("input"); input.type = "hidden"; input.name = name; input.value = value; signup.append(input);
+        }
+      }
+      void refreshProfile();
+    });
+    signup.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const button = form.querySelector("button");
@@ -223,7 +313,9 @@ export function renderPublicForm(
       result.textContent = "送信しています…";
       try {
         const payload = Object.fromEntries(new FormData(form));
-        payload.idempotencyKey = crypto.randomUUID();
+        if (payload.consent === "true") payload.consent = true;
+        form.dataset.submissionKey ||= crypto.randomUUID();
+        payload.idempotencyKey = form.dataset.submissionKey;
         const response = await fetch("${endpoint}", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -232,7 +324,15 @@ export function renderPublicForm(
         const body = await response.json();
         if (!response.ok) throw new Error(body?.error?.message || "送信できませんでした");
         result.textContent = body?.data?.message || "ありがとうございます。";
+        if (body?.data?.visitorToken) {
+          const input = form.querySelector('input[name="oe_v"]');
+          if (input) { input.value = body.data.visitorToken; input.defaultValue = body.data.visitorToken; }
+          const targetOrigin = parentOrigin ?? (document.referrer ? new URL(document.referrer).origin : location.origin);
+          window.parent.postMessage({ type: "openengage:form-identity", visitorToken: body.data.visitorToken }, targetOrigin);
+        }
+        delete form.dataset.submissionKey;
         form.reset();
+        void refreshProfile();
       } catch (error) {
         result.textContent = error instanceof Error ? error.message : "送信できませんでした";
       } finally {
@@ -253,28 +353,19 @@ export function renderPublicForm(
 export function selectPublicFormFields(
   definition: Record<string, unknown>,
   answered: ReadonlySet<string>,
+  values: Record<string, unknown> = {},
 ): RenderableField[] {
-  const configured = Array.isArray(definition["fields"])
-    ? definition["fields"].filter(isRecord)
-    : [];
-  const maxProgressive = Math.max(1, Math.trunc(Number(definition["progressiveMaxFields"]) || 3));
-
-  const always: RenderableField[] = [];
-  const progressive: RenderableField[] = [];
-  for (const raw of configured) {
-    const field = toRenderableField(raw);
-    if (!field) continue;
-    if (raw["progressive"] === true) {
-      // Email is the identity key, so it is asked every time regardless.
-      if (field.key !== "email" && answered.has(field.key)) continue;
-      progressive.push(field);
-      continue;
-    }
-    always.push(field);
-  }
-
-  const fields = [...always, ...progressive.slice(0, maxProgressive)];
-  if (!fields.some((field) => field.kind === "standard" && field.key === "email")) {
+  const parsed = signupFormDefinitionSchema.parse(definition);
+  const fields = resolveFormFields(
+    parsed,
+    Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [key.replace(/^custom:/, ""), value]),
+    ),
+    answered,
+  )
+    .map((field) => toRenderableField(field))
+    .filter((field): field is RenderableField => field !== null);
+  if (!fields.some((field) => field.kind === "standard" && field.key === "email"))
     fields.unshift({
       key: "email",
       label: "メールアドレス",
@@ -283,7 +374,6 @@ export function selectPublicFormFields(
       options: [],
       kind: "standard",
     });
-  }
   return fields;
 }
 
@@ -349,8 +439,22 @@ export function formEmbedScript(
   const frame = document.createElement("iframe");
   // Same localStorage key the tracking beacon writes. Passing it through lets
   // the form drop questions this visitor has already answered.
-  const visitorId = localStorage.getItem("openengage_visitor_" + ${JSON.stringify(workspaceSlug)});
-  frame.src = ${JSON.stringify(formUrl)} + (visitorId ? "?oe_v=" + encodeURIComponent(visitorId) : "");
+  const visitorKey = "openengage_visitor_" + ${JSON.stringify(workspaceSlug)};
+  let visitorToken;
+  try { if (window.openengageSettings?.consent === true) visitorToken = localStorage.getItem(visitorKey); } catch {}
+  const formOrigin = new URL(${JSON.stringify(formUrl)}).origin;
+  frame.src = ${JSON.stringify(formUrl)} + (visitorToken ? "?consent=true&oe_v=" + encodeURIComponent(visitorToken) : "");
+  window.addEventListener("openengage:identity", event => frame.contentWindow?.postMessage({ type: "openengage:identity", ...event.detail }, formOrigin));
+  frame.addEventListener("load", () => {
+    let token; try { token = localStorage.getItem(visitorKey); } catch {}
+    frame.contentWindow?.postMessage({ type: "openengage:identity", visitorToken: token, consent: window.openengageSettings?.consent === true }, formOrigin);
+  });
+  window.addEventListener("message", event => {
+    if (event.source !== frame.contentWindow || event.origin !== formOrigin || event.data?.type !== "openengage:form-identity") return;
+    if (window.openengageSettings?.consent !== true || typeof event.data.visitorToken !== "string") return;
+    try { localStorage.setItem(visitorKey, event.data.visitorToken); } catch {}
+    window.openengage?.acceptIdentity(event.data.visitorToken);
+  });
   frame.title = ${JSON.stringify(formName)};
   frame.loading = "lazy";
   frame.style.cssText = "border:0;background:#fff;width:100%";

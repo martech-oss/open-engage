@@ -26,7 +26,7 @@ export default function AutomationFlowCanvas({
   const builder = useAutomationBuilder(definition, onDefinitionChange);
   const { selectedNode } = builder;
 
-  function addNode(kind: "email" | "delay" | "decision" | "condition"): void {
+  function addNode(kind: "handoff" | "email" | "delay" | "decision" | "condition"): void {
     const result = builder.addNode(kind, options);
     if (result === "template_missing") {
       toast.error("先にメールテンプレートを作成してください");
@@ -43,6 +43,7 @@ export default function AutomationFlowCanvas({
         <div className="hidden px-1 pb-1 text-xs font-medium text-muted-foreground lg:block">
           ステップを追加
         </div>
+        <StepButton icon={Mail} label="営業引き継ぎ" onClick={() => addNode("handoff")} />
         <StepButton icon={Mail} label="メール" onClick={() => addNode("email")} />
         <StepButton icon={Clock3} label="待機" onClick={() => addNode("delay")} />
         <StepButton

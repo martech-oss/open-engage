@@ -5,13 +5,8 @@ import { PublicCustomRedirectRepository } from "@openengage/database/web";
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
 import { recordContactEvent } from "../runtime/contact-event-service";
+import { VisitorIdentityService } from "../web/visitor-identity-service";
 
-/**
- * The public side of a Custom Redirect. The URL is stable and shareable, so
- * unlike the per-delivery click redirect there is no signed token to identify
- * the visitor - attribution rides the `oe_v` visitor id that the site tracking
- * script appends, and falls back to an anonymous click.
- */
 export function registerPublicCustomRedirectRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/r/:workspaceSlug/:redirectSlug", async (context) => {
     const database = context.get("database");
@@ -22,11 +17,19 @@ export function registerPublicCustomRedirectRoutes(publicApp: Hono<AppEnvironmen
     );
     if (!redirect) return apiError(context, 404, "redirect_not_found", "リンクが見つかりません");
 
-    const visitorId = context.req.query("oe_v");
+    const visitor =
+      context.req.query("consent") === "true"
+        ? await new VisitorIdentityService(database, context.env).resolve(
+            redirect.workspaceId,
+            context.req.query("oe_v"),
+          )
+        : null;
+    context.header("Cache-Control", "private, no-store");
+    context.header("Referrer-Policy", "no-referrer");
     context.executionCtx.waitUntil(
       recordRedirectClick(database, {
         redirect,
-        ...(visitorId ? { visitorId } : {}),
+        ...(visitor ? { visitorId: visitor.id, contactId: visitor.contactId } : {}),
         queue: context.env.JOBS_QUEUE,
       }),
     );
@@ -39,17 +42,14 @@ async function recordRedirectClick(
   input: {
     redirect: { id: string; workspaceId: string; destinationUrl: string };
     visitorId?: string;
+    contactId?: string | null;
     queue: Queue;
   },
 ): Promise<void> {
   const repository = new PublicCustomRedirectRepository(database);
   await repository.countClick(input.redirect.id);
-  const contactId = input.visitorId
-    ? await repository.findContactIdByVisitor(input.redirect.workspaceId, input.visitorId)
-    : null;
-  // An anonymous click still moves the counter; only a resolved contact earns a
-  // timeline entry, an automation enrollment and a score change.
-  if (!contactId) return;
+  if (!input.visitorId) return;
+  const contactId = input.contactId ?? null;
   await recordContactEvent(database, {
     workspaceId: input.redirect.workspaceId,
     contactId,

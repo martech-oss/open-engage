@@ -4,6 +4,7 @@ import type { CustomRedirect, CustomRedirectWrite } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
 import { contacts } from "../contacts/schema";
+import { visitorBindings } from "../contacts/visitor-schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
@@ -133,10 +134,17 @@ export class PublicCustomRedirectRepository extends DatabaseRepository {
     const row = await this.database.orm
       .select({ id: contacts.id })
       .from(contacts)
+      .innerJoin(
+        visitorBindings,
+        and(
+          eq(visitorBindings.workspaceId, contacts.workspaceId),
+          eq(visitorBindings.contactId, contacts.id),
+        ),
+      )
       .where(
         and(
           eq(contacts.workspaceId, workspaceId),
-          eq(contacts.visitorId, visitorId),
+          eq(visitorBindings.visitorId, visitorId),
           eq(contacts.status, "active"),
         ),
       )

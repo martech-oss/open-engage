@@ -50,6 +50,8 @@ describe("website resource tables on SSR", () => {
         currentVersionId: "version-1",
         version: 1,
         contentDocument: null,
+        document: null,
+        publishedVersionId: null,
         createdAt: timestamp,
         updatedAt: timestamp,
       } satisfies LandingPageRow,

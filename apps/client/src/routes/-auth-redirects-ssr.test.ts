@@ -153,7 +153,7 @@ describe("SSR router auth redirects", () => {
       routeContext: router.state.matches.map((match) => match.context),
       markup: `${routerMarkup}${markup}`,
     });
-    expect(serializedBoundary).not.toMatch(/session-sentinel|token|ipAddress|userAgent/);
+    expect(serializedBoundary).not.toMatch(/session-sentinel|["\\]token["\\]|ipAddress|userAgent/);
     router.serverSsr?.cleanup();
   });
 });

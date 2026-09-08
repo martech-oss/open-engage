@@ -82,6 +82,13 @@ const actionNodeSchema = z.object({
     z.object({ action: z.literal("remove_tag"), tagId: z.string() }),
     z.object({ action: z.literal("add_segment"), segmentId: z.string() }),
     z.object({ action: z.literal("remove_segment"), segmentId: z.string() }),
+    z.object({
+      action: z.literal("handoff_to_sales"),
+      ownerUserId: z.string().min(1).optional(),
+      groupId: z.string().min(1).optional(),
+      preserveOwner: z.boolean().default(true),
+      title: z.string().trim().min(1).max(191).default("Follow up with qualified lead"),
+    }),
     z.object({ action: z.literal("change_score"), amount: z.number().int() }),
     z.object({
       action: z.literal("update_field"),

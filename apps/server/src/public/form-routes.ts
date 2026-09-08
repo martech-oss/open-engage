@@ -7,13 +7,50 @@ import type { AppEnvironment } from "../env";
 import { logError } from "../observability";
 import type { JobsQueueMessage } from "../runtime/queues";
 import { hasTurnstileConfiguration } from "../web/config";
+import { VisitorIdentityService } from "../web/visitor-identity-service";
+import { resolvePublicForm } from "./form-context";
 import { safeJson } from "./http";
 import { SubmitPublicFormUseCase } from "./submit-form-use-case";
 import { formEmbedScript, renderPublicForm } from "./templates";
 
 export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void {
+  publicApp.post("/f/:workspaceSlug/:formSlug/fields", async (context) => {
+    const repository = new PublicFormRepository(context.get("database"));
+    context.header("Cache-Control", "private, no-store");
+    const body = (await safeJson(context)) as {
+      consent?: unknown;
+      visitorToken?: unknown;
+      email?: unknown;
+      measurementToken?: unknown;
+    } | null;
+    const resolved = await resolvePublicForm(context.get("database"), context.env, {
+      workspaceSlug: context.req.param("workspaceSlug"),
+      formSlug: context.req.param("formSlug"),
+      measurementToken: body?.measurementToken,
+    });
+    if (resolved.kind === "form_not_found")
+      return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (resolved.kind === "invalid_context")
+      return apiError(context, 422, "invalid_context", "ページの参照が無効です");
+    const { form } = resolved;
+    const visitor =
+      body?.consent === true
+        ? await new VisitorIdentityService(context.get("database"), context.env).resolve(
+            form.workspaceId,
+            body.visitorToken,
+          )
+        : null;
+    const sameEmail =
+      typeof body?.email === "string" &&
+      visitor?.email?.toLowerCase() === body.email.trim().toLowerCase();
+    const answered =
+      sameEmail && visitor
+        ? [...(await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitor.id))]
+        : [];
+    return context.json({ data: { answered } });
+  });
   publicApp.get("/api/public/forms/:workspaceSlug/:formSlug/embed.js", async (context) => {
-    const form = await new PublicFormRepository(context.get("database")).findPublishedForm(
+    let form = await new PublicFormRepository(context.get("database")).findPublishedForm(
       context.req.param("workspaceSlug"),
       context.req.param("formSlug"),
     );
@@ -44,14 +81,19 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
   });
 
   publicApp.get("/f/:workspaceSlug/:formSlug", async (context) => {
-    const form = await new PublicFormRepository(context.get("database")).findPublishedForm(
-      context.req.param("workspaceSlug"),
-      context.req.param("formSlug"),
-    );
-    if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
-    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env)) {
+    const measurementToken = context.req.query("measurementToken");
+    const resolved = await resolvePublicForm(context.get("database"), context.env, {
+      workspaceSlug: context.req.param("workspaceSlug"),
+      formSlug: context.req.param("formSlug"),
+      measurementToken,
+    });
+    if (resolved.kind === "form_not_found")
+      return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    if (resolved.kind === "invalid_context")
+      return apiError(context, 422, "invalid_context", "ページの参照が無効です");
+    const { form } = resolved;
+    if (form.turnstileEnabled && !hasTurnstileConfiguration(context.env))
       return apiError(context, 503, "turnstile_not_configured", "Turnstileが設定されていません");
-    }
     const domains = form.allowedDomains;
     const frameAncestors =
       domains.length > 0
@@ -67,19 +109,24 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       "Content-Security-Policy",
       `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'${turnstileSource}; connect-src 'self'${turnstileSource}; frame-src 'self'${turnstileSource}; frame-ancestors 'self' ${frameAncestors.join(" ")}`,
     );
-    // `oe_v` is stamped by the embed script from the same localStorage key the
-    // tracking beacon writes, so a returning visitor is recognised here.
-    const visitorId = context.req.query("oe_v");
-    const answered = visitorId
+    context.header("Cache-Control", "private, no-store");
+    const visitorToken =
+      context.req.query("consent") === "true" ? context.req.query("oe_v") : undefined;
+    const visitor = await new VisitorIdentityService(context.get("database"), context.env).resolve(
+      form.workspaceId,
+      visitorToken,
+    );
+    const answered = visitor
       ? await new PublicFormRepository(context.get("database")).findAnsweredFieldsByVisitor(
           form.workspaceId,
-          visitorId,
+          visitor.id,
         )
       : undefined;
     return context.html(
       renderPublicForm(form.name, form.definition, context.req.url, {
+        ...(measurementToken ? { measurementToken } : {}),
         ...(answered ? { answered } : {}),
-        ...(visitorId ? { visitorId } : {}),
+        ...(visitor && visitorToken ? { visitorId: visitorToken } : {}),
         ...(form.turnstileEnabled && context.env.TURNSTILE_SITE_KEY
           ? { turnstileSiteKey: context.env.TURNSTILE_SITE_KEY }
           : {}),
@@ -112,8 +159,24 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         return context.json({ data: { accepted: true } }, 202);
       case "idempotency_key_required":
         return apiError(context, 422, "idempotency_key_required", "Idempotency-Keyが必要です");
+      case "idempotency_conflict":
+        return apiError(
+          context,
+          409,
+          "idempotency_conflict",
+          "同じ送信キーで異なる内容は送信できません",
+        );
       case "duplicate":
-        return context.json({ data: { accepted: true, duplicate: true } }, 202);
+        return context.json(
+          {
+            data: {
+              accepted: true,
+              duplicate: true,
+              ...(result.visitorToken ? { visitorToken: result.visitorToken } : {}),
+            },
+          },
+          202,
+        );
       case "invalid_form_fields":
         return apiError(context, 422, "invalid_form_fields", "入力項目が不正です", {
           fields: result.fields,
@@ -124,9 +187,17 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         break;
     }
 
-    const messages = result.eventIds.map((eventId) => ({
+    const messages: Array<{ body: JobsQueueMessage }> = result.eventIds.map((eventId) => ({
       body: { kind: "contact_event" as const, eventId } satisfies JobsQueueMessage,
     }));
+    if (result.visitorId)
+      messages.push({
+        body: {
+          kind: "visitor_history",
+          workspaceId: result.workspaceId,
+          visitorId: result.visitorId,
+        },
+      });
     try {
       context.executionCtx.waitUntil(
         context.env.JOBS_QUEUE.sendBatch(messages).catch((error) => {
@@ -146,6 +217,15 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
         eventIds: result.eventIds,
       });
     }
-    return context.json({ data: { accepted: true, message: result.successMessage } }, 202);
+    return context.json(
+      {
+        data: {
+          accepted: true,
+          message: result.successMessage,
+          ...(result.visitorToken ? { visitorToken: result.visitorToken } : {}),
+        },
+      },
+      202,
+    );
   });
 }

@@ -10,12 +10,17 @@ import {
   customFieldDefinitions,
   tags,
 } from "../contacts/schema";
+import { dealStages, dealPipelines } from "../deals/schema";
+import { scoringCategories } from "../scoring/schema";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { segments } from "./schema";
 import { filterAstCodec } from "./support";
 
 export class SegmentCatalogRepository extends WorkspaceRepository {
   public async loadGenerationCatalogRows(): Promise<{
+    categories: Array<{ id: string; name: string }>;
+    companyCustomFields: Array<{ id: string; key: string; label: string; dataType: string }>;
+    dealStages: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string; slug: string }>;
     staticSegments: Array<{ id: string; name: string; slug: string }>;
     companies: Array<{ id: string; name: string }>;
@@ -33,6 +38,9 @@ export class SegmentCatalogRepository extends WorkspaceRepository {
       eventRows,
       customFieldRows,
       stageRows,
+      categoryRows,
+      companyFieldRows,
+      dealStageRows,
     ] = await orm.batch([
       orm
         .select({ id: tags.id, name: tags.name, slug: tags.slug })
@@ -91,8 +99,37 @@ export class SegmentCatalogRepository extends WorkspaceRepository {
         .where(this.inWorkspace(contacts))
         .orderBy(asc(contacts.stage))
         .limit(1_000),
+      orm
+        .select({ id: scoringCategories.id, name: scoringCategories.name })
+        .from(scoringCategories)
+        .where(this.inWorkspace(scoringCategories))
+        .limit(1000),
+      orm
+        .select({
+          id: customFieldDefinitions.id,
+          key: customFieldDefinitions.key,
+          label: customFieldDefinitions.label,
+          dataType: customFieldDefinitions.dataType,
+        })
+        .from(customFieldDefinitions)
+        .where(
+          and(
+            this.inWorkspace(customFieldDefinitions),
+            eq(customFieldDefinitions.entityType, "company"),
+          ),
+        )
+        .limit(1000),
+      orm
+        .select({ id: dealStages.id, name: dealStages.name })
+        .from(dealStages)
+        .innerJoin(dealPipelines, eq(dealStages.pipelineId, dealPipelines.id))
+        .where(this.inWorkspace(dealPipelines))
+        .limit(1000),
     ]);
     return {
+      categories: categoryRows,
+      companyCustomFields: companyFieldRows,
+      dealStages: dealStageRows,
       tags: tagRows,
       staticSegments: staticSegmentRows,
       companies: companyRows,

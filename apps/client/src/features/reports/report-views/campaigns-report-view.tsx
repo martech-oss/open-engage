@@ -7,12 +7,20 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { CampaignsReport } from "@/features/reports/report-api";
 import { formatMoney } from "@/lib/format";
 
+import { CampaignCostsPanel } from "../campaign-costs-panel";
 import { ReportTableCard } from "../report-widgets";
 
 type CampaignRow = CampaignsReport["campaigns"][number];
 
 export function CampaignsReportView({ report }: { report: CampaignsReport }): ReactNode {
   const columns: DataTableColumn<CampaignRow>[] = [
+    { key: "cost", header: "期間費用", cell: (row) => formatMoney(row.cost, report.currency) },
+    {
+      key: "attributedValue",
+      header: "配賦売上",
+      cell: (row) => formatMoney(row.attributedValue, report.currency),
+    },
+    { key: "roi", header: "ROI", cell: (row) => (row.roi === null ? "算出不可" : `${row.roi}%`) },
     {
       key: "name",
       header: "キャンペーン",
@@ -52,7 +60,7 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
     },
     {
       key: "influencedValue",
-      header: "関与金額",
+      header: "影響売上（参考）",
       cell: (row) => formatMoney(row.influencedValue, report.currency),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
@@ -107,8 +115,10 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
           }
         />
         <MetricCard
-          label="最終接点の売上"
-          value={formatMoney(report.summary.lastTouchValue, report.currency)}
+          label={
+            report.attributionModel === "first_touch" ? "初回接点の配賦売上" : "最終接点の配賦売上"
+          }
+          value={formatMoney(report.summary.attributedValue, report.currency)}
           description={
             <div className="flex items-center gap-2 text-sm">
               <Handshake />
@@ -117,6 +127,14 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
           }
         />
       </MetricGrid>
+      <div className="flex flex-wrap gap-6 text-sm">
+        <span>期間費用: {formatMoney(report.summary.cost, report.currency)}</span>
+        <span>ROI: {report.summary.roi === null ? "算出不可" : `${report.summary.roi}%`}</span>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        ROI = （配賦売上 − 費用）÷ 費用 ×
+        100。選択期間の計上費用と受注売上を使い、通貨間の合算・換算は行いません。
+      </p>
       <Alert>
         <Megaphone />
         <AlertTitle>3つの金額は足し合わせないでください</AlertTitle>
@@ -136,6 +154,7 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
           emptyDescription="プロジェクトにメールやフォームを紐付けると、そこへの反応が接点として記録されます。"
         />
       </ReportTableCard>
+      <CampaignCostsPanel campaigns={report.campaigns} currency={report.currency} />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import { salesProcedures } from "./sales-router";
 import {
   archiveDeal,
   archiveDealPipeline,
@@ -29,7 +31,12 @@ export const listDealsProcedure = authed.deals.list.handler(async ({ context, in
 });
 
 export const listDealTasksProcedure = authed.deals.listTasks.handler(({ context, input }) =>
-  listWorkspaceDealTasks(context.database, context.workspace, input.status),
+  listWorkspaceDealTasks(
+    context.database,
+    context.workspace,
+    input.status,
+    input.mine ? context.workspace.userId : undefined,
+  ),
 );
 
 export const createPipelineProcedure = authed.deals.createPipeline.handler(
@@ -100,6 +107,12 @@ export const createDealProcedure = authed.deals.create.handler(
       throw errors.INVALID_DEAL_REFERENCE({ message: outcome.message });
     }
     if (outcome.kind === "not_found") throw errors.INVALID_DEAL_REFERENCE();
+    if (outcome.deal.contactId)
+      await enqueueSegmentContactReconciliation(
+        context.env.JOBS_QUEUE,
+        context.workspace.workspaceId,
+        [outcome.deal.contactId],
+      );
     return outcome.deal;
   },
 );
@@ -108,6 +121,7 @@ export const updateDealProcedure = authed.deals.update.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
+    const previous = await getDealDetail(context.database, context.workspace, id);
     const outcome = await updateDeal(
       context.database,
       context.workspace,
@@ -119,6 +133,18 @@ export const updateDealProcedure = authed.deals.update.handler(
     if (outcome.kind === "invalid_reference") {
       throw errors.INVALID_DEAL_REFERENCE({ message: outcome.message });
     }
+    if (previous?.deal.contactId)
+      await enqueueSegmentContactReconciliation(
+        context.env.JOBS_QUEUE,
+        context.workspace.workspaceId,
+        [previous.deal.contactId],
+      );
+    if (outcome.deal.contactId)
+      await enqueueSegmentContactReconciliation(
+        context.env.JOBS_QUEUE,
+        context.workspace.workspaceId,
+        [outcome.deal.contactId],
+      );
     return outcome.deal;
   },
 );
@@ -134,17 +160,30 @@ export const moveDealProcedure = authed.deals.move.handler(async ({ context, inp
   );
   if (outcome.kind === "not_found") throw errors.DEAL_NOT_FOUND();
   if (outcome.kind === "invalid_stage") throw errors.INVALID_DEAL_STAGE();
+  if (outcome.deal.contactId)
+    await enqueueSegmentContactReconciliation(
+      context.env.JOBS_QUEUE,
+      context.workspace.workspaceId,
+      [outcome.deal.contactId],
+    );
   return outcome.deal;
 });
 
 export const archiveDealProcedure = authed.deals.archive.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
+    const previous = await getDealDetail(context.database, context.workspace, input.id);
     if (
       !(await archiveDeal(context.database, context.workspace, input.id, context.executionContext))
     ) {
       throw errors.DEAL_NOT_FOUND();
     }
+    if (previous?.deal.contactId)
+      await enqueueSegmentContactReconciliation(
+        context.env.JOBS_QUEUE,
+        context.workspace.workspaceId,
+        [previous.deal.contactId],
+      );
     return ack;
   },
 );
@@ -188,6 +227,7 @@ export const deleteDealTaskProcedure = authed.deals.deleteTask.handler(
 );
 
 export const dealProcedures = {
+  ...salesProcedures,
   options: dealOptionsProcedure,
   list: listDealsProcedure,
   listTasks: listDealTasksProcedure,

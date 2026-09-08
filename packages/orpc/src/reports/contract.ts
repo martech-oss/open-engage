@@ -3,6 +3,9 @@ import { oc } from "@orpc/contract";
 import {
   automationsReportSchema,
   campaignsReportSchema,
+  campaignReportQuerySchema,
+  lifecycleReportQuerySchema,
+  lifecycleReportSchema,
   contactsReportSchema,
   dealsReportSchema,
   emailsReportSchema,
@@ -50,9 +53,14 @@ export const reportsContract = {
     .errors(analystErrors)
     .input(rangeInput)
     .output(siteReportSchema),
+  lifecycle: oc
+    .route({ method: "GET", path: "/reports/lifecycle" })
+    .errors(analystErrors)
+    .input(lifecycleReportQuerySchema)
+    .output(lifecycleReportSchema),
   campaigns: oc
     .route({ method: "GET", path: "/reports/campaigns" })
     .errors(analystErrors)
-    .input(reportQuerySchema)
+    .input(campaignReportQuerySchema)
     .output(campaignsReportSchema),
 };

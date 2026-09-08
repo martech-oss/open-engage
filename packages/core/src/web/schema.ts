@@ -2,59 +2,13 @@ import * as z from "zod";
 
 import { normalizeSlug } from "../shared/schema";
 import { contentDocumentSchema } from "./content";
+import { signupFormDefinitionSchema } from "./form-schema";
+import { landingPageDocumentSchema } from "./landing-document";
 
 export const publishStatusSchema = z.enum(["draft", "published"]);
 export type PublishStatus = z.infer<typeof publishStatusSchema>;
 
-export const STANDARD_FORM_FIELD_KEYS = ["email", "firstName", "lastName", "phone"] as const;
-export const standardFormFieldKeySchema = z.enum(STANDARD_FORM_FIELD_KEYS);
-export type StandardFormFieldKey = z.infer<typeof standardFormFieldKeySchema>;
-
-export const FORM_FIELD_INPUT_TYPES = [
-  "email",
-  "text",
-  "tel",
-  "url",
-  "number",
-  "date",
-  "textarea",
-  "select",
-] as const;
-export const formFieldInputTypeSchema = z.enum(FORM_FIELD_INPUT_TYPES);
-export type FormFieldInputType = z.infer<typeof formFieldInputTypeSchema>;
-
-/**
- * `standard` keys map onto contact columns; `custom` keys land in
- * `contacts.custom_fields` under the same key. Definitions written before
- * custom fields existed omit `kind`, so it defaults to `standard`.
- */
-export const formFieldSchema = z.object({
-  key: z
-    .string()
-    .trim()
-    .min(1)
-    .max(191)
-    .regex(/^[A-Za-z0-9_-]+$/, "英数字、アンダースコア、ハイフンで入力してください"),
-  kind: z.enum(["standard", "custom"]).default("standard"),
-  label: z.string().trim().max(191).optional(),
-  type: formFieldInputTypeSchema.default("text"),
-  required: z.boolean().default(false),
-  options: z.array(z.string().trim().min(1).max(191)).max(50).optional(),
-  /**
-   * Progressive Profiling: once the identified visitor already has a value for
-   * this field, the form drops it and shows the next unanswered one instead.
-   */
-  progressive: z.boolean().default(false),
-});
-export type FormField = z.infer<typeof formFieldSchema>;
-
-export const signupFormDefinitionSchema = z.object({
-  style: z.enum(["inline", "floating-bar", "floating-box", "modal"]).optional(),
-  fields: z.array(formFieldSchema).max(50).optional(),
-  /** Cap on how many progressive fields one visit may ask for. */
-  progressiveMaxFields: z.number().int().min(1).max(10).default(3),
-});
-export type SignupFormDefinition = z.infer<typeof signupFormDefinitionSchema>;
+export * from "./form-schema";
 
 export const signupFormSchema = z.object({
   id: z.string(),
@@ -78,8 +32,10 @@ export const landingPageSchema = z.object({
   slug: z.string(),
   status: publishStatusSchema,
   currentVersionId: z.string().nullable(),
+  publishedVersionId: z.string().nullable().default(null),
   version: z.number().int().nullable(),
   contentDocument: contentDocumentSchema.nullable(),
+  document: landingPageDocumentSchema.nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -154,7 +110,9 @@ export const landingPageWriteSchema = z.object({
   name: z.string().trim().min(1).max(191),
   slug: normalizedSlugSchema("landing-page"),
   status: publishStatusSchema.default("draft"),
-  content: contentDocumentSchema,
+  content: contentDocumentSchema.optional(),
+  document: landingPageDocumentSchema.optional(),
+  baseVersionId: z.string().optional(),
 });
 export type LandingPageWrite = z.infer<typeof landingPageWriteSchema>;
 export const landingPageCreateSchema = landingPageWriteSchema.extend({

@@ -51,6 +51,16 @@ export const contactOptionsSchema = z.object({
 export type ContactOptions = z.infer<typeof contactOptionsSchema>;
 
 export const contactProfileSchema = z.object({
+  owner: z.object({ id: z.string(), name: z.string() }).nullable().optional(),
+  lifecycleHistory: z
+    .array(
+      z.object({
+        stage: z.enum(["mql", "sql", "customer"]),
+        reachedAt: z.string(),
+        source: z.string(),
+      }),
+    )
+    .optional(),
   contact: contactSchema,
   tags: z.array(tagSchema.omit({ contactCount: true })),
   segments: z.array(
