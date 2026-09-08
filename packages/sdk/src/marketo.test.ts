@@ -10,7 +10,10 @@ import type {
   AutomationRunDetail,
   AutomationSchedule,
   OpenEngageClient,
+  ProgramMemberImportJob,
   ProjectCloneJob,
+  ProjectCloneSummary,
+  ProjectClonePage,
   ProjectMember,
   ProjectMemberTransition,
   ProjectProgramDefinition,
@@ -21,6 +24,10 @@ import type {
 
 it("exports program, variable, clone and automation types matching the public client", () => {
   type Projects = OpenEngageClient["projects"];
+  expectTypeOf<
+    Awaited<ReturnType<Projects["memberImport"]>>
+  >().toEqualTypeOf<ProgramMemberImportJob>();
+  expectTypeOf<Parameters<Projects["memberImportGet"]>[0]["jobId"]>().toEqualTypeOf<string>();
   type Automations = OpenEngageClient["automations"];
   expectTypeOf<
     Parameters<Projects["programSave"]>[0]["definition"]
@@ -41,6 +48,10 @@ it("exports program, variable, clone and automation types matching the public cl
     Awaited<ReturnType<Projects["variablesUses"]>>[number]["references"][number]
   >().toEqualTypeOf<VariableRef>();
   expectTypeOf<Awaited<ReturnType<Projects["cloneGet"]>>>().toEqualTypeOf<ProjectCloneJob>();
+  expectTypeOf<
+    Awaited<ReturnType<Projects["cloneProgress"]>>
+  >().toEqualTypeOf<ProjectCloneSummary>();
+  expectTypeOf<Awaited<ReturnType<Projects["cloneList"]>>>().toEqualTypeOf<ProjectClonePage>();
   expectTypeOf<Awaited<ReturnType<Automations["startRun"]>>>().toEqualTypeOf<AutomationRun>();
   expectTypeOf<
     Awaited<ReturnType<Automations["runDetail"]>>

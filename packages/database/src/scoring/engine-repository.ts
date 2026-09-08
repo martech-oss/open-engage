@@ -1,10 +1,9 @@
-import { and, eq, exists, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import { asc, and, eq, exists, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 
 import type { GradingCriterion } from "@openengage/core/scoring";
 
 import { contactTags, contacts, tags } from "../contacts/schema";
 import { changedExactlyOne } from "../shared/database-utils";
-import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { criterionSelection } from "./configuration-values";
@@ -52,7 +51,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
           or(isNull(scoringRules.tagId), isNotNull(tags.id)),
         ),
       )
-      .limit(UNPAGINATED_LIST_LIMIT);
+      .orderBy(asc(scoringRules.id));
   }
 
   public async applyScore(input: {
@@ -67,6 +66,14 @@ export class ScoringEngineRepository extends DatabaseRepository {
     }>;
     now: string;
   }): Promise<void> {
+    for (let offset = 0; offset < input.effects.length; offset += 50) {
+      await this.applyScoreBatch({ ...input, effects: input.effects.slice(offset, offset + 50) });
+    }
+  }
+
+  private async applyScoreBatch(
+    input: Parameters<ScoringEngineRepository["applyScore"]>[0],
+  ): Promise<void> {
     const orm = this.database.orm;
     const activeContact = await orm
       .select({ id: contacts.id })
@@ -181,7 +188,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
           isNull(gradingCriteria.archivedAt),
         ),
       )
-      .limit(UNPAGINATED_LIST_LIMIT) as Promise<GradingCriterion[]>;
+      .orderBy(asc(gradingCriteria.id)) as Promise<GradingCriterion[]>;
   }
 
   public async readGradingContact(

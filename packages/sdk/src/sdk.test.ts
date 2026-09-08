@@ -22,6 +22,31 @@ function exerciseProjectBriefContract(client: OpenEngageClient): void {
 void exerciseProjectBriefContract;
 
 describe("createOpenEngageClient", () => {
+  it("transports scoring cursors and preserves page summaries", async () => {
+    const requests: URL[] = [];
+    const response = {
+      items: [],
+      total: 201,
+      nextCursor: "rule-100",
+      summary: { enabled: 201, pageActions: 2 },
+    };
+    const client = createOpenEngageClient({
+      baseUrl: "https://openengage.example",
+      apiKey: "test-key",
+      fetch: async (input, init) => {
+        requests.push(new URL(new Request(input, init).url));
+        return Response.json(response);
+      },
+    });
+    expect(await client.scoring.listRules({ cursor: "rule-050", limit: 50 })).toEqual(response);
+    expect(requests[0]?.pathname).toBe("/api/v1/scoring/rules");
+    expect(requests[0]?.searchParams.get("cursor")).toBe("rule-050");
+    expect(requests[0]?.searchParams.get("limit")).toBe("50");
+    await client.scoring.listCriteria({ cursor: "criterion-100", limit: 100 });
+    expect(requests[1]?.pathname).toBe("/api/v1/scoring/grading-criteria");
+    expect(requests[1]?.searchParams.get("cursor")).toBe("criterion-100");
+    expect(requests[1]?.searchParams.get("limit")).toBe("100");
+  });
   it("exports the public project brief types without breaking the legacy alias", () => {
     expectTypeOf<ProjectBriefDraftInput>().toEqualTypeOf<ProjectBriefMutation>();
     expectTypeOf<ProjectBriefReference>().toMatchTypeOf<

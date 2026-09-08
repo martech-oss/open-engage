@@ -20,7 +20,7 @@ export function registerProjectCloneTools(server: McpServer, context: McpToolCon
   registerRpcTool(
     server,
     "start_project_clone",
-    "Queue the frozen clone preview using its jobId and an idempotent requestKey. Poll get_project_clone for completion; copied resources begin as drafts.",
+    "Queue the frozen clone preview using its jobId and an idempotent requestKey. Poll get_project_clone_progress for completion; copied resources begin as drafts.",
     contract.cloneStart["~orpc"].inputSchema,
     api.cloneStart,
     { idempotent: true },
@@ -35,6 +35,14 @@ export function registerProjectCloneTools(server: McpServer, context: McpToolCon
   );
   registerRpcTool(
     server,
+    "get_project_clone_progress",
+    "Read lightweight clone progress and failure information. Use get_project_clone only for the frozen resource mapping and options.",
+    contract.cloneProgress["~orpc"].inputSchema,
+    api.cloneProgress,
+    read,
+  );
+  registerRpcTool(
+    server,
     "retry_project_clone",
     "Retry a failed clone job into the same destination, preserving its frozen preview.",
     contract.cloneRetry["~orpc"].inputSchema,
@@ -43,7 +51,7 @@ export function registerProjectCloneTools(server: McpServer, context: McpToolCon
   registerRpcTool(
     server,
     "list_project_clones",
-    "List clone jobs for a source project.",
+    "Read a page of clone history excluding previews (default 20, max 100). Pass nextCursor as cursor for the next page. Returns summaries without frozen resource data.",
     contract.cloneList["~orpc"].inputSchema,
     api.cloneList,
     read,

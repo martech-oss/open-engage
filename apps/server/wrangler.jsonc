@@ -36,10 +36,18 @@
   ],
   "queues": {
     "producers": [
+      { "binding": "PROGRAM_MEMBER_IMPORT_QUEUE", "queue": "openengage-program-member-import" },
       { "binding": "JOBS_QUEUE", "queue": "openengage-jobs" },
       { "binding": "DELIVERY_QUEUE", "queue": "openengage-delivery" },
     ],
     "consumers": [
+      {
+        "queue": "openengage-program-member-import",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+        "dead_letter_queue": "openengage-dead-letter",
+      },
       {
         "queue": "openengage-jobs",
         "max_batch_size": 50,

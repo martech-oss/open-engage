@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { expect, it } from "vitest";
 
-import { ProjectCloneRepository } from "@openengage/database/projects";
+import { ProjectCloneQueryRepository } from "@openengage/database/projects";
 
 import { seedWorkspaceClient } from "./factory";
 import { cloneOptions, finishClone } from "./project-clone-test-support";
@@ -52,7 +52,7 @@ it("discloses a decision's shared form and rejects materialization if it is dele
   expect(clone.resources.some((resource) => resource.sourceId === f.form.id)).toBe(false);
   await env.DB.prepare("DELETE FROM forms WHERE id=?").bind(f.form.id).run();
   await expect(finishClone(f, f.project.id, clone.id)).rejects.toThrow();
-  expect((await new ProjectCloneRepository(env.DB, f).get(clone.id))?.status).toBe("failed");
+  expect((await new ProjectCloneQueryRepository(env.DB, f).get(clone.id))?.status).toBe("failed");
   expect(
     await env.DB.prepare("SELECT id FROM projects WHERE id=?").bind(clone.targetProjectId).first(),
   ).toBeNull();

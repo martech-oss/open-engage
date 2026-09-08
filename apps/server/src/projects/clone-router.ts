@@ -1,8 +1,12 @@
 import { writeAuditLog } from "@openengage/database/platform";
-import { ProjectCloneError, ProjectCloneRepository } from "@openengage/database/projects";
+import {
+  ProjectCloneError,
+  ProjectCloneJobRepository,
+  ProjectCloneQueryRepository,
+} from "@openengage/database/projects";
 
 import { authed, requireRole } from "../orpc/base";
-import { getProjectClone, previewProjectClone } from "./clone-service";
+import { getProjectClone, getProjectCloneProgress, previewProjectClone } from "./clone-service";
 
 function rethrow(
   error: unknown,
@@ -33,8 +37,20 @@ export const projectCloneProcedures = {
     }
   }),
   cloneList: authed.projects.cloneList.handler(({ context, input }) =>
-    new ProjectCloneRepository(context.database, context.workspace).list(input.id),
+    new ProjectCloneQueryRepository(context.database, context.workspace).list(input.id, input),
   ),
+  cloneProgress: authed.projects.cloneProgress.handler(async ({ context, input, errors }) => {
+    try {
+      return await getProjectCloneProgress(
+        context.database,
+        context.workspace.workspaceId,
+        input.id,
+        input.jobId,
+      );
+    } catch (error) {
+      rethrow(error, errors);
+    }
+  }),
   cloneGet: authed.projects.cloneGet.handler(async ({ context, input, errors }) => {
     try {
       return await getProjectClone(
@@ -50,8 +66,13 @@ export const projectCloneProcedures = {
   cloneStart: authed.projects.cloneStart.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await getProjectClone(context.database, context.workspace.workspaceId, input.id, input.jobId);
-      const job = await new ProjectCloneRepository(context.database, context.workspace).start(
+      await getProjectCloneProgress(
+        context.database,
+        context.workspace.workspaceId,
+        input.id,
+        input.jobId,
+      );
+      const job = await new ProjectCloneJobRepository(context.database, context.workspace).start(
         input.jobId,
         input.requestKey,
       );
@@ -75,8 +96,13 @@ export const projectCloneProcedures = {
   cloneRetry: authed.projects.cloneRetry.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await getProjectClone(context.database, context.workspace.workspaceId, input.id, input.jobId);
-      const job = await new ProjectCloneRepository(context.database, context.workspace).retry(
+      await getProjectCloneProgress(
+        context.database,
+        context.workspace.workspaceId,
+        input.id,
+        input.jobId,
+      );
+      const job = await new ProjectCloneJobRepository(context.database, context.workspace).retry(
         input.jobId,
       );
       if (job.status === "queued")

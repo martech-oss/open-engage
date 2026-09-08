@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import {
+  programMemberImportSchema,
   programBindingSchema,
   programCohortInputSchema,
   programCohortSchema,
@@ -76,18 +77,11 @@ export const programContract = {
         idempotencyKey: z.string().min(8).max(150),
       }),
     )
-    .output(
-      z.object({
-        rows: z.array(
-          z.object({
-            row: z.number().int(),
-            ok: z.boolean(),
-            contactId: z.string().optional(),
-            error: z.string().optional(),
-          }),
-        ),
-      }),
-    ),
+    .output(programMemberImportSchema),
+  memberImportGet: base
+    .route({ method: "GET", path: "/projects/{id}/members/import/{jobId}" })
+    .input(idInput.extend({ jobId: z.string().min(1) }))
+    .output(programMemberImportSchema),
   memberHistory: base
     .route({ method: "GET", path: "/projects/{id}/members/{contactId}/history" })
     .input(idInput.extend({ contactId: z.string().min(1) }))

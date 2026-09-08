@@ -11,6 +11,7 @@ import * as messagingSchema from "./messaging/schema";
 import * as platformSchema from "./platform/schema";
 import * as projectCloneSchema from "./projects/clone-schema";
 import * as formProgramSchema from "./projects/form-program-schema";
+import * as programImportSchema from "./projects/program-import-schema";
 import * as projectProgramSchema from "./projects/program-schema";
 import * as projectsSchema from "./projects/schema";
 import * as projectVariableSchema from "./projects/variable-schema";
@@ -67,6 +68,7 @@ export const schema = {
   ...workspacesSchema,
   ...platformSchema,
   ...projectsSchema,
+  ...programImportSchema,
   ...projectCloneSchema,
   ...projectProgramSchema,
   ...projectVariableSchema,
@@ -75,3 +77,5 @@ export const schema = {
   ...scoringSchema,
   ...relationsSchema,
 };
+
+export * from "./projects/program-import-schema";

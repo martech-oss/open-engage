@@ -14,6 +14,8 @@ import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 import type {
   ProjectCloneJob,
+  ProjectCloneSummary,
+  ProjectCloneCursor,
   ProjectCloneOptions,
   ProjectCloneResourceKind,
   VariableDefinition,
@@ -21,7 +23,7 @@ import type {
 
 import {
   projectCloneListQueryOptions,
-  projectCloneQueryOptions,
+  projectCloneProgressQueryOptions,
   usePreviewProjectClone,
   useRetryProjectClone,
   useStartProjectClone,
@@ -65,10 +67,22 @@ export function ProjectClonePanel({
   canEdit?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState({
+    projectId,
+    cursors: [undefined] as Array<ProjectCloneCursor | undefined>,
+  });
+  const cursors = history.projectId === projectId ? history.cursors : [undefined];
+  const setCursors = (
+    update: (
+      previous: Array<ProjectCloneCursor | undefined>,
+    ) => Array<ProjectCloneCursor | undefined>,
+  ) => setHistory({ projectId, cursors: update(cursors) });
   const list = useQuery({
-    ...projectCloneListQueryOptions(projectId),
+    ...projectCloneListQueryOptions(projectId, cursors.at(-1)),
     refetchInterval: (query) =>
-      query.state.data?.some((job) => ["queued", "running"].includes(job.status)) ? 3000 : false,
+      query.state.data?.items.some((job) => ["queued", "running"].includes(job.status))
+        ? 3000
+        : false,
   });
   return (
     <section className="space-y-3 rounded-lg border p-4" aria-label="施策の複製">
@@ -89,11 +103,28 @@ export function ProjectClonePanel({
       {list.error && (
         <ErrorAlert>{getErrorMessage(list.error, "複製履歴を取得できませんでした")}</ErrorAlert>
       )}
-      {list.data
-        ?.filter((job) => job.status !== "preview")
-        .map((job) => (
-          <CloneJobProgress key={job.id} job={job} canEdit={canEdit} />
-        ))}
+      {list.data?.items.map((job) => (
+        <CloneJobProgress key={job.id} job={job} canEdit={canEdit} />
+      ))}
+      <div className="flex gap-2" aria-label="複製履歴のページ">
+        <Button
+          variant="outline"
+          disabled={cursors.length === 1 || list.isFetching}
+          onClick={() => setCursors((previous) => previous.slice(0, -1))}
+        >
+          前へ
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!list.data?.nextCursor || list.isFetching}
+          onClick={() => {
+            const next = list.data?.nextCursor;
+            if (next) setCursors((previous) => [...previous, next]);
+          }}
+        >
+          次へ
+        </Button>
+      </div>
       {open && (
         <ProjectCloneDialog
           projectId={projectId}
@@ -105,12 +136,12 @@ export function ProjectClonePanel({
   );
 }
 
-function CloneJobProgress({ job, canEdit }: { job: ProjectCloneJob; canEdit: boolean }) {
+function CloneJobProgress({ job, canEdit }: { job: ProjectCloneSummary; canEdit: boolean }) {
   const retry = useRetryProjectClone();
   return (
-    <div className="space-y-2 rounded-md border p-3" aria-label={`${job.options.name}の複製状況`}>
+    <div className="space-y-2 rounded-md border p-3" aria-label={`${job.name}の複製状況`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <strong>{job.options.name}</strong>
+        <strong>{job.name}</strong>
         <span>{statusLabels[job.status]}</span>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -167,12 +198,15 @@ function ProjectCloneDialog({
   const { fromDateTimeLocal, toDateTimeLocal } = useWorkspaceFormatters();
   const { timeZone } = useWorkspaceTime();
   const current = useQuery({
-    ...projectCloneQueryOptions(projectId, selected?.id ?? ""),
+    ...projectCloneProgressQueryOptions(projectId, selected?.id ?? ""),
     enabled: Boolean(selected),
     refetchInterval: (query) =>
       query.state.data && ["queued", "running"].includes(query.state.data.status) ? 2000 : false,
   });
-  const job = current.data ?? selected;
+  // Keep the frozen preview details locally; polling supplies only mutable summary fields.
+  const job = selected
+    ? { ...selected, ...current.data, name: current.data?.name ?? selected.options.name }
+    : null;
 
   async function prepare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

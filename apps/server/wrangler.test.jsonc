@@ -21,6 +21,7 @@
   "send_email": [{ "name": "EMAIL" }],
   "queues": {
     "producers": [
+      { "binding": "PROGRAM_MEMBER_IMPORT_QUEUE", "queue": "openengage-program-member-import" },
       { "binding": "JOBS_QUEUE", "queue": "openengage-jobs" },
       { "binding": "DELIVERY_QUEUE", "queue": "openengage-delivery" },
     ],

@@ -63,6 +63,13 @@ export type {
   ContactTimelineEvent,
 } from "@openengage/core/contacts";
 export type { Dashboard } from "@openengage/core/reports";
+export type {
+  ScoringPageInput,
+  ScoringRule,
+  ScoringRulePage,
+  GradingCriterion,
+  GradingCriterionPage,
+} from "@openengage/core/scoring";
 export type { DeadLetterRow } from "@openengage/core/platform";
 export type { SegmentRow } from "@openengage/core/segments";
 export type { SubscriptionTopicRow } from "@openengage/core/consent";
@@ -120,3 +127,13 @@ export type VariableImpact = Awaited<
   ReturnType<OpenEngageClient["projects"]["variablesImpact"]>
 >[number];
 export type { WebhookEndpointRow } from "@openengage/core/workspaces";
+
+export type ProgramMemberImportJob = Awaited<
+  ReturnType<OpenEngageClient["projects"]["memberImportGet"]>
+>;
+
+export type {
+  ProjectCloneSummary,
+  ProjectCloneCursor,
+  ProjectClonePage,
+} from "@openengage/core/projects";

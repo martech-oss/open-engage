@@ -9,7 +9,7 @@ import {
   AutomationRunRepository,
 } from "@openengage/database/automations";
 import { createDatabase } from "@openengage/database/client";
-import { ProjectCloneRepository } from "@openengage/database/projects";
+import { ProjectCloneJobRepository } from "@openengage/database/projects";
 import { nowIso } from "@openengage/database/testing";
 import { PublicFormRepository } from "@openengage/database/web";
 
@@ -30,7 +30,7 @@ function clonedResource(preview: ProjectClonePreview, kind: string, sourceId: st
   return resource;
 }
 
-async function finishClone(repository: ProjectCloneRepository, jobId: string) {
+async function finishClone(repository: ProjectCloneJobRepository, jobId: string) {
   for (let chunk = 0; chunk < 30; chunk++) {
     if ((await repository.process(jobId, 3)) === "completed") return;
   }
@@ -186,7 +186,7 @@ it("runs an approved cloned campaign from form acquisition through scheduled cal
     jobId: preview.id,
     requestKey: "journey-clone",
   });
-  await finishClone(new ProjectCloneRepository(database, owner), preview.id);
+  await finishClone(new ProjectCloneJobRepository(database, owner), preview.id);
   expect((await client.projects.cloneGet({ id: source.id, jobId: preview.id })).status).toBe(
     "completed",
   );

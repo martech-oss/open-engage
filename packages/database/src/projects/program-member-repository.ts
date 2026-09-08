@@ -6,6 +6,7 @@ import {
   projectMemberSchema,
   projectMemberTransitionSchema,
   resolveProgramProgress,
+  type ProjectProgramDefinition,
   type ProgramMemberMutation,
   type ProgramMemberMutationResult,
   type ProjectMember,
@@ -101,6 +102,7 @@ export class ProjectMemberRepository extends WorkspaceRepository {
   public async prepareMutation(
     input: ProgramMemberCommand,
     now = nowIso(),
+    cache?: { publishedVersion: number | null; definitions: Map<number, ProjectProgramDefinition> },
   ): Promise<{ statements: BatchItem<"sqlite">[]; result: ProgramMemberMutationResult }> {
     const fingerprint = JSON.stringify({
       contactId: input.contactId,
@@ -124,7 +126,7 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       };
     }
     const programRepository = new ProjectProgramRepository(this.database, this.context);
-    const program = await programRepository.get(input.projectId);
+    const program = cache ?? (await programRepository.get(input.projectId));
     const current = await this.get(input.projectId, input.contactId);
     const definitionVersion =
       current?.definitionVersion ?? input.definitionVersion ?? program?.publishedVersion;
@@ -139,7 +141,10 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       throw new ProgramError("conflict", "Member retains its enrollment definition version");
     if (input.expectedRevision !== undefined && input.expectedRevision !== (current?.revision ?? 0))
       throw new ProgramError("conflict", "Member was changed by another writer");
-    const definition = await programRepository.definition(input.projectId, definitionVersion);
+    const definition =
+      cache?.definitions.get(definitionVersion) ??
+      (await programRepository.definition(input.projectId, definitionVersion));
+    cache?.definitions.set(definitionVersion, definition);
     const preservePinnedMember = Boolean(
       current &&
       input.source === "form" &&

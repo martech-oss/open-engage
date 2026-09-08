@@ -1,7 +1,13 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { projectCloneJobSchema, projectCloneOptionsSchema } from "@openengage/core/projects";
+import {
+  projectCloneJobSchema,
+  projectCloneOptionsSchema,
+  projectCloneSummarySchema,
+  projectCloneListInputSchema,
+  projectClonePageSchema,
+} from "@openengage/core/projects";
 
 import { authedErrors } from "../shared/errors";
 import { idInput } from "../shared/schemas";
@@ -27,8 +33,13 @@ export const projectCloneContract = {
   cloneList: oc
     .route({ method: "GET", path: "/projects/{id}/clones" })
     .errors(errors)
-    .input(idInput)
-    .output(z.array(projectCloneJobSchema)),
+    .input(idInput.extend(projectCloneListInputSchema.shape))
+    .output(projectClonePageSchema),
+  cloneProgress: oc
+    .route({ method: "GET", path: "/projects/{id}/clones/{jobId}/progress" })
+    .errors(errors)
+    .input(jobInput)
+    .output(projectCloneSummarySchema),
   cloneGet: oc
     .route({ method: "GET", path: "/projects/{id}/clones/{jobId}" })
     .errors(errors)

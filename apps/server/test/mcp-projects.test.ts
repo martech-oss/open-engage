@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { PROJECT_PROGRAM_TEMPLATES } from "@openengage/core/projects";
-import { ProjectCloneRepository } from "@openengage/database/projects";
+import { ProjectCloneJobRepository } from "@openengage/database/projects";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -64,6 +64,7 @@ describe("Remote MCP project and automation APIs", () => {
         "list_project_members",
         "mutate_project_member",
         "import_project_members",
+        "get_project_member_import",
         "get_project_member_history",
         "get_project_program_cohort",
         "bind_project_program_form",
@@ -75,6 +76,7 @@ describe("Remote MCP project and automation APIs", () => {
         "preview_project_clone",
         "start_project_clone",
         "get_project_clone",
+        "get_project_clone_progress",
         "retry_project_clone",
         "list_project_clones",
         "get_automation_execution_options",
@@ -125,7 +127,7 @@ describe("Remote MCP project and automation APIs", () => {
   });
 
   it("writes through the real program API, preserving publication, conflicts, member retries and history", async () => {
-    const { token, client } = await seedWorkspaceClient(env.DB);
+    const { token, client, workspaceId } = await seedWorkspaceClient(env.DB);
     const created = await success(token, "create_project", { name: "MCP event" });
     const id = created.id as string;
     const contact = await client.contacts.create({ email: "mcp-member@example.com" });
@@ -195,13 +197,20 @@ describe("Remote MCP project and automation APIs", () => {
       }),
     ).toMatchObject({ members: 1, succeeded: 1, rate: 1 });
     const csvContact = await client.contacts.create({ email: "mcp-csv@example.com" });
+    const imported = await success(token, "import_project_members", {
+      id,
+      csv: `contactId,statusId\n${csvContact.id},registered\nunknown,registered`,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(imported).toMatchObject({ status: "pending", processed: 0, total: 2 });
+    const { processProgramMemberImport } = await import("../src/projects/program-import-service");
+    await processProgramMemberImport(env, workspaceId, imported.jobId as string);
     expect(
-      await success(token, "import_project_members", {
-        id,
-        csv: `contactId,statusId\n${csvContact.id},registered\nunknown,registered`,
-        idempotencyKey: crypto.randomUUID(),
-      }),
-    ).toMatchObject({ rows: [{ ok: true, contactId: csvContact.id }, { ok: false }] });
+      await success(token, "get_project_member_import", { id, jobId: imported.jobId }),
+    ).toMatchObject({
+      status: "completed",
+      rows: [{ ok: true, contactId: csvContact.id }, { ok: false }],
+    });
     expect(await client.projects.memberList({ id })).toMatchObject({ total: 2 });
   });
 
@@ -312,13 +321,17 @@ describe("Remote MCP project and automation APIs", () => {
       targetProjectId: preview.targetProjectId,
     });
     expect(
-      await new ProjectCloneRepository(env.DB, { workspaceId }).process(preview.id as string),
+      await new ProjectCloneJobRepository(env.DB, { workspaceId }).process(preview.id as string),
     ).toBe("completed");
     expect(await success(token, "get_project_clone", { id, jobId: preview.id })).toMatchObject({
       status: "completed",
     });
+    expect(
+      await success(token, "get_project_clone_progress", { id, jobId: preview.id }),
+    ).toMatchObject({ status: "completed", name: "MCP clone" });
     expect(await success(token, "list_project_clones", { id })).toMatchObject({
-      value: [expect.objectContaining({ id: preview.id })],
+      items: [expect.objectContaining({ id: preview.id })],
+      nextCursor: null,
     });
     expect(
       await client.projects.variablesList({ projectId: preview.targetProjectId as string }),

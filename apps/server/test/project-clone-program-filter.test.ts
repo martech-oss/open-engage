@@ -103,5 +103,5 @@ it("rejects an older qualified program version before creating a clone job", asy
     code: "PROJECT_CLONE_CONFLICT",
     message: expect.stringContaining("Qualified audience"),
   });
-  expect(await f.client.projects.cloneList({ id: project.id })).toHaveLength(0);
+  expect((await f.client.projects.cloneList({ id: project.id })).items).toHaveLength(0);
 });

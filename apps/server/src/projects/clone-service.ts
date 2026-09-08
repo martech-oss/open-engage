@@ -5,7 +5,8 @@ import {
   ProjectCloneError,
   ProjectCloneRecoveryRepository,
   ProjectCloneReferenceRepository,
-  ProjectCloneRepository,
+  ProjectCloneJobRepository,
+  ProjectCloneQueryRepository,
   ProjectCloneSnapshotRepository,
 } from "@openengage/database/projects";
 
@@ -27,7 +28,10 @@ export async function previewProjectClone(
   capture.sharedReferences = await new ProjectCloneReferenceRepository(database, workspace).collect(
     capture,
   );
-  return new ProjectCloneRepository(database, workspace).createPreview(capture, workspace.userId);
+  return new ProjectCloneJobRepository(database, workspace).createPreview(
+    capture,
+    workspace.userId,
+  );
 }
 
 export async function getProjectClone(
@@ -36,20 +40,32 @@ export async function getProjectClone(
   projectId: string,
   jobId: string,
 ) {
-  const job = await new ProjectCloneRepository(database, { workspaceId }).get(jobId);
+  const job = await new ProjectCloneQueryRepository(database, { workspaceId }).get(jobId);
+  if (!job || job.sourceProjectId !== projectId)
+    throw new ProjectCloneError("not_found", "複製ジョブが見つかりません");
+  return job;
+}
+
+export async function getProjectCloneProgress(
+  database: OpenEngageDatabase,
+  workspaceId: string,
+  projectId: string,
+  jobId: string,
+) {
+  const job = await new ProjectCloneQueryRepository(database, { workspaceId }).progress(jobId);
   if (!job || job.sourceProjectId !== projectId)
     throw new ProjectCloneError("not_found", "複製ジョブが見つかりません");
   return job;
 }
 
 export async function processProjectClone(env: RuntimeEnv, workspaceId: string, jobId: string) {
-  const repository = new ProjectCloneRepository(createDatabase(env.DB), { workspaceId });
+  const repository = new ProjectCloneJobRepository(createDatabase(env.DB), { workspaceId });
   try {
     const result = await repository.process(jobId);
     if (result === "continue")
       await env.JOBS_QUEUE.send({ kind: "project_clone", workspaceId, jobId });
     if (result === "completed") {
-      const job = await repository.get(jobId);
+      const job = await new ProjectCloneQueryRepository(env.DB, { workspaceId }).get(jobId);
       for (const segment of job?.resources.filter((resource) => resource.kind === "segment") ??
         []) {
         await env.JOBS_QUEUE.send({

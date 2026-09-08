@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 
 import { defaultEmailDocumentV2 } from "@openengage/core/messaging";
 import { emptyLandingPageDocument } from "@openengage/core/web";
-import { ProjectCloneRepository } from "@openengage/database/projects";
+import { ProjectCloneQueryRepository } from "@openengage/database/projects";
 
 import { seedMember, seedWorkspaceClient } from "./factory";
 import { cloneOptions, finishClone } from "./project-clone-test-support";
@@ -37,7 +37,7 @@ it.each(["delete", "rename"] as const)(
     else
       await env.DB.prepare("UPDATE segments SET slug='renamed' WHERE id=?").bind(shared.id).run();
     await expect(finishClone(f, project.id, clone.id)).rejects.toThrow();
-    expect((await new ProjectCloneRepository(env.DB, f).get(clone.id))?.status).toBe("failed");
+    expect((await new ProjectCloneQueryRepository(env.DB, f).get(clone.id))?.status).toBe("failed");
     expect(
       await env.DB.prepare("SELECT id FROM projects WHERE id=?")
         .bind(clone.targetProjectId)

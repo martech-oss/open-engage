@@ -32,8 +32,8 @@ export const archiveCategoryProcedure = authed.scoring.archiveCategory.handler(
   },
 );
 
-export const listRulesProcedure = authed.scoring.listRules.handler(({ context }) =>
-  new ScoringRepository(context.database, context.workspace).listRules(),
+export const listRulesProcedure = authed.scoring.listRules.handler(({ context, input }) =>
+  new ScoringRepository(context.database, context.workspace).listRules(input),
 );
 
 export const createRuleProcedure = authed.scoring.createRule.handler(
@@ -70,8 +70,8 @@ export const archiveRuleProcedure = authed.scoring.archiveRule.handler(
   },
 );
 
-export const listCriteriaProcedure = authed.scoring.listCriteria.handler(({ context }) =>
-  new ScoringRepository(context.database, context.workspace).listCriteria(),
+export const listCriteriaProcedure = authed.scoring.listCriteria.handler(({ context, input }) =>
+  new ScoringRepository(context.database, context.workspace).listCriteria(input),
 );
 
 export const createCriterionProcedure = authed.scoring.createCriterion.handler(
