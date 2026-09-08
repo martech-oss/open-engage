@@ -612,9 +612,12 @@ Authorization: Bearer openengage_xxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxx
 - オートメーション一覧とdraft取得
 - オートメーション enrollmentの準備
 - 明示確認後のオートメーション enrollment
+- バッチの対象プレビュー、実行準備、明示確認後の開始と実行履歴
 
 実配信につながるオートメーション enrollmentは二段階です。準備ToolがD1へ5分間有効な
 一回限りの確認Tokenを保存し、確認Toolで`CONFIRM SEND`を明示しない限り実行されません。
+
+バッチも `prepare_automation_run` で対象人数・サンプル・配信警告を確認し、ユーザーの明示確認後に `start_automation_run` へ `confirmationToken` と `confirmation: "CONFIRM SEND"` を渡します。TokenはWorkspace・APIキー・公開版・実行要求に固定され、5分で失効します。`preview_automation_run` の結果だけでは開始できません。
 
 ## セットアップCLI
 

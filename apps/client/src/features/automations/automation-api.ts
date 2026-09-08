@@ -75,7 +75,12 @@ export function usePublishAutomationDraft() {
   const queryClient = useQueryClient();
   return useMutation({
     ...orpcQuery.automations.publish.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
+    onSuccess: async (_, { id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
+        queryClient.invalidateQueries({ queryKey: automationDraftQueryOptions(id).queryKey }),
+      ]);
+    },
   });
 }
 

@@ -1,4 +1,4 @@
-import { and, eq, ne, notExists, isNull, sql } from "drizzle-orm";
+import { and, eq, exists, ne, notExists, isNull, sql } from "drizzle-orm";
 
 import { contacts } from "../contacts/schema";
 import { scoreEvents, contactCategoryScores, scoringCategories } from "../scoring/schema";
@@ -54,7 +54,19 @@ export class AutomationActionRepository extends DatabaseRepository {
       ? sql`coalesce((SELECT score FROM ${contactCategoryScores} WHERE workspace_id=${job.workspaceId} AND contact_id=${job.contactId} AND category_id=${categoryId}),0)`
       : sql`(SELECT score FROM ${contacts} WHERE workspace_id=${job.workspaceId} AND id=${job.contactId})`;
     const delta = options.operation === "set" ? sql`${amount}-${current}` : sql`${amount}`;
-    const guard = and(unapplied, authority)!;
+    const activeContact = exists(
+      orm
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.workspaceId, job.workspaceId),
+            eq(contacts.id, job.contactId),
+            ne(contacts.status, "archived"),
+          ),
+        ),
+    );
+    const guard = and(unapplied, authority, activeContact)!;
     await orm.batch([
       // Capture the delta before changing the score, in the same atomic transaction.
       orm
@@ -96,7 +108,6 @@ export class AutomationActionRepository extends DatabaseRepository {
                 and(
                   eq(contacts.workspaceId, job.workspaceId),
                   eq(contacts.id, job.contactId),
-                  ne(contacts.status, "archived"),
                   guard,
                 ),
               ),

@@ -4,7 +4,7 @@ import type {
   AutomationResourceKind,
   AutomationResourceOption,
 } from "@openengage/core/automations";
-import type { SegmentGenerationCatalog } from "@openengage/core/segments";
+import type { SegmentValidationResult } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { AutomationCatalogRepository } from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
@@ -15,10 +15,7 @@ import { SegmentRepository } from "@openengage/database/segments";
 import { WebRepository } from "@openengage/database/web";
 import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
-import {
-  loadSegmentCatalog,
-  validateSegmentFilterWithCatalog,
-} from "../segments/validation-service";
+import { loadSegmentCatalog, validateSegmentFilter } from "../segments/validation-service";
 
 interface ResourceReferences {
   emailTemplates: Set<string>;
@@ -34,7 +31,7 @@ interface ResourceReferences {
 
 export interface AutomationResourceContext {
   catalog: AutomationGenerationCatalog;
-  segmentCatalog?: SegmentGenerationCatalog;
+  validateFilter?(filter: unknown): Promise<SegmentValidationResult>;
   references: ResourceReferences;
 }
 
@@ -97,7 +94,7 @@ export async function loadAutomationResourceContext(
     .slice(0, 1_000);
 
   return {
-    segmentCatalog,
+    validateFilter: (filter) => validateSegmentFilter(database, workspace, filter, segmentCatalog),
     catalog: {
       projects: execution.projects,
       callableAutomations: execution.callableAutomations,
@@ -131,11 +128,11 @@ export async function loadAutomationResourceContext(
   };
 }
 
-export function validateAutomationResources(
+export async function validateAutomationResources(
   definition: AutomationDefinition,
   context: AutomationResourceContext,
   options?: { additionalEmailTemplateIds?: readonly string[] },
-): AutomationResourceValidationIssue[] {
+): Promise<AutomationResourceValidationIssue[]> {
   const issues: AutomationResourceValidationIssue[] = [];
   const { references } = context;
   const emailTemplateIds = new Set([
@@ -153,8 +150,8 @@ export function validateAutomationResources(
           ? node.config.audience.filter
           : undefined;
     if (filter) {
-      if (!context.segmentCatalog) throw new Error("Shared segment validation catalog is required");
-      const result = validateSegmentFilterWithCatalog(filter, context.segmentCatalog);
+      if (!context.validateFilter) throw new Error("Shared segment filter validator is required");
+      const result = await context.validateFilter(filter);
       for (const issue of result.issues)
         issues.push({
           kind: "filter",

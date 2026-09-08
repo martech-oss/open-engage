@@ -127,6 +127,8 @@ export function rewriteProjectCloneReferences(
         if (typeof program.projectId === "string" && Object.hasOwn(map.ids, program.projectId))
           return [key, { ...program, projectId: map.ids[program.projectId], definitionVersion: 1 }];
       }
+      // Custom-event resource IDs are caller-defined literals, even if they resemble a copied ID.
+      if (key === "resourceId" && input.event === "custom_event") return [key, item];
       if (typeof item === "string" && referenceKeys.has(key)) return [key, map.ids[item] ?? item];
       if (key === "value" && input.kind === "condition" && input.field === "segment") {
         const remap = (slug: unknown) =>

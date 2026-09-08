@@ -22,7 +22,7 @@ Projectを施策管理の中心として、参加者の進捗と成果、バッ�
 
 ## インターフェースと運用
 
-公開の型と検証は `@openengage/core`、API定義は `@openengage/orpc` にあります。REST、SDK、Remote MCPは同じドメイン処理と権限検証を利用します。MCPには参加者・変数・複製・実行履歴などの36ツールを追加し、既存6ツールを維持しています。
+公開の型と検証は `@openengage/core`、API定義は `@openengage/orpc` にあります。REST、SDK、Remote MCPは同じドメイン処理と権限検証を利用します。MCPには参加者・変数・複製・実行履歴・バッチの明示確認準備などの37ツールを追加し、既存6ツールを維持しています。
 
 設定画面の運用状況は管理者向けです。定期実行の5分以上の遅延、バッチ対象者の登録失敗、共通処理失敗、複製失敗を表示し、対応する実行・施策へ移動できます。各失敗一覧は直近50件、予定の遅延確認は最大200件です。大量運用ではWorkerログも併用してください。
 
@@ -66,3 +66,23 @@ npm_config_manage_package_manager_versions=false pnpm check --env-mode=loose
 ```
 
 独立した最終レビューでも、実migrationを使う58件のWorkersテスト、8件のDOMテスト、SDK実行経路と型検査を確認しました。SDKのOpenAPI経路から公開フォームHTTP、実際のQueue consumer・Cronへ接続した通しシナリオも成功し、未解決の指摘はありません。
+
+## 差分レビューへの対応（2026-09-08）
+
+追加の7件の指摘は、いずれも再現可能な不具合として修正しました。
+
+| 指摘 | 修正後の動作                                                                                                    | 主な回帰テスト                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 1    | MCPバッチは5分以内・一度限りの確認Tokenと `CONFIRM SEND` を必須とし、Workspace・APIキー・公開版・実行要求を固定 | `mcp-run-confirmation.test.ts`                                                   |
+| 2    | 手動実行ボタンは編集中の下書きではなく公開版の開始方式を参照し、公開後に再取得                                  | `automation-editor-page.dom.test.tsx`、`automation-draft-run-capability.test.ts` |
+| 3    | フォームからの無効な参加者分岐変更は422で応答し、Contact・訪問者・送信・履歴を途中保存しない                    | `program-form-recovery.test.ts`                                                  |
+| 4    | アーカイブ済み施策の関連付け意図を読み、権限確認後に解除・有効な施策への付け替えを許可                          | `program-form-recovery.test.ts`                                                  |
+| 5    | ステータス候補は1,000件に制限しつつ、条件が参照するProject・定義版・ステータスはDBから直接検証                  | `segment-program-validation.test.ts`                                             |
+| 6    | フォーム送信待ちの `resourceId` を複製の共有依存へ追加し、確定時にも参照を検証                                  | `project-clone-decision-references.test.ts`                                      |
+| 7    | アーカイブ済みContactへの全体・カテゴリスコア、イベント、実行済み記録を共通の原子的な条件で停止                 | `automation-score-archived-contact.test.ts`                                      |
+
+DBスキーマの変更はありません。MCPの `start_automation_run` は直接の実行ID・公開版指定から確認Token方式へ変更しています。操作手順は[Automationガイド](automation-execution.md)を参照してください。
+
+複製の追加レビューで、カスタムイベントの識別子がコピー対象のフォームIDと一致すると書き換わる既存の問題も再現・修正しました。フォーム送信待ちの内部参照は差し替え、カスタムイベントの識別子はそのまま保持します。
+
+修正後の `pnpm check` は全27タスク成功しました。Serverは122ファイル614テスト、Clientは83ファイル337テスト、バンドル後の公開フォーム2テストが成功し、型検査・lint・format・ビルド・未使用コード・アーキテクチャ・SQL境界検査も通過しています。検証DBは全migrationを適用した一時DBを使用し、既存DBへは変更していません。

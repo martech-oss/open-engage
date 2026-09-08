@@ -79,6 +79,7 @@ describe("Remote MCP project and automation APIs", () => {
         "list_project_clones",
         "get_automation_execution_options",
         "preview_automation_run",
+        "prepare_automation_run",
         "start_automation_run",
         "list_automation_runs",
         "get_automation_run",
@@ -107,7 +108,7 @@ describe("Remote MCP project and automation APIs", () => {
       expect.arrayContaining(["id", "jobId", "requestKey"]),
     );
     expect(schema("start_automation_run").required).toEqual(
-      expect.arrayContaining(["id", "requestId", "versionId"]),
+      expect.arrayContaining(["confirmationToken", "confirmation"]),
     );
     expect(schema("save_project_variable").required).toEqual(
       expect.arrayContaining(["key", "type", "value", "expectedRevision"]),
@@ -338,7 +339,7 @@ describe("Remote MCP project and automation APIs", () => {
     ).toEqual({ ok: true });
   });
 
-  it("creates and publishes a batch graph and preserves preview version and run request identity", async () => {
+  it("creates and publishes a batch graph and requires one-use confirmation for its preview version", async () => {
     const { token, client } = await seedWorkspaceClient(env.DB);
     const contact = await client.contacts.create({ email: "mcp-run@example.com" });
     const definition = {
@@ -387,7 +388,25 @@ describe("Remote MCP project and automation APIs", () => {
     expect(
       (await call(token, "start_automation_run", { id, requestId: "missing-version" })).isError,
     ).toBe(true);
-    const runInput = { id, requestId: crypto.randomUUID(), versionId: preview.versionId };
+    expect(
+      (
+        await call(token, "start_automation_run", {
+          id,
+          requestId: crypto.randomUUID(),
+          versionId: preview.versionId,
+        })
+      ).isError,
+    ).toBe(true);
+    const prepared = await success(token, "prepare_automation_run", { id });
+    expect(prepared).toMatchObject({
+      count: 1,
+      versionId: preview.versionId,
+      requiresConfirmation: true,
+    });
+    const runInput = {
+      confirmationToken: prepared.confirmationToken,
+      confirmation: "CONFIRM SEND",
+    };
     const run = await success(token, "start_automation_run", runInput);
     const direct = await client.automations.runDetail({ id, runId: run.id as string });
     expect
@@ -398,7 +417,7 @@ describe("Remote MCP project and automation APIs", () => {
       })
       .toEqual({ mcpCount: 1, apiCount: 1, targetIds: [contact.id] });
     expect(run).toMatchObject({ automationVersionId: preview.versionId });
-    expect(await success(token, "start_automation_run", runInput)).toMatchObject({ id: run.id });
+    expect((await call(token, "start_automation_run", runInput)).isError).toBe(true);
     expect(await success(token, "get_automation_run", { id, runId: run.id })).toMatchObject({
       run: { id: run.id },
       targets: [expect.objectContaining({ contactId: expect.any(String) })],

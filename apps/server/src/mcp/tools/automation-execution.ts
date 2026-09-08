@@ -1,8 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ORPCError } from "@orpc/server";
+import * as z from "zod";
 
 import { automationsContract } from "@openengage/orpc";
 
+import { hasWorkspaceRole } from "../../auth/authorization";
 import { registerRpcTool } from "../rpc-tool";
+import {
+  consumeAutomationRunConfirmation,
+  createAutomationRunConfirmation,
+} from "../run-confirmation-store";
 import type { McpToolContext } from "../types";
 
 export function registerAutomationExecutionTools(server: McpServer, context: McpToolContext): void {
@@ -21,18 +28,57 @@ export function registerAutomationExecutionTools(server: McpServer, context: Mcp
   registerRpcTool(
     server,
     "preview_automation_run",
-    "Preview the published batch audience count and sample, returning versionId for start_automation_run.",
+    "Preview the published batch audience count and sample without starting it. Use prepare_automation_run to request user confirmation.",
     contract.previewRun["~orpc"].inputSchema,
     api.previewRun,
     read,
   );
   registerRpcTool(
     server,
+    "prepare_automation_run",
+    "Prepare, but do not start, a published batch. Show the audience and delivery warning to the user and obtain explicit confirmation before starting. The single-use token expires in five minutes.",
+    contract.previewRun["~orpc"].inputSchema,
+    async ({ id }) => {
+      const preview = await api.previewRun({ id });
+      const confirmation = await createAutomationRunConfirmation(
+        context.database,
+        context.workspace,
+        id,
+        preview.versionId,
+      );
+      return {
+        ...preview,
+        automationId: id,
+        requiresConfirmation: true,
+        confirmationToken: confirmation.token,
+        expiresAt: confirmation.expiresAt,
+        warning:
+          "This batch can trigger real email or webhook delivery for its audience. Ask the user to explicitly confirm before calling start_automation_run with confirmation exactly CONFIRM SEND. The audience is frozen when the run starts.",
+      };
+    },
+  );
+  registerRpcTool(
+    server,
     "start_automation_run",
-    "Start a batch with the preview's versionId and a stable requestId. This freezes targets and can trigger real email or webhook delivery.",
-    contract.startRun["~orpc"].inputSchema,
-    api.startRun,
-    { idempotent: true, openWorld: true },
+    "Start the prepared batch only after explicit user confirmation. Requires the single-use token from prepare_automation_run and exact CONFIRM SEND acknowledgement. This freezes targets and can trigger real email or webhook delivery.",
+    z.object({ confirmationToken: z.string().uuid(), confirmation: z.literal("CONFIRM SEND") }),
+    async ({ confirmationToken }) => {
+      if (!hasWorkspaceRole(context.workspace.role, "marketer"))
+        throw new ORPCError("FORBIDDEN", {
+          message: "A marketer or higher workspace role is required.",
+        });
+      const pending = await consumeAutomationRunConfirmation(
+        context.database,
+        context.workspace,
+        confirmationToken,
+      );
+      if (!pending)
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Confirmation token is invalid or expired.",
+        });
+      return api.startRun(pending);
+    },
+    { destructive: true, openWorld: true },
   );
   registerRpcTool(
     server,

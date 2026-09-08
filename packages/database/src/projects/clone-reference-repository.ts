@@ -111,6 +111,19 @@ export class ProjectCloneReferenceRepository extends WorkspaceRepository {
       }
       if (!value || typeof value !== "object") return;
       const condition = value as Record<string, unknown>;
+      if (
+        condition.type === "decision" &&
+        condition.config &&
+        typeof condition.config === "object"
+      ) {
+        const config = condition.config as Record<string, unknown>;
+        if (
+          config.event === "form_submitted" &&
+          typeof config.resourceId === "string" &&
+          config.resourceId
+        )
+          add("form", config.resourceId);
+      }
       if (condition.kind === "condition") {
         const slugKind = ({ segment: "segment", tag: "tag", subscription: "topic" } as const)[
           condition.field as "segment" | "tag" | "subscription"

@@ -23,12 +23,16 @@ export class ProgramError extends Error {
   }
 }
 export class ProjectProgramRepository extends WorkspaceRepository {
-  public async project(projectId: string) {
+  public async project(projectId: string, options: { includeArchived?: boolean } = {}) {
     const row = await this.database.orm
       .select()
       .from(projects)
       .where(
-        and(this.inWorkspace(projects), eq(projects.id, projectId), isNull(projects.archivedAt)),
+        and(
+          this.inWorkspace(projects),
+          eq(projects.id, projectId),
+          options.includeArchived ? undefined : isNull(projects.archivedAt),
+        ),
       )
       .get();
     if (!row) throw new ProgramError("not_found", "Project not found");

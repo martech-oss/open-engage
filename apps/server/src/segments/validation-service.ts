@@ -10,7 +10,7 @@ import {
 } from "@openengage/core/segments";
 import { formatIssuePath, type WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { SegmentRepository } from "@openengage/database/segments";
+import { SegmentCatalogRepository, SegmentRepository } from "@openengage/database/segments";
 
 const SYSTEM_EVENTS = [
   "project_member_joined",
@@ -96,10 +96,15 @@ export async function validateSegmentFilter(
   filter: unknown,
   providedCatalog?: SegmentGenerationCatalog,
 ): Promise<SegmentValidationResult> {
-  return validateSegmentFilterWithCatalog(
-    filter,
-    providedCatalog ?? (await loadSegmentCatalog(database, workspace)),
-  );
+  const catalog = providedCatalog ?? (await loadSegmentCatalog(database, workspace));
+  const parsed = segmentFilterSchema.safeParse(filter);
+  if (!parsed.success) return validateSegmentFilterWithCatalog(filter, catalog);
+  // Picker/generation catalogs are bounded; pinned versions must be resolved directly.
+  const projectStatuses = await new SegmentCatalogRepository(
+    database,
+    workspace,
+  ).loadReferencedProgramStatusOptions(parsed.data);
+  return validateSegmentFilterWithCatalog(parsed.data, { ...catalog, projectStatuses });
 }
 
 export function validateSegmentFilterWithCatalog(

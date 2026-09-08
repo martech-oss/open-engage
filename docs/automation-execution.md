@@ -30,6 +30,8 @@ Automation はイベント、バッチ、他のフローからの呼び出しで
 
 ## バッチの対象台帳と予定
 
+Remote MCPでは、`preview_automation_run` は参照専用です。実行時は `prepare_automation_run` が返す対象人数・サンプル・配信警告をユーザーへ示して明示確認を得てから、`start_automation_run` に `confirmationToken` と正確な `CONFIRM SEND` を渡します。確認は5分以内に一度だけ使え、別のWorkspace・APIキーでは使用できません。対象Automation・公開版・実行要求はTokenに保存するため、開始時に差し替えられません。公開版が変わった場合は準備からやり直します。REST・SDKの実行要求と管理画面の確認手順は従来どおりです。
+
 プレビューは現在の対象人数と最大20人のサンプル、公開版 ID を返します。対象 Contact ID の集合を固定する時点は実行開始です。`automation_runs` と `automation_run_targets` を同じ D1 batch で作り、以後の条件・スコア・リスト所属変更では台帳を組み替えません。登録直前に Contact のアーカイブ状態と再参加ルールを確認します。
 
 `workspace_id / automation_id / slot` は公開版を跨いで一意です。手動開始の slot は `manual:<requestId>`、予定開始は予定時刻の UTC 文字列です。要求の再送や Cron/Queue の重複で別の実行を作りません。登録完了時刻と全フロー完了時刻は別に保存します。

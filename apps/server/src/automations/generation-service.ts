@@ -66,7 +66,7 @@ export async function generateAutomation(
       cause: new Error(graphIssues.map((issue) => issue.message).join("; ")),
     });
   }
-  const resourceIssues = validateAutomationResources(proposal.definition, resources);
+  const resourceIssues = await validateAutomationResources(proposal.definition, resources);
   if (resourceIssues.length > 0) {
     throw new AutomationGenerationError("failed", {
       cause: new Error(resourceIssues.map((issue) => issue.message).join("; ")),

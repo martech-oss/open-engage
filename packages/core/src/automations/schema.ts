@@ -302,6 +302,7 @@ export type AutomationDefinition = z.infer<typeof automationDefinitionSchema>;
 export const automationDraftSchema = z.object({
   graph: automationDefinitionSchema,
   status: automationStatusSchema,
+  publishedTriggerSource: z.string().nullable(),
   publishability: z.object({
     publishable: z.boolean(),
     capabilityState: z.enum(["transactional-compatible", "delivery-capability-blocked"]).nullable(),

@@ -170,12 +170,7 @@ export function AutomationBuilder({
       {view === "runs" ? (
         <AutomationRunsPanel
           id={id}
-          canStart={
-            status === "active" &&
-            definition.nodes.some(
-              (node) => node.type === "source" && node.config.source === "batch",
-            )
-          }
+          canStart={status === "active" && initialDraft.publishedTriggerSource === "batch"}
         />
       ) : (
         <>

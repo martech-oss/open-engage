@@ -34,6 +34,7 @@ export async function getAutomationDraft(
   return {
     graph: row.graph,
     status: normalizeAutomationStatus(row.status),
+    publishedTriggerSource: row.publishedTriggerSource,
     publishability: await getAutomationPublishability(database, workspace, row.graph),
   };
 }

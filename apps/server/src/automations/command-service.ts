@@ -322,7 +322,7 @@ export function createAutomationCommandService(input: {
             childId,
           ),
         async (graph) => {
-          const issues = validateAutomationResources(
+          const issues = await validateAutomationResources(
             graph,
             await loadAutomationResourceContext(input.database, input.workspace),
           );
