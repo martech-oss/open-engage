@@ -76,6 +76,8 @@ export class ScoringRepository extends WorkspaceRepository {
         matchType: scoringRules.matchType,
         matchValue: scoringRules.matchValue,
         points: scoringRules.points,
+        decayDays: scoringRules.decayDays,
+        maxScore: scoringRules.maxScore,
         categoryId: scoringCategories.id,
         categoryName: scoringCategories.name,
         tagId: tags.id,
@@ -136,7 +138,7 @@ export class ScoringRepository extends WorkspaceRepository {
     const result = await this.database.orm.insert(scoringRules).select(
       sql`SELECT
         ${id}, ${this.context.workspaceId}, ${input.name}, ${input.eventType},
-        ${input.matchType}, ${input.matchValue}, ${input.points}, ${input.categoryId},
+        ${input.matchType}, ${input.matchValue}, ${input.points}, ${input.decayDays ?? null}, ${input.maxScore ?? null}, ${input.categoryId},
         ${input.tagId}, ${input.enabled}, NULL, ${now}, ${now}
       WHERE ${this.ruleReferencesAreValid(input)}`,
     );

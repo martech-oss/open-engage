@@ -196,6 +196,16 @@ it("connects anonymous LP -> form -> score segment -> handoff -> won deal -> ROI
     attributedValue: 500,
     roi: 400,
   });
+  const acquisition = await client.reports.acquisition({ from: today, to: today, currency: "JPY" });
+  expect(acquisition.sources.find((row) => row.source === "test")).toMatchObject({
+    visitors: 1,
+    submissions: 1,
+    submittingContacts: 1,
+    mql: 1,
+    dealsCreated: 1,
+    won: 1,
+    wonValue: 500,
+  });
   const progress = await client.reports.lifecycle({
     from: today,
     to: today,

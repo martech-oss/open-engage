@@ -37,9 +37,14 @@ export class VisitorMessageRepository extends WorkspaceRepository {
     return row?.contactId ?? null;
   }
 
-  public async listActiveSiteMessagesForVisitor(now: string): Promise<
+  public async listActiveSiteMessagesForVisitor(
+    now: string,
+    identified = false,
+  ): Promise<
     Array<{
       id: string;
+      audience: "identified" | "all";
+      frequency: "session" | "page";
       headline: string;
       body: string;
       ctaLabel: string;
@@ -50,6 +55,8 @@ export class VisitorMessageRepository extends WorkspaceRepository {
     return await this.database.orm
       .select({
         id: siteMessages.id,
+        audience: siteMessages.audience,
+        frequency: siteMessages.frequency,
         headline: siteMessages.headline,
         body: siteMessages.body,
         ctaLabel: siteMessages.ctaLabel,
@@ -61,6 +68,7 @@ export class VisitorMessageRepository extends WorkspaceRepository {
         and(
           this.inWorkspace(siteMessages),
           eq(siteMessages.status, "published"),
+          identified ? undefined : eq(siteMessages.audience, "all"),
           or(isNull(siteMessages.startsAt), lte(siteMessages.startsAt, now)),
           or(isNull(siteMessages.endsAt), gte(siteMessages.endsAt, now)),
         ),

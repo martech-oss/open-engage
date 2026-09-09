@@ -44,7 +44,12 @@ export const landingPageSchema = z.object({
 });
 export type LandingPage = z.infer<typeof landingPageSchema>;
 
+export const siteMessageAudienceSchema = z.enum(["identified", "all"]);
+export const siteMessageFrequencySchema = z.enum(["session", "page"]);
+
 export const siteMessageSchema = z.object({
+  audience: siteMessageAudienceSchema.default("identified"),
+  frequency: siteMessageFrequencySchema.default("session"),
   id: z.string(),
   name: z.string(),
   status: publishStatusSchema,
@@ -144,6 +149,8 @@ export const siteMessageScheduleSchema = z
   });
 
 export const siteMessageWriteSchema = z.object({
+  audience: siteMessageAudienceSchema.default("identified"),
+  frequency: siteMessageFrequencySchema.default("session"),
   name: z.string().trim().min(1).max(191),
   status: publishStatusSchema.default("draft"),
   headline: z.string().trim().min(1).max(191),
@@ -154,7 +161,7 @@ export const siteMessageWriteSchema = z.object({
   startsAt: z.iso.datetime().nullable(),
   endsAt: z.iso.datetime().nullable(),
 });
-export type SiteMessageWrite = z.infer<typeof siteMessageWriteSchema>;
+export type SiteMessageWrite = z.input<typeof siteMessageWriteSchema>;
 
 export const siteTrackingWriteSchema = z.object({
   enabled: z.boolean(),

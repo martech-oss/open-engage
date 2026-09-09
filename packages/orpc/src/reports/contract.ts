@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 
 import {
+  acquisitionReportSchema,
   automationsReportSchema,
   campaignsReportSchema,
   campaignReportQuerySchema,
@@ -23,6 +24,11 @@ const analystErrors = authedErrors;
 const rangeInput = reportDateRangeSchema;
 
 export const reportsContract = {
+  acquisition: oc
+    .route({ method: "GET", path: "/reports/acquisition" })
+    .errors(analystErrors)
+    .input(reportQuerySchema)
+    .output(acquisitionReportSchema),
   overview: oc
     .route({ method: "GET", path: "/reports/overview" })
     .errors(analystErrors)

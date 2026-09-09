@@ -183,6 +183,20 @@
       "when": 1788853299214,
       "tag": "0025_program_member_import_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1788932145942,
+      "tag": "0026_scoring_limits_decay",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1788932560353,
+      "tag": "0027_anonymous_site_messages",
+      "breakpoints": true
     }
   ]
 }

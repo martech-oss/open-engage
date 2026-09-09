@@ -120,7 +120,7 @@ export function SiteTrackingPage(): ReactNode {
               <CardHeader>
                 <CardTitle>設置コード</CardTitle>
                 <CardDescription>
-                  同意取得後、追跡するすべてのページで読み込んでください。
+                  CTAを表示するページで読み込んでください。計測は同意取得後に開始します。
                 </CardDescription>
                 <CardAction>
                   <CopyButton value={trackingCode} label="コピー" />
@@ -135,11 +135,13 @@ export function SiteTrackingPage(): ReactNode {
           </div>
           <Alert>
             <Info />
-            <AlertTitle>訪問者の同意が必須です</AlertTitle>
+            <AlertTitle>計測には訪問者の同意が必須です</AlertTitle>
             <AlertDescription>
-              サンプルコードの consent: true
-              は、Cookieバナー等で同意を得た後にだけ設定してください。
-              フォーム送信後は再訪時も識別されます。外部アプリからの識別には、管理APIで発行したトークンを
+              初期設定は consent: false です。Cookieバナー等で同意を得た後に
+              openengage.consent(true)、撤回時に openengage.consent(false) を呼び出してください。
+              スクリプト読込前に同意が決まった場合は window.openengageSettings.consent
+              に反映します。
+              すべての訪問者向けCTAは未同意でも表示されます。外部アプリからの識別には、管理APIで発行したトークンを
               openengage.identify(token) に渡します。
             </AlertDescription>
           </Alert>
@@ -280,7 +282,7 @@ function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): R
 function buildTrackingCode(scriptUrl: string): string {
   return `<script>
   window.openengageSettings = {
-    consent: true
+    consent: false
   };
 </script>
 <script async src="${scriptUrl}"></script>`;

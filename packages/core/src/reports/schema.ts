@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import { ACQUISITION_CHANNELS } from "../web/acquisition-source";
+
 const dashboardEventSchema = z.object({
   type: z.string(),
   occurredAt: z.string(),
@@ -79,6 +81,7 @@ export const reportCategorySchema = z.enum([
   "site",
   "campaigns",
   "lifecycle",
+  "acquisition",
 ]);
 export type ReportCategory = z.infer<typeof reportCategorySchema>;
 
@@ -386,3 +389,30 @@ export const lifecycleReportSchema = z.object({
   cohorts: z.array(lifecycleMetricsSchema.extend({ day: z.iso.date() })),
 });
 export type LifecycleReport = z.infer<typeof lifecycleReportSchema>;
+
+const acquisitionMetricsSchema = z.object({
+  pageViews: int,
+  visitors: int,
+  submissions: int,
+  submittingContacts: int,
+  mql: int,
+  dealsCreated: int,
+  won: int,
+  wonValue: z.number().nonnegative(),
+});
+export const acquisitionReportSchema = z.object({
+  category: z.literal("acquisition"),
+  range: reportRangeOutputSchema,
+  currency: z.string(),
+  attributionModel: z.literal("first_retained_touch"),
+  summary: acquisitionMetricsSchema,
+  sources: z.array(
+    acquisitionMetricsSchema.extend({
+      channel: z.enum(ACQUISITION_CHANNELS),
+      source: z.string(),
+      medium: z.string(),
+      campaign: z.string(),
+    }),
+  ),
+});
+export type AcquisitionReport = z.infer<typeof acquisitionReportSchema>;

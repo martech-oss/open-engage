@@ -120,6 +120,7 @@ export function ScoringRuleEditorView({
           ))}
         </FormNativeSelect>
       </FieldGroup>
+      <ScoringLifetimeFields item={item} />
       <FormNativeSelect
         label="状態"
         name="enabled"
@@ -129,5 +130,32 @@ export function ScoringRuleEditorView({
         <FormSelectOption value="disabled">停止中</FormSelectOption>
       </FormNativeSelect>
     </FormDialog>
+  );
+}
+
+function ScoringLifetimeFields({ item }: Pick<ScoringRuleEditorViewProps, "item">): ReactNode {
+  return (
+    <FieldGroup className="grid gap-4 sm:grid-cols-2">
+      <FormInput
+        label="減衰日数"
+        name="decayDays"
+        type="number"
+        min={1}
+        max={3650}
+        step={1}
+        defaultValue={item?.decayDays ?? ""}
+        description="正の加点のみ。イベントから指定日数で0点になります。空欄は減衰なし。"
+      />
+      <FormInput
+        label="コンタクトごとの加点上限"
+        name="maxScore"
+        type="number"
+        min={1}
+        max={1000000}
+        step={1}
+        defaultValue={item?.maxScore ?? ""}
+        description="このルールが残している加点の合計上限。空欄は上限なし。"
+      />
+    </FieldGroup>
   );
 }

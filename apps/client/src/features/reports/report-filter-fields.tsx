@@ -5,6 +5,17 @@ import { FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-
 import { reportProjectOptions, reportOwnerOptions, type ReportSearch } from "./report-api";
 
 export function ReportFilterFields({ search }: { search: ReportSearch }) {
+  if (search.view === "acquisition")
+    return (
+      <FormInput
+        label="商談・受注の通貨（換算なし）"
+        name="currency"
+        maxLength={3}
+        pattern="[A-Za-z]{3}"
+        defaultValue={search.currency || "JPY"}
+        required
+      />
+    );
   if (search.view === "campaigns")
     return (
       <>

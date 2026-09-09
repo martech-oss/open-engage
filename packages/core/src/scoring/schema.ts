@@ -87,6 +87,8 @@ export const scoringRuleSchema = z.object({
   matchType: scoringMatchTypeSchema,
   matchValue: z.string().nullable(),
   points: z.number().int(),
+  decayDays: z.number().int().nullable(),
+  maxScore: z.number().int().nullable(),
   categoryId: z.string().nullable(),
   categoryName: z.string().nullable(),
   tagId: z.string().nullable(),
@@ -104,9 +106,15 @@ export const scoringRuleWriteSchema = z
     matchType: scoringMatchTypeSchema.default("any"),
     matchValue: z.string().trim().max(2_000).nullable().default(null),
     points: z.number().int().min(-1_000).max(1_000),
+    decayDays: z.number().int().min(1).max(3650).nullable().default(null),
+    maxScore: z.number().int().min(1).max(1_000_000).nullable().default(null),
     categoryId: z.string().min(1).nullable().default(null),
     tagId: z.string().min(1).nullable().default(null),
     enabled: z.boolean().default(true),
+  })
+  .refine((rule) => rule.points > 0 || (rule.decayDays === null && rule.maxScore === null), {
+    path: ["points"],
+    message: "減衰・上限は正の加点ルールにのみ設定できます",
   })
   .refine((rule) => rule.matchType === "any" || Boolean(rule.matchValue?.trim()), {
     path: ["matchValue"],
@@ -116,7 +124,10 @@ export const scoringRuleWriteSchema = z
     path: ["points"],
     message: "点数かタグのどちらかを設定してください",
   });
-export type ScoringRuleWrite = z.infer<typeof scoringRuleWriteSchema>;
+export type ScoringRuleWrite = Omit<
+  z.infer<typeof scoringRuleWriteSchema>,
+  "decayDays" | "maxScore"
+> & { decayDays?: number | null; maxScore?: number | null };
 
 export const gradingCriterionSchema = z.object({
   id: z.string(),

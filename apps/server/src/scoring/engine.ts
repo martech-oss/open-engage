@@ -44,22 +44,20 @@ export async function applyScoringForEvent(
   const matched = rules.filter((rule) => matchesRule(rule, input));
   if (matched.length === 0) return { total: 0, tagIds: [] };
 
-  let total = 0;
   const tagIds = new Set<string>();
   for (const rule of matched) {
-    if (rule.points !== 0) {
-      total += rule.points;
-    }
     if (rule.tagId) tagIds.add(rule.tagId);
   }
 
-  await repository.applyScore({
+  const total = await repository.applyScore({
     workspaceId: input.workspaceId,
     contactId: input.contactId,
     contactEventId: input.id,
     effects: matched.map((rule) => ({
       ruleId: rule.id,
       delta: rule.points,
+      decayDays: rule.decayDays,
+      maxScore: rule.maxScore,
       categoryId: rule.categoryId,
       tagId: rule.tagId,
     })),
