@@ -136,6 +136,62 @@ function browser(
 }
 
 describe("browser identity changes", () => {
+  it.each(["page", "session"])(
+    "replaces a visible public CTA after identification (%s)",
+    async (frequency) => {
+      const b = browser({ consent: true });
+      await b.flush();
+      await b.respondMessage([publicMessage]);
+      const original = b.body.children[0]!;
+      const selected = {
+        ...publicMessage,
+        id: "known",
+        audience: "identified",
+        identified: true,
+        frequency,
+      };
+      b.window.openengage.acceptIdentity("form-token");
+      await b.respondMessage([selected]);
+      expect(original.removed).toBe(true);
+      const visible = b.body.children.filter((element) => !element.removed);
+      expect(visible).toHaveLength(1);
+      visible[0]!.children.find((element) => element.tag === "a")!.listeners.get("click")!();
+      const events = b.requests.filter((r) => r.url.pathname.endsWith("/events"));
+      expect(events.map((r) => r.url.pathname)).toEqual([
+        "/messages/known/events",
+        "/messages/known/events",
+      ]);
+      expect(
+        events.map((r) => JSON.parse(typeof r.init?.body === "string" ? r.init.body : "")),
+      ).toEqual([
+        { visitorToken: "form-token", type: "impression", consent: true },
+        { visitorToken: "form-token", type: "click", consent: true },
+      ]);
+      b.window.openengage.acceptIdentity("refreshed-token");
+      await b.respondMessage([selected]);
+      expect(b.body.children.filter((element) => !element.removed)).toEqual(visible);
+      expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(2);
+      visible[0]!.children.find((element) => element.tag === "button")!.listeners.get("click")!();
+      b.window.openengage.acceptIdentity("next-token");
+      await b.respondMessage([selected]);
+      expect(b.body.children.filter((element) => !element.removed)).toHaveLength(0);
+      expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(2);
+    },
+  );
+
+  it("preserves the current CTA when the replacement has already been shown this session", async () => {
+    const b = browser({ consent: true, session: new Map([["openengage_message_known", "shown"]]) });
+    await b.flush();
+    await b.respondMessage([publicMessage]);
+    b.window.openengage.acceptIdentity("form-token");
+    await b.respondMessage([
+      { ...publicMessage, id: "known", audience: "identified", identified: true },
+    ]);
+    expect(b.body.children).toHaveLength(1);
+    expect(b.body.children[0]!.removed).toBe(false);
+    expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(0);
+  });
+
   it.each(["identity", "consent"])(
     "rejects an in-flight public CTA after a change to %s before rendering the identified CTA",
     async (change) => {

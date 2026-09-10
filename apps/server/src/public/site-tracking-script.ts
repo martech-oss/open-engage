@@ -89,7 +89,7 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
         identified = message.identified === true;
       }
       // Revalidate measurement even when the current CTA does not need to render again.
-      if (activeMessage) return;
+      if (activeMessage?.id === message.id) return;
       const key = "openengage_message_" + message.id;
       const memoryKey = message.frequency === "page" ? key + ":" + pageUrl : key;
       if (shownMessages.has(memoryKey)) return;
@@ -131,8 +131,9 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
         });
         container.append(link);
       }
+      activeMessage?.container.remove();
       document.body.append(container);
-      activeMessage = { container, audience: message.audience };
+      activeMessage = { id: message.id, container, audience: message.audience };
       shownMessages.add(memoryKey);
       if (settings.consent === true && message.frequency !== "page") {
         try { sessionStorage.setItem(key, "shown"); } catch {}
