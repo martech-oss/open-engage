@@ -23,6 +23,8 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
     stampRedirectLinks();
     try { localStorage.setItem(visitorKey, token); } catch {}
     window.dispatchEvent(new CustomEvent("openengage:identity", { detail: { visitorToken: token, consent: true } }));
+    // Form tokens and verified tracking responses both change message eligibility.
+    void loadMessage();
   }
   let recording = Promise.resolve();
   function record(type, resourceId, properties = {}) {
@@ -81,11 +83,13 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
         await new Promise(resolve => document.addEventListener("DOMContentLoaded", resolve, { once: true }));
       }
       const message = payload?.data?.[0];
-      if (!message || activeMessage || pageUrl !== window.location.href) return;
+      if (!message || pageUrl !== window.location.href) return;
       if (message.audience !== "all" && (!authenticated || settings.consent !== true || generation !== identityGeneration)) return;
       if (authenticated && settings.consent === true && generation === identityGeneration) {
         identified = message.identified === true;
       }
+      // Revalidate measurement even when the current CTA does not need to render again.
+      if (activeMessage) return;
       const key = "openengage_message_" + message.id;
       const memoryKey = message.frequency === "page" ? key + ":" + pageUrl : key;
       if (shownMessages.has(memoryKey)) return;
@@ -151,14 +155,12 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
 
   async function page() {
     // Public CTA must load even when tracking is refused, blocked or never resolves.
-    const generation = identityGeneration;
     void loadMessage();
-    const result = await record("page_viewed", window.location.href, {
+    await record("page_viewed", window.location.href, {
       title: document.title,
       referrer: document.referrer,
     });
     stampRedirectLinks();
-    if (result?.visitorToken && settings.consent === true && identityGeneration === generation + 1) await loadMessage();
   }
 
   // Custom Redirect URLs are shareable and carry no per-recipient token, so the

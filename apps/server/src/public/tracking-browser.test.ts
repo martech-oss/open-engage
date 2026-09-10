@@ -107,8 +107,8 @@ function browser(
   const flush = async () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   };
-  const respond = async (token: string) => {
-    pending.shift()?.({ json: async () => ({ data: { visitorToken: token, identified: true } }) });
+  const respond = async (token: string, identified = true) => {
+    pending.shift()?.({ json: async () => ({ data: { visitorToken: token, identified } }) });
     await flush();
   };
   const respondMessage = async (data: unknown) => {
@@ -136,6 +136,90 @@ function browser(
 }
 
 describe("browser identity changes", () => {
+  it("revalidates a form token before measuring clicks on an already visible public CTA", async () => {
+    const b = browser({ consent: true });
+    await b.flush();
+    await b.respondMessage([{ ...publicMessage, identified: false }]);
+    await b.respond("anonymous-token", false);
+    await b.respondMessage([{ ...publicMessage, identified: false }]);
+    const link = b.body.children[0]!.children.find((element) => element.tag === "a")!;
+    b.window.openengage.acceptIdentity("form-token");
+    await b.flush();
+    expect(
+      b.requests
+        .filter((r) => r.url.pathname === "/messages")
+        .at(-1)!
+        .url.searchParams.get("visitorToken"),
+    ).toBe("form-token");
+    link.listeners.get("click")!();
+    expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(0);
+    await b.respondMessage([{ ...publicMessage, identified: true }]);
+    link.listeners.get("click")!();
+    const events = b.requests.filter((r) => r.url.pathname.endsWith("/events"));
+    expect(events).toHaveLength(1);
+    expect(
+      JSON.parse(typeof events[0]!.init?.body === "string" ? events[0]!.init.body : ""),
+    ).toEqual({ visitorToken: "form-token", type: "click", consent: true });
+    expect(b.body.children).toHaveLength(1);
+  });
+
+  it("loads an identified-only CTA after an embedded form binds the visitor", async () => {
+    const b = browser({ consent: true });
+    await b.flush();
+    await b.respondMessage([]);
+    await b.respond("anonymous-token", false);
+    await b.respondMessage([]);
+    b.window.openengage.acceptIdentity("form-token");
+    await b.flush();
+    await b.respondMessage([{ ...publicMessage, audience: "identified", identified: true }]);
+    expect(b.body.children).toHaveLength(1);
+    expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(1);
+  });
+
+  it("reloads messages when the initial queued page consumes a synchronous identify token", async () => {
+    const b = browser({ consent: true });
+    void b.window.openengage.identify("signed-contact");
+    await b.flush();
+    await b.respondMessage([]);
+    await b.respondMessage([]);
+    const beacon = b.requests.find((r) => r.url.pathname === "/api/public/track/acme")!;
+    expect(
+      JSON.parse(typeof beacon.init?.body === "string" ? beacon.init.body : "").identityToken,
+    ).toBe("signed-contact");
+    await b.respond("identified-first-token");
+    expect(
+      b.requests
+        .filter((r) => r.url.pathname === "/messages")
+        .at(-1)!
+        .url.searchParams.get("visitorToken"),
+    ).toBe("identified-first-token");
+    await b.respondMessage([{ ...publicMessage, audience: "identified", identified: true }]);
+    await b.respond("identified-next-token");
+    await b.respondMessage([{ ...publicMessage, audience: "identified", identified: true }]);
+    expect(b.body.children).toHaveLength(1);
+    expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(1);
+  });
+
+  it("ignores an old form-identity response before measuring the current visitor", async () => {
+    const b = browser({ consent: true, visitorToken: "saved-token" });
+    await b.flush();
+    await b.respondMessage([{ ...publicMessage, identified: true }]);
+    const link = b.body.children[0]!.children.find((element) => element.tag === "a")!;
+    b.window.openengage.acceptIdentity("older-form-token");
+    b.window.openengage.acceptIdentity("current-form-token");
+    await b.respondMessage([{ ...publicMessage, identified: true }]);
+    link.listeners.get("click")!();
+    expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(1);
+    await b.respondMessage([{ ...publicMessage, identified: true }]);
+    link.listeners.get("click")!();
+    const events = b.requests.filter((r) => r.url.pathname.endsWith("/events"));
+    expect(events).toHaveLength(2);
+    expect(
+      JSON.parse(typeof events[1]!.init?.body === "string" ? events[1]!.init.body : "")
+        .visitorToken,
+    ).toBe("current-form-token");
+  });
+
   it("restores a saved visitor only after a delayed consent grant and clears it on withdrawal", async () => {
     const b = browser({ consent: false, visitorToken: "saved-token" });
     await b.flush();
