@@ -60,6 +60,8 @@ async function restoreLegacyScoringRulesTable(): Promise<void> {
       match_type text DEFAULT 'any' NOT NULL,
       match_value text,
       points integer DEFAULT 0 NOT NULL,
+      decay_days integer,
+      max_score integer,
       category_id text,
       tag_id text,
       enabled integer DEFAULT true NOT NULL,

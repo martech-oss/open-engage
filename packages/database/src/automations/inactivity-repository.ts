@@ -26,7 +26,13 @@ export class AutomationInactivityRepository extends DatabaseRepository {
     }>
   > {
     const orm = this.database.orm;
-    const lastActivity = sql<string>`COALESCE((SELECT MAX(${contactEvents.occurredAt}) FROM ${contactEvents} WHERE ${contactEvents.workspaceId}=${contacts.workspaceId} AND ${contactEvents.contactId}=${contacts.id}),${contacts.createdAt})`;
+    // Derived score updates must not renew customer activity or its reentry identity.
+    const lastActivity = sql<string>`COALESCE((
+      SELECT MAX(${contactEvents.occurredAt}) FROM ${contactEvents}
+      WHERE ${contactEvents.workspaceId}=${contacts.workspaceId}
+        AND ${contactEvents.contactId}=${contacts.id}
+        AND ${contactEvents.type}<>'score_changed'
+    ),${contacts.createdAt})`;
     return await orm
       .select({
         automationVersionId: automationTriggers.automationVersionId,
@@ -52,11 +58,7 @@ export class AutomationInactivityRepository extends DatabaseRepository {
           eq(automations.status, "active"),
           eq(automations.publishedVersionId, automationTriggers.automationVersionId),
           eq(contacts.status, "active"),
-          sql`julianday(COALESCE((
-            SELECT MAX(${contactEvents.occurredAt}) FROM ${contactEvents}
-            WHERE ${contactEvents.workspaceId} = ${contacts.workspaceId}
-              AND ${contactEvents.contactId} = ${contacts.id}
-          ), ${contacts.createdAt})) <= julianday(${now}) - ${automationTriggers.inactivityDays}`,
+          sql`julianday(${lastActivity}) <= julianday(${now}) - ${automationTriggers.inactivityDays}`,
           notExists(
             orm
               .select({ value: sql`1` })

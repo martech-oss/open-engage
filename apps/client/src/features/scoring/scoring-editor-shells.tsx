@@ -113,6 +113,12 @@ function readRuleValues(form: FormData): ScoringRuleWrite {
     matchType: getFormString(form, "matchType") as ScoringRuleRow["matchType"],
     matchValue: matchValue || null,
     points: Number(getFormString(form, "points")) || 0,
+    decayDays: getFormString(form, "decayDays").trim()
+      ? Number(getFormString(form, "decayDays"))
+      : null,
+    maxScore: getFormString(form, "maxScore").trim()
+      ? Number(getFormString(form, "maxScore"))
+      : null,
     categoryId: categoryId || null,
     tagId: tagId || null,
     enabled: getFormString(form, "enabled") !== "disabled",

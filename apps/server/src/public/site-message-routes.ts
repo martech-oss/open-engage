@@ -20,27 +20,40 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     const visitorToken = context.req.query("visitorToken");
     context.header("Cache-Control", "private, no-store");
     const pageUrl = context.req.query("url") ?? "";
-    if (!workspace || !visitorToken || context.req.query("consent") !== "true") {
+    if (!workspace) {
       return context.json({ data: [] });
     }
     const origin = context.req.header("origin");
-    if (origin && !originAllowed(origin, workspace.allowedDomains)) {
+    const parsedPageUrl = URL.parse(pageUrl);
+    if (
+      !parsedPageUrl ||
+      !["http:", "https:"].includes(parsedPageUrl.protocol) ||
+      !originAllowed(parsedPageUrl.origin, workspace.allowedDomains) ||
+      (origin && (!/^https?:\/\//.test(origin) || !originAllowed(origin, workspace.allowedDomains)))
+    ) {
       return context.json({ data: [] });
     }
     const repository = new WebRepository(database, { workspaceId: workspace.id });
-    const visitor = await new VisitorIdentityService(database, context.env).resolve(
-      workspace.id,
-      visitorToken,
+    const visitor =
+      visitorToken && context.req.query("consent") === "true"
+        ? await new VisitorIdentityService(database, context.env).resolve(
+            workspace.id,
+            visitorToken,
+          )
+        : null;
+    const messages = await repository.listActiveSiteMessagesForVisitor(
+      new Date().toISOString(),
+      Boolean(visitor?.contactId),
     );
-    const contactId = visitor?.contactId;
-    if (!contactId) return context.json({ data: [] });
-    const messages = await repository.listActiveSiteMessagesForVisitor(new Date().toISOString());
     return context.json({
       data: messages
         .filter((message) => pagePatternMatches(pageUrl, message.pagePattern))
         .slice(0, 1)
         .map((message) => ({
           id: message.id,
+          identified: Boolean(visitor?.contactId),
+          audience: message.audience,
+          frequency: message.frequency,
           headline: message.headline,
           body: message.body,
           cta_label: message.ctaLabel,

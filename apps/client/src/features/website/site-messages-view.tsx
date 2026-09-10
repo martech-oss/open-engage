@@ -37,6 +37,16 @@ export function siteMessageColumns({
       cell: (item) => <code className="text-xs">{item.pagePattern}</code>,
     },
     {
+      key: "audience",
+      header: "対象",
+      cell: (item) => (item.audience === "all" ? "すべての訪問者" : "識別済みの連絡先"),
+    },
+    {
+      key: "frequency",
+      header: "再表示",
+      cell: (item) => (item.frequency === "page" ? "ページごと" : "セッションに1回"),
+    },
+    {
       key: "impressions",
       header: "表示",
       cell: (item) => item.impressionCount.toLocaleString(),
@@ -94,7 +104,7 @@ export function SiteMessagesSummary({ items }: { items: SiteMessageRow[] }): Rea
     {
       label: "表示",
       value: summary.impressions.toLocaleString(),
-      description: "識別済み連絡先への表示",
+      description: "同意済み・識別済みの連絡先への表示",
       icon: Eye,
     },
     {

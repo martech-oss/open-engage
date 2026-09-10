@@ -59,6 +59,27 @@ afterEach(() => {
 });
 
 describe("scoring editor composition sessions", () => {
+  it("submits optional decay and cap values and clears them with blank fields", async () => {
+    doubles.createRule.mutateAsync.mockRejectedValue(new Error("inspect draft"));
+    render(<RuleSessionHarness />, { wrapper: queryWrapper() });
+    fireEvent.click(screen.getByRole("button", { name: "ルールを開く" }));
+    fireEvent.change(screen.getByLabelText("減衰日数"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("コンタクトごとの加点上限"), {
+      target: { value: "100" },
+    });
+    fireEvent.submit(requiredForm());
+    await screen.findByText("inspect draft");
+    expect(doubles.createRule.mutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ decayDays: 30, maxScore: 100 }),
+    );
+    fireEvent.change(screen.getByLabelText("減衰日数"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("コンタクトごとの加点上限"), { target: { value: "" } });
+    fireEvent.submit(requiredForm());
+    await screen.findByText("inspect draft");
+    expect(doubles.createRule.mutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({ decayDays: null, maxScore: null }),
+    );
+  });
   it("drops a failed rule draft and conditional field when create is reopened", async () => {
     doubles.createRule.mutateAsync.mockRejectedValue(new Error("rule rejected"));
     render(<RuleSessionHarness />, { wrapper: queryWrapper() });

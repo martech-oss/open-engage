@@ -265,6 +265,8 @@ function rule(overrides: Partial<ScoringRuleRow> = {}): ScoringRuleRow {
     eventType: "custom_event" as const,
     matchType: "any" as const,
     matchValue: null,
+    decayDays: null,
+    maxScore: null,
     points: 5,
     categoryId: null,
     categoryName: null,

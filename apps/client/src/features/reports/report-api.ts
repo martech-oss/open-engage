@@ -3,6 +3,7 @@ import type { QueryFunction, QueryKey } from "@tanstack/react-query";
 import { formatIsoDate } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import type {
+  AcquisitionReport,
   AutomationsReport,
   CampaignsReport,
   LifecycleReport,
@@ -15,6 +16,7 @@ import type {
 } from "@openengage/core/reports";
 
 export type {
+  AcquisitionReport,
   AutomationsReport,
   CampaignsReport,
   LifecycleReport,
@@ -44,6 +46,7 @@ export interface ReportWorkspace {
   deals?: DealsReport;
   site?: SiteReport;
   campaigns?: CampaignsReport;
+  acquisition?: AcquisitionReport;
   lifecycle?: LifecycleReport;
 }
 
@@ -53,6 +56,7 @@ export interface ReportClock {
 }
 
 type ReportQueryOutput =
+  | AcquisitionReport
   | ReportsOverview
   | ContactsReport
   | AutomationsReport
@@ -82,6 +86,7 @@ export function createReportSearchDefaults(clock: ReportClock): ReportSearch {
 
 function isReportView(value: unknown): value is ReportView {
   return (
+    value === "acquisition" ||
     value === "overview" ||
     value === "contacts" ||
     value === "automations" ||
@@ -123,6 +128,10 @@ export function reportWorkspaceQueryOptions(search: ReportSearch): ReportQueryOp
   const dealsInput = { ...range, ...(search.currency ? { currency: search.currency } : {}) };
 
   switch (search.view) {
+    case "acquisition":
+      return withWorkspaceSelection(
+        orpcQuery.reports.acquisition.queryOptions({ input: dealsInput }),
+      );
     case "overview":
       return withWorkspaceSelection(orpcQuery.reports.overview.queryOptions({ input: dealsInput }));
     case "contacts":
@@ -168,6 +177,8 @@ function withWorkspaceSelection<Output extends ReportQueryOutput>(generated: {
 function toReportWorkspace(output: ReportQueryOutput): ReportWorkspace {
   if ("contacts" in output) return { view: "overview", ...output };
   switch (output.category) {
+    case "acquisition":
+      return { view: output.category, acquisition: output };
     case "contacts":
       return { view: output.category, contacts: output };
     case "automations":

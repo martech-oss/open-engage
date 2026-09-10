@@ -12,6 +12,7 @@ describe("report schemas", () => {
       "site",
       "campaigns",
       "lifecycle",
+      "acquisition",
     ]);
   });
 

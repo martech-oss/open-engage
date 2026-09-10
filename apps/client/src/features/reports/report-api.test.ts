@@ -41,3 +41,14 @@ describe("report queries", () => {
     );
   });
 });
+
+it("keeps the acquisition view and currency when parsing and querying", () => {
+  const defaults = createReportSearchDefaults({ now: "2026-01-31T00:00:00.000Z", timeZone: "UTC" });
+  const search = parseReportSearch({ view: "acquisition", currency: "USD" }, defaults);
+  expect(search.view).toBe("acquisition");
+  expect(reportWorkspaceQueryOptions(search).queryKey).toEqual(
+    orpcQuery.reports.acquisition.queryOptions({
+      input: { from: search.from, to: search.to, currency: "USD" },
+    }).queryKey,
+  );
+});

@@ -60,6 +60,8 @@ export const scoringRules = sqliteTable(
     matchType: text("match_type").default("any").notNull(),
     matchValue: text("match_value"),
     points: integer().default(0).notNull(),
+    decayDays: integer("decay_days"),
+    maxScore: integer("max_score"),
     categoryId: text("category_id").references(() => scoringCategories.id, {
       onDelete: "set null",
     }),
@@ -196,6 +198,37 @@ export const scoreEvents = sqliteTable(
       columns: [table.workspaceId, table.contactId],
       foreignColumns: [contacts.workspaceId, contacts.id],
       name: "score_events_workspace_contact_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+/** New positive contributions only; independent of event retention and rule archival. */
+export const scoreContributions = sqliteTable(
+  "score_contributions",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    contactId: text("contact_id").notNull(),
+    ruleId: text("rule_id").notNull(),
+    categoryId: text("category_id"),
+    initialScore: integer("initial_score").notNull(),
+    remainingScore: integer("remaining_score").notNull(),
+    decayDays: integer("decay_days"),
+    occurredAt: text("occurred_at").notNull(),
+    nextDecayAt: text("next_decay_at"),
+  },
+  (table) => [
+    index("score_contributions_contact_rule_idx").on(
+      table.workspaceId,
+      table.contactId,
+      table.ruleId,
+    ),
+    index("score_contributions_due_idx").on(table.nextDecayAt),
+    foreignKey({
+      columns: [table.workspaceId, table.contactId],
+      foreignColumns: [contacts.workspaceId, contacts.id],
     }).onDelete("cascade"),
   ],
 );

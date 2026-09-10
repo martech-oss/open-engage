@@ -5,6 +5,7 @@ import type { AppEnvironment } from "../env";
 import { recordContactEvent } from "../runtime/contact-event-service";
 import { originAllowed } from "../web/domain";
 import {
+  measurementSource,
   stripReservedMeasurementProperties,
   verifyMeasurementContext,
 } from "../web/measurement-service";
@@ -99,6 +100,14 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
           : {}),
       properties: {
         ...stripReservedMeasurementProperties(parsed.data.properties),
+        ...(parsed.data.type === "page_viewed" && !measurement
+          ? {
+              source: measurementSource({
+                url: parsed.data.resourceId,
+                referrer: parsed.data.properties.referrer,
+              }),
+            }
+          : {}),
         ...measurement?.properties,
       },
       occurredAt: now,

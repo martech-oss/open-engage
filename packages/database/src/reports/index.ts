@@ -8,3 +8,4 @@ export * from "./repository";
 export * from "./site-repository";
 export * from "./types";
 export * from "./lifecycle-repository";
+export * from "./acquisition-repository";

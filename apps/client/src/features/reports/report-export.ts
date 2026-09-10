@@ -3,6 +3,30 @@ import { type ReportWorkspace } from "@/features/reports/report-api";
 export function reportExport(
   data: ReportWorkspace,
 ): { filename: string; rows: Array<Record<string, string | number>> } | null {
+  if (data.view === "acquisition" && data.acquisition) {
+    const report = data.acquisition;
+    return {
+      filename: "acquisition-report.csv",
+      rows: report.sources.map((row) => ({
+        from: report.range.from,
+        to: report.range.to,
+        currency: report.currency,
+        attribution_model: report.attributionModel,
+        channel: row.channel,
+        source: row.source,
+        medium: row.medium,
+        campaign: row.campaign,
+        page_views: row.pageViews,
+        visitors: row.visitors,
+        submissions: row.submissions,
+        submitting_contacts: row.submittingContacts,
+        mql: row.mql,
+        deals_created: row.dealsCreated,
+        won: row.won,
+        won_value: row.wonValue,
+      })),
+    };
+  }
   if (data.view === "contacts" && data.contacts) {
     return {
       filename: "contacts-report.csv",

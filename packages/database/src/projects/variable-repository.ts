@@ -8,7 +8,7 @@ import {
   type VariableWrite,
 } from "@openengage/core/projects";
 
-import { nowIso } from "../shared/database-utils";
+import { isNotNullConstraintError, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { projects } from "./schema";
@@ -126,7 +126,15 @@ export class VariableRepository extends WorkspaceRepository {
           setWhere: isNotNull(projectVariables.deletedAt),
         })
         .returning()
-        .get();
+        .get()
+        .catch((error: unknown) => {
+          if (isNotNullConstraintError(error, "project_variables.type"))
+            throw new VariableRepositoryError(
+              "type",
+              "Variable key type cannot change while definitions use it",
+            );
+          throw error;
+        });
     } else {
       row = await this.database.orm
         .update(projectVariables)

@@ -2,6 +2,7 @@ import type { OpenEngageDatabase } from "@openengage/database/client";
 import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
 import { authed, requireRole } from "../orpc/base";
+import { acquisitionReport } from "./acquisition-report";
 import { automationReport } from "./automations-report";
 import { campaignReport } from "./campaigns-report";
 import { contactReport } from "./contacts-report";
@@ -116,7 +117,21 @@ export const dashboardProcedure = authed.dashboard.get.handler(async ({ context 
   return getDashboard(context.database, context.workspace.workspaceId);
 });
 
+export const acquisitionReportProcedure = authed.reports.acquisition.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    const timeZone = await reportTimeZone(context.database, context.workspace.workspaceId);
+    return acquisitionReport(
+      context.database,
+      context.workspace.workspaceId,
+      toReportRange(input.from, input.to, timeZone),
+      input.currency,
+    );
+  },
+);
+
 export const reportProcedures = {
+  acquisition: acquisitionReportProcedure,
   lifecycle: lifecycleReportProcedure,
   overview: reportsOverviewProcedure,
   contacts: contactsReportProcedure,

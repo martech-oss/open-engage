@@ -39,6 +39,7 @@ import {
   EmailsReportView,
   SiteReportView,
 } from "./report-views";
+import { AcquisitionReportView } from "./report-views/acquisition-report-view";
 import { LifecycleReportView } from "./report-views/lifecycle-report-view";
 import { AttentionItem, ProgressRow } from "./report-widgets";
 
@@ -51,6 +52,7 @@ const reportNavigation: Array<{
   { view: "contacts", label: "連絡先", icon: UsersRound },
   { view: "automations", label: "オートメーション", icon: GitBranch },
   { view: "emails", label: "メール", icon: Mail },
+  { view: "acquisition", label: "流入元", icon: Globe2 },
   { view: "site", label: "サイト", icon: Globe2 },
   { view: "lifecycle", label: "営業進捗", icon: BriefcaseBusiness },
   { view: "campaigns", label: "キャンペーン", icon: Megaphone },
@@ -97,6 +99,9 @@ export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
         <AutomationsReportView report={data.automations} />
       ) : null}
       {data.view === "emails" && data.emails ? <EmailsReportView report={data.emails} /> : null}
+      {data.view === "acquisition" && data.acquisition ? (
+        <AcquisitionReportView report={data.acquisition} />
+      ) : null}
       {data.view === "site" && data.site ? <SiteReportView report={data.site} /> : null}
       {data.view === "lifecycle" && data.lifecycle ? (
         <LifecycleReportView report={data.lifecycle} />
@@ -120,6 +125,9 @@ function ReportControls({ search }: { search: ReportSearch }): ReactNode {
         ...search,
         from: getFormString(form, "from"),
         to: getFormString(form, "to"),
+        ...(search.view === "acquisition"
+          ? { currency: getFormString(form, "currency").toUpperCase() }
+          : {}),
         ...(search.view === "campaigns"
           ? {
               currency: getFormString(form, "currency").toUpperCase(),

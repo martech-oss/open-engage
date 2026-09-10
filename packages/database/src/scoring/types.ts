@@ -4,6 +4,8 @@ export interface ScoringRuleMatch {
   matchType: string;
   matchValue: string | null;
   points: number;
+  decayDays: number | null;
+  maxScore: number | null;
   categoryId: string | null;
   tagId: string | null;
 }

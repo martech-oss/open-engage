@@ -12,6 +12,7 @@ import { logError } from "../observability";
 import { persistDeadLetter } from "../platform/maintenance-worker";
 import { processProjectClone } from "../projects/clone-service";
 import { processProgramMemberImport } from "../projects/program-import-service";
+import { runScoringDecay } from "../scoring/decay-service";
 import {
   reconcileContactSegmentMemberships,
   refreshSegmentMemberships,
@@ -34,6 +35,9 @@ type JobsQueueHandlerMap = {
 };
 
 export const jobsQueueHandlers = {
+  scoring_decay: async (message, env) => {
+    await runScoringDecay(createDatabase(env.DB), env.JOBS_QUEUE, new Date(message.now));
+  },
   automation_schedule: async (message, env) => {
     await dispatchScheduledAutomationRuns(
       createDatabase(env.DB),

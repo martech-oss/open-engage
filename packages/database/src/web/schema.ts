@@ -238,6 +238,12 @@ export const siteMessages = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text().notNull(),
     status: text().default("draft").notNull(),
+    audience: text({ enum: ["identified", "all"] })
+      .default("identified")
+      .notNull(),
+    frequency: text({ enum: ["session", "page"] })
+      .default("session")
+      .notNull(),
     headline: text().notNull(),
     body: text().default("").notNull(),
     ctaLabel: text("cta_label").default("").notNull(),

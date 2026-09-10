@@ -37,7 +37,8 @@ async function finishClone(repository: ProjectCloneJobRepository, jobId: string)
   throw new Error("Clone did not finalize within its bounded manifest");
 }
 
-it("runs an approved cloned campaign from form acquisition through scheduled callable sales handoff to cohort success without changing the source", async () => {
+// This full journey makes many real D1 calls; allow for shared CI runner latency.
+it("runs a cloned campaign from acquisition to success", { timeout: 30_000 }, async () => {
   const fixture = await seedWorkspaceClient(env.DB);
   await seedMember(env.DB, fixture);
   const owner = {

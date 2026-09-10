@@ -34,6 +34,17 @@ export function isUniqueConstraintError(error: unknown, columns: readonly string
   );
 }
 
+/** Recognizes a specific atomic write guard without masking unrelated database failures. */
+export function isNotNullConstraintError(error: unknown, column: string): boolean {
+  return errorMessages(error).some((message) => {
+    const match = /^(?:D1_ERROR:\s*)?NOT NULL constraint failed:\s*([^:\n]+)/i.exec(message);
+    return (
+      match !== null &&
+      normalizeConstraintColumn(match[1] ?? "") === normalizeConstraintColumn(column)
+    );
+  });
+}
+
 /** The current instant as an ISO-8601 string, for `createdAt`/`updatedAt` columns. */
 export function nowIso(): string {
   return new Date().toISOString();

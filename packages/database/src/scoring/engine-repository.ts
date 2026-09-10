@@ -1,8 +1,20 @@
-import { asc, and, eq, exists, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
+import {
+  inArray,
+  asc,
+  and,
+  eq,
+  exists,
+  isNotNull,
+  isNull,
+  ne,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 
-import type { GradingCriterion } from "@openengage/core/scoring";
+import { nextContributionDecay, type GradingCriterion } from "@openengage/core/scoring";
 
-import { contactTags, contacts, tags } from "../contacts/schema";
+import { contactEvents, contactTags, contacts, tags } from "../contacts/schema";
 import { changedExactlyOne } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
@@ -11,6 +23,7 @@ import {
   contactCategoryScores,
   gradingCriteria,
   scoreEvents,
+  scoreContributions,
   scoringCategories,
   scoringRules,
 } from "./schema";
@@ -25,6 +38,8 @@ export class ScoringEngineRepository extends DatabaseRepository {
         matchType: scoringRules.matchType,
         matchValue: scoringRules.matchValue,
         points: scoringRules.points,
+        decayDays: scoringRules.decayDays,
+        maxScore: scoringRules.maxScore,
         categoryId: scoringCategories.id,
         tagId: tags.id,
       })
@@ -61,19 +76,26 @@ export class ScoringEngineRepository extends DatabaseRepository {
     effects: Array<{
       ruleId: string;
       delta: number;
+      decayDays?: number | null;
+      maxScore?: number | null;
       categoryId: string | null;
       tagId: string | null;
     }>;
     now: string;
-  }): Promise<void> {
+  }): Promise<number> {
+    let total = 0;
     for (let offset = 0; offset < input.effects.length; offset += 50) {
-      await this.applyScoreBatch({ ...input, effects: input.effects.slice(offset, offset + 50) });
+      total += await this.applyScoreBatch({
+        ...input,
+        effects: input.effects.slice(offset, offset + 50),
+      });
     }
+    return total;
   }
 
   private async applyScoreBatch(
     input: Parameters<ScoringEngineRepository["applyScore"]>[0],
-  ): Promise<void> {
+  ): Promise<number> {
     const orm = this.database.orm;
     const activeContact = await orm
       .select({ id: contacts.id })
@@ -86,9 +108,42 @@ export class ScoringEngineRepository extends DatabaseRepository {
         ),
       )
       .get();
-    if (!activeContact) return;
+    if (!activeContact) return 0;
+    const event = await orm
+      .select({ occurredAt: contactEvents.occurredAt })
+      .from(contactEvents)
+      .where(
+        and(
+          eq(contactEvents.id, input.contactEventId),
+          eq(contactEvents.workspaceId, input.workspaceId),
+          eq(contactEvents.contactId, input.contactId),
+        ),
+      )
+      .get();
+    if (!event) return 0;
     const statements = [];
+    const appliedIds: string[] = [];
     for (const effect of input.effects) {
+      const contributionId = uuidv7();
+      appliedIds.push(contributionId);
+      const initial =
+        effect.delta > 0 && effect.maxScore != null
+          ? sql`min(${effect.delta}, max(0, ${effect.maxScore} - (SELECT coalesce(sum(${scoreContributions.remainingScore}), 0) FROM ${scoreContributions} WHERE ${scoreContributions.workspaceId} = ${input.workspaceId} AND ${scoreContributions.contactId} = ${input.contactId} AND ${scoreContributions.ruleId} = ${effect.ruleId})))`
+          : sql`${effect.delta}`;
+
+      const elapsed = Math.max(
+        0,
+        Math.floor((Date.parse(input.now) - Date.parse(event.occurredAt)) / 86400000),
+      );
+      const available =
+        effect.delta > 0 && effect.decayDays != null
+          ? sql`cast(${initial} * ${Math.max(0, effect.decayDays - elapsed)} / ${effect.decayDays} as integer)`
+          : initial;
+      const nextDecayAt = nextContributionDecay(
+        effect.decayDays ?? null,
+        event.occurredAt,
+        new Date(input.now),
+      );
       const contactIsProcessable = exists(
         orm
           .select({ id: contacts.id })
@@ -117,7 +172,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
         statements.push(
           orm
             .update(contacts)
-            .set({ score: sql`${contacts.score} + ${effect.delta}`, updatedAt: input.now })
+            .set({ score: sql`${contacts.score} + ${available}`, updatedAt: input.now })
             .where(
               and(
                 eq(contacts.workspaceId, input.workspaceId),
@@ -134,7 +189,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
             .insert(contactCategoryScores)
             .select(
               sql`SELECT ${input.workspaceId}, ${input.contactId}, ${effect.categoryId},
-                         ${effect.delta}, ${input.now}
+                         ${available}, ${input.now}
                   WHERE ${notApplied} AND ${contactIsProcessable}`,
             )
             .onConflictDoUpdate({
@@ -144,7 +199,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
                 contactCategoryScores.categoryId,
               ],
               set: {
-                score: sql`${contactCategoryScores.score} + ${effect.delta}`,
+                score: sql`${contactCategoryScores.score} + ${available}`,
                 updatedAt: input.now,
               },
             }),
@@ -165,16 +220,33 @@ export class ScoringEngineRepository extends DatabaseRepository {
         orm
           .insert(scoreEvents)
           .select(
-            sql`SELECT ${uuidv7()}, ${input.workspaceId}, ${input.contactId}, ${effect.delta},
+            sql`SELECT ${contributionId}, ${input.workspaceId}, ${input.contactId}, ${available},
                        ${`rule:${effect.ruleId}`}, NULL, ${input.contactEventId},
                        ${effect.ruleId}, ${input.now}
                 WHERE ${notApplied} AND ${contactIsProcessable}`,
           )
           .onConflictDoNothing(),
       );
+      if (effect.delta > 0) {
+        // Capture the actual capped amount from the just-written score event.
+        // Its generated id also identifies whether this batch won the replay race.
+        statements.push(
+          orm.insert(scoreContributions).select(sql`
+          SELECT ${contributionId}, ${input.workspaceId}, ${input.contactId}, ${effect.ruleId},
+            ${effect.categoryId}, ${initial}, delta, ${effect.decayDays ?? null},
+            ${event.occurredAt}, CASE WHEN delta > 0 THEN ${nextDecayAt} ELSE NULL END
+          FROM ${scoreEvents} WHERE ${scoreEvents.id} = ${contributionId}`),
+        );
+      }
     }
-    if (statements.length === 0) return;
+    if (statements.length === 0) return 0;
     await orm.batch(statements as [(typeof statements)[number], ...typeof statements]);
+    const result = await orm
+      .select({ total: sql<number>`coalesce(sum(${scoreEvents.delta}),0)`.mapWith(Number) })
+      .from(scoreEvents)
+      .where(inArray(scoreEvents.id, appliedIds))
+      .get();
+    return result?.total ?? 0;
   }
 
   public listEnabledCriteria(workspaceId: string): Promise<GradingCriterion[]> {

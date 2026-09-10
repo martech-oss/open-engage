@@ -22,6 +22,8 @@ export function ruleColumns(input: ScoringRuleWrite) {
     matchType: input.matchType,
     matchValue: input.matchValue,
     points: input.points,
+    decayDays: input.decayDays ?? null,
+    maxScore: input.maxScore ?? null,
     categoryId: input.categoryId,
     tagId: input.tagId,
     enabled: input.enabled,

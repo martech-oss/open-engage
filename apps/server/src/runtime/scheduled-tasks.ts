@@ -19,6 +19,7 @@ import { runDailyMaintenance } from "../platform/maintenance-worker";
 import { publishQueueBatches } from "../platform/queue-publisher";
 import { recoverProjectClones } from "../projects/clone-service";
 import { recoverProgramMemberImports } from "../projects/program-import-service";
+import { runScoringDecay } from "../scoring/decay-service";
 import { listDynamicSegmentsForCorrection } from "../segments/membership-service";
 import { recoverLandingGenerations } from "../web/landing-design-service";
 import { retryPendingPublicFormEvents } from "./contact-event-service";
@@ -60,6 +61,7 @@ function createScheduledTasks(env: RuntimeEnv): ScheduledTask[] {
           logError("public_form.event_retry_failed", failure.error, { eventId: failure.eventId });
       },
     },
+    { name: "scoring_decay", run: () => runScoringDecay(database, env.JOBS_QUEUE) },
     { name: "visitor_history", run: () => recoverVisitorHistories(env) },
     { name: "landing_generation", run: () => recoverLandingGenerations(env) },
     { name: "project_clones", run: () => recoverProjectClones(env) },

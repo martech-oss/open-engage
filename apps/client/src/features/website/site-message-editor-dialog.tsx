@@ -120,6 +120,7 @@ export function SiteMessageEditorDialog({
         placeholder="/pricing*"
         required
       />
+      <SiteMessageDeliveryFields item={item} />
       <SiteMessageScheduleFields
         startsAt={toDateTimeLocal(item?.startsAt)}
         endsAt={toDateTimeLocal(item?.endsAt)}
@@ -128,9 +129,40 @@ export function SiteMessageEditorDialog({
   );
 }
 
+function SiteMessageDeliveryFields({ item }: { item: SiteMessageRow | null }): ReactNode {
+  return (
+    <>
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
+        <FormNativeSelect
+          label="対象の訪問者"
+          name="audience"
+          defaultValue={item?.audience ?? "identified"}
+        >
+          <FormSelectOption value="identified">識別済みの連絡先</FormSelectOption>
+          <FormSelectOption value="all">すべての訪問者</FormSelectOption>
+        </FormNativeSelect>
+        <FormNativeSelect
+          label="再表示"
+          name="frequency"
+          defaultValue={item?.frequency ?? "session"}
+        >
+          <FormSelectOption value="session">セッションに1回</FormSelectOption>
+          <FormSelectOption value="page">ページごと</FormSelectOption>
+        </FormNativeSelect>
+      </FieldGroup>
+      <p className="text-sm text-muted-foreground">
+        すべての訪問者向けのメッセージは追跡同意なしでも表示します。未同意時の重複抑止はページ内のみです。
+        表示数・クリック数は同意済みで識別できた連絡先のみを計測します。
+      </p>
+    </>
+  );
+}
+
 function siteMessagePayload(formData: FormData, timeZone: string): SiteMessageWrite {
   const ctaUrl = getFormString(formData, "ctaUrl").trim();
   return {
+    audience: getFormString(formData, "audience") === "all" ? "all" : "identified",
+    frequency: getFormString(formData, "frequency") === "page" ? "page" : "session",
     name: getFormString(formData, "name"),
     status: getFormString(formData, "status") === "published" ? "published" : "draft",
     headline: getFormString(formData, "headline"),
