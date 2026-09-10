@@ -83,7 +83,7 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
         await new Promise(resolve => document.addEventListener("DOMContentLoaded", resolve, { once: true }));
       }
       const message = payload?.data?.[0];
-      if (!message || pageUrl !== window.location.href) return;
+      if (!message || pageUrl !== window.location.href || generation !== identityGeneration) return;
       if (message.audience !== "all" && (!authenticated || settings.consent !== true || generation !== identityGeneration)) return;
       if (authenticated && settings.consent === true && generation === identityGeneration) {
         identified = message.identified === true;

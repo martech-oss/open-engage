@@ -141,7 +141,11 @@ describe("decay reevaluation", () => {
       occurredAt,
     });
     const messages: unknown[] = [];
+    const continuations: unknown[] = [];
     const queue = {
+      send: async (message: unknown) => {
+        continuations.push(message);
+      },
       sendBatch: async (batch: Iterable<MessageSendRequest<unknown>>) => {
         messages.push(...batch);
       },
@@ -157,6 +161,7 @@ describe("decay reevaluation", () => {
       .first<{ grade_points: number }>();
     expect(contact?.grade_points).toBe(0);
     expect(messages).toHaveLength(2);
+    expect(continuations).toEqual([{ kind: "scoring_decay", now: future.toISOString() }]);
     const projections = await env.DB.prepare(
       "SELECT count(*) AS count FROM contact_event_projections p JOIN contact_events e ON e.id = p.event_id WHERE e.contact_id = ? AND e.type = 'score_changed' AND p.status = 'completed'",
     )

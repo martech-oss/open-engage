@@ -59,6 +59,11 @@ export const visitorHistoryQueueMessageSchema = z.object({
   visitorId: z.string().min(1),
 });
 
+export const scoringDecayQueueMessageSchema = z.object({
+  kind: z.literal("scoring_decay"),
+  now: z.iso.datetime(),
+});
+
 /** Everything the jobs queue carries, dispatched on the kind discriminator. */
 export const projectCloneQueueMessageSchema = z.object({
   kind: z.literal("project_clone"),
@@ -81,6 +86,7 @@ export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
   automationRunQueueMessageSchema,
   automationScheduleQueueMessageSchema,
   visitorHistoryQueueMessageSchema,
+  scoringDecayQueueMessageSchema,
   landingGenerationQueueMessageSchema,
   automationJobQueueMessageSchema,
   contactEventQueueMessageSchema,

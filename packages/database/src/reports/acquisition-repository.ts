@@ -58,7 +58,7 @@ export class AcquisitionReportsRepository extends DatabaseRepository {
       ), first_sources AS (
         SELECT person, occurred_at, source FROM ranked WHERE position=1
       ), activity AS (
-        SELECT person, occurred_at, 'page' AS kind, id, 0 AS value
+        SELECT person, occurred_at AS attribution_at, 'page' AS kind, id, 0 AS value
         FROM events WHERE type='page_viewed' AND occurred_at>=${range.fromTimestamp}
         UNION ALL SELECT person, occurred_at, 'form', id, 0 FROM forms WHERE occurred_at>=${range.fromTimestamp}
         UNION ALL SELECT 'c:'||contact_id, reached_at, 'mql', contact_id, 0
@@ -67,12 +67,12 @@ export class AcquisitionReportsRepository extends DatabaseRepository {
         UNION ALL SELECT 'c:'||contact_id, created_at, 'deal', id, 0
         FROM deals WHERE workspace_id=${workspaceId} AND currency=${currency} AND archived_at IS NULL
           AND created_at>=${range.fromTimestamp} AND created_at<${range.toExclusiveTimestamp}
-        UNION ALL SELECT 'c:'||contact_id, won_at, 'won', id, value
+        UNION ALL SELECT 'c:'||contact_id, created_at, 'won', id, value
         FROM deals WHERE workspace_id=${workspaceId} AND currency=${currency} AND archived_at IS NULL AND status='won'
           AND won_at>=${range.fromTimestamp} AND won_at<${range.toExclusiveTimestamp}
       ), attributed AS (
         SELECT a.*, COALESCE(s.source,'{}') AS source
-        FROM activity a LEFT JOIN first_sources s ON s.person=a.person AND s.occurred_at<=a.occurred_at
+        FROM activity a LEFT JOIN first_sources s ON s.person=a.person AND s.occurred_at<=a.attribution_at
       )
       SELECT source,
         SUM(CASE WHEN kind='page' THEN 1 ELSE 0 END) AS pageViews,

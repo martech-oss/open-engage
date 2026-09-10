@@ -136,6 +136,43 @@ function browser(
 }
 
 describe("browser identity changes", () => {
+  it.each(["identity", "consent"])(
+    "rejects an in-flight public CTA after a change to %s before rendering the identified CTA",
+    async (change) => {
+      const b = browser({ consent: change === "identity", visitorToken: "saved-token" });
+      await b.flush();
+      if (change === "identity") b.window.openengage.acceptIdentity("form-token");
+      else b.window.openengage.consent(true);
+      await b.flush();
+      await b.respondMessage([publicMessage]);
+      expect(b.body.children).toHaveLength(0);
+      expect(b.requests.filter((r) => r.url.pathname.endsWith("/events"))).toHaveLength(0);
+      await b.respondMessage([
+        {
+          ...publicMessage,
+          id: "known",
+          headline: "Known",
+          audience: "identified",
+          identified: true,
+        },
+      ]);
+      expect(b.body.children).toHaveLength(1);
+      expect(
+        b.body.children[0]!.children.find((element) => element.tag === "strong")?.textContent,
+      ).toBe("Known");
+      const events = b.requests.filter((r) => r.url.pathname.endsWith("/events"));
+      expect(events).toHaveLength(1);
+      expect(events[0]!.url.pathname).toBe("/messages/known/events");
+      expect(
+        JSON.parse(typeof events[0]!.init?.body === "string" ? events[0]!.init.body : ""),
+      ).toEqual({
+        visitorToken: change === "identity" ? "form-token" : "saved-token",
+        type: "impression",
+        consent: true,
+      });
+    },
+  );
+
   it("revalidates a form token before measuring clicks on an already visible public CTA", async () => {
     const b = browser({ consent: true });
     await b.flush();

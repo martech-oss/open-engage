@@ -29,6 +29,56 @@ async function event(
 }
 
 describe("acquisition report", () => {
+  it("anchors won deals to their creation-time source even when creation is outside the report period", async () => {
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+    const contact = await client.contacts.create({
+      email: "deal-source@example.com",
+      customFields: {},
+    });
+    await event(workspaceId, contact.id, null, "2026-01-05T00:00:00.000Z", {
+      url: "https://example.com/",
+      utm_source: "google",
+      utm_medium: "cpc",
+    });
+    const { pipelines } = await client.deals.options();
+    const pipeline = pipelines[0]!;
+    for (const [createdAt, value] of [
+      ["2026-01-01T00:00:00.000Z", 100],
+      ["2026-01-10T00:00:00.000Z", 200],
+    ] as const) {
+      const deal = await client.deals.create({
+        name: "Source at creation",
+        contactId: contact.id,
+        value,
+        currency: "JPY",
+        pipelineId: pipeline.id,
+        stageId: pipeline.stages[0]!.id,
+      });
+      await env.DB.prepare("UPDATE deals SET status='won',created_at=?,won_at=? WHERE id=?")
+        .bind(createdAt, "2026-01-20T00:00:00.000Z", deal.id)
+        .run();
+    }
+    for (const from of ["2026-01-01", "2026-01-15"]) {
+      const report = await client.reports.acquisition({ from, to: "2026-01-31", currency: "JPY" });
+      const dealsCreated = from === "2026-01-01" ? 1 : 0;
+      expect(report.sources.find((row) => row.channel === "unknown")).toMatchObject({
+        dealsCreated,
+        won: 1,
+        wonValue: 100,
+      });
+      expect(report.sources.find((row) => row.source === "google")).toMatchObject({
+        dealsCreated,
+        won: 1,
+        wonValue: 200,
+      });
+      expect(report.summary).toMatchObject({
+        dealsCreated: dealsCreated * 2,
+        won: 2,
+        wonValue: 300,
+      });
+    }
+  });
+
   it("attributes period outcomes to the earliest retained source, merges bound visitors, and separates currency/workspace", async () => {
     const { client, workspaceId } = await seedWorkspaceClient(env.DB, { timezone: "Asia/Tokyo" });
     const contact = await client.contacts.create({ email: "source@example.com", customFields: {} });
