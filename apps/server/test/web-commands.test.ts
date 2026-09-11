@@ -227,9 +227,16 @@ describe("Web commands", () => {
         },
       ],
     };
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(
       client.website.createPage({ name: "Requires Turnstile", status: "published", document }),
     ).rejects.toMatchObject({ code: "PAGE_INVALID", status: 422 });
+    expect(errorLog).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(errorLog.mock.calls[0]?.[0]))).toMatchObject({
+      event: "orpc.request_failed",
+      error: { message: "ページの参照または設定を確認してください" },
+    });
+    errorLog.mockRestore();
     const [page] = await client.website.listPages();
     expect(page).toMatchObject({ status: "draft", publishedVersionId: null });
     const design = await client.website.getPageDesign({ id: page!.id });

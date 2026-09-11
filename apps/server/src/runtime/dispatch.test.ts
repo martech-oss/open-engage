@@ -72,6 +72,7 @@ describe("jobs queue dispatch", () => {
       });
     const successful = message("successful");
     const failed = message("failed");
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await queue(batch([failed, successful]), {} as RuntimeEnv);
 
@@ -79,6 +80,13 @@ describe("jobs queue dispatch", () => {
     expect(successful.retry).not.toHaveBeenCalled();
     expect(failed.ack).not.toHaveBeenCalled();
     expect(failed.retry).toHaveBeenCalledOnce();
+    expect(errorLog).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(errorLog.mock.calls[0]?.[0]))).toMatchObject({
+      event: "queue.message_failed",
+      context: { queue: "openengage-jobs", messageId: "failed", attempts: 1 },
+      error: { message: "projection failed" },
+    });
+    errorLog.mockRestore();
     handler.mockRestore();
   });
 });

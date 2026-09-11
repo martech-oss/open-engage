@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { emptyLandingPageDocument } from "@openengage/core/web";
 import { createDatabase } from "@openengage/database/client";
@@ -13,6 +13,8 @@ import {
   retryLandingGeneration,
 } from "../src/web/landing-generation-service";
 import { seedWorkspaceClient } from "./factory";
+
+afterEach(() => vi.restoreAllMocks());
 
 it("retries a failed request explicitly with the same durable job and rejects stale or foreign retries", async () => {
   const { client } = await seedWorkspaceClient(env.DB),
@@ -134,9 +136,17 @@ it("recovers durable generation and retry requests when sending to the queue fai
   expect(sendBatch).toHaveBeenLastCalledWith(
     expect.arrayContaining([{ body: { kind: "landing_generation", jobId: queued.job.id } }]),
   );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
   await processLandingGeneration(queued.job.id, unavailableQueueEnv, async () => {
     throw new Error("Temporary provider failure");
   });
+  expect(errorLog).toHaveBeenCalledOnce();
+  expect(JSON.parse(String(errorLog.mock.calls[0]?.[0]))).toMatchObject({
+    event: "landing.generation_failed",
+    context: { jobId: queued.job.id, workspaceId },
+    error: { message: "Temporary provider failure" },
+  });
+  errorLog.mockRestore();
   await expect(
     retryLandingGeneration(database, workspace, unavailableQueueEnv, {
       pageId: page.id,
