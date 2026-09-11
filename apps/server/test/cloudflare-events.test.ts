@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ContactRepository,
   DeliveryRecoveryRepository,
-  MessagingWorkerRepository,
+  MessagingDeliveryWriteRepository,
   uuidv7,
 } from "@openengage/database/testing";
 
@@ -22,7 +22,7 @@ describe("Cloudflare Email Sending events", () => {
       userId: "event-owner",
       role: "owner",
     });
-    const repository = new MessagingWorkerRepository(env.DB);
+    const repository = new MessagingDeliveryWriteRepository(env.DB);
     const recovery = new DeliveryRecoveryRepository(env.DB);
 
     for (const kind of kinds) {

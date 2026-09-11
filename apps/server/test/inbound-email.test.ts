@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ContactRepository,
   EmailTrackingEventRepository,
-  MessagingWorkerRepository,
+  MessagingDeliveryWriteRepository,
   uuidv7,
 } from "@openengage/database/testing";
 
@@ -233,7 +233,7 @@ async function seedReplyTarget(input: { workspaceId?: string; contactEmail: stri
     role: "owner",
   }).createContact({ email: input.contactEmail, customFields: {} });
   const deliveryId = uuidv7();
-  await new MessagingWorkerRepository(env.DB).insertQueuedDelivery({
+  await new MessagingDeliveryWriteRepository(env.DB).insertQueuedDelivery({
     id: deliveryId,
     workspaceId,
     contactId: contact.id,

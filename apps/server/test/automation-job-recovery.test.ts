@@ -7,7 +7,7 @@ import {
   AutomationActionRepository,
   AutomationJobRecoveryRepository,
   createDatabase,
-  MessagingWorkerRepository,
+  MessagingDeliveryWriteRepository,
   uuidv7,
 } from "@openengage/database/testing";
 
@@ -329,7 +329,7 @@ describe("automation job recovery", () => {
       .bind(endpointId, seeded.workspaceId)
       .run();
 
-    const originalRepository = new MessagingWorkerRepository(createDatabase(env.DB));
+    const originalRepository = new MessagingDeliveryWriteRepository(createDatabase(env.DB));
     const originalInsert = originalRepository.insertQueuedDelivery.bind(originalRepository);
     let releaseInsert!: () => void;
     let announceInsert!: () => void;
@@ -339,7 +339,7 @@ describe("automation job recovery", () => {
     const insertObserved = new Promise<void>((resolve) => {
       announceInsert = resolve;
     });
-    vi.spyOn(MessagingWorkerRepository.prototype, "insertQueuedDelivery").mockImplementation(
+    vi.spyOn(MessagingDeliveryWriteRepository.prototype, "insertQueuedDelivery").mockImplementation(
       async (...args) => {
         announceInsert();
         await insertReleased;

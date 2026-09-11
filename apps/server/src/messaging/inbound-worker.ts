@@ -1,7 +1,7 @@
 import PostalMime from "postal-mime";
 
 import { createDatabase } from "@openengage/database/client";
-import { MessagingWorkerRepository } from "@openengage/database/messaging";
+import { MessagingInboundReplyRepository } from "@openengage/database/messaging";
 import { uuidv7 } from "@openengage/database/shared";
 
 import type { RuntimeEnv } from "../env";
@@ -27,7 +27,7 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     return;
   }
   const database = createDatabase(env.DB);
-  const repository = new MessagingWorkerRepository(database);
+  const repository = new MessagingInboundReplyRepository(database);
   const delivery = await repository.findReplyDelivery(
     payload.workspaceId,
     payload.resourceId,

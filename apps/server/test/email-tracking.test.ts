@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ContactRepository,
   EmailTrackingSettingsRepository,
-  MessagingWorkerRepository,
+  MessagingDeliveryWriteRepository,
   createDatabase,
   emailTemplates,
   projectItems,
@@ -36,7 +36,7 @@ async function seedDelivery(label: string): Promise<Seeded> {
     role: "owner",
   }).createContact({ email: `${label}@example.com`, customFields: {} });
   const deliveryId = uuidv7();
-  await new MessagingWorkerRepository(env.DB).insertQueuedDelivery({
+  await new MessagingDeliveryWriteRepository(env.DB).insertQueuedDelivery({
     id: deliveryId,
     workspaceId,
     contactId: contact.id,
@@ -89,7 +89,7 @@ async function seedAttributedDelivery(label: string): Promise<AttributedSeeded> 
       createdAt: now,
     }),
   ]);
-  await new MessagingWorkerRepository(env.DB).insertQueuedDelivery({
+  await new MessagingDeliveryWriteRepository(env.DB).insertQueuedDelivery({
     id: deliveryId,
     workspaceId,
     contactId: contact.id,
