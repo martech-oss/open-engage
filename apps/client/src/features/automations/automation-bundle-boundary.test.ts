@@ -13,7 +13,10 @@ describe("automation route bundle boundary", () => {
     const editor = resolve(clientSourceRoot, "features/automations/automation-editor-page.tsx");
     const root = resolve(clientSourceRoot, "routes/__root.tsx");
     const canvas = resolve(clientSourceRoot, "features/automations/automation-flow-canvas.tsx");
-    const automationAi = resolve(clientSourceRoot, "features/automations/automation-ai-sheet.tsx");
+    const automationAi = resolve(
+      clientSourceRoot,
+      "features/automations/automation-ai-sheet/index.tsx",
+    );
     const emailSequenceAi = resolve(
       clientSourceRoot,
       "features/automations/email-sequence-ai-sheet/index.tsx",

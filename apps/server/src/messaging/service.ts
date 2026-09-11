@@ -8,7 +8,7 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ConsentRepository } from "@openengage/database/consent";
 import { MessagingRepository } from "@openengage/database/messaging";
-import { SegmentRepository } from "@openengage/database/segments";
+import { SegmentQueryRepository } from "@openengage/database/segments";
 import { isConstraintError } from "@openengage/database/shared";
 
 export function listMessageVariables(
@@ -62,7 +62,7 @@ export async function listEmailSegmentOptions(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<EmailSegmentOption[]> {
-  const rows = await new SegmentRepository(database, workspace).listSegments();
+  const rows = await new SegmentQueryRepository(database, workspace).listSegments();
   return rows.map((row) => ({ id: row.id, name: row.name, memberCount: row.memberCount }));
 }
 

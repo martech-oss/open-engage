@@ -126,7 +126,7 @@ export const deliveries = sqliteTable(
     purpose: text().notNull(),
     provider: text().notNull(),
     // Nulled out when the owning contact is archived (see ContactRepository.
-    // archiveContact / ContactResourceRepository.bulkSetContactsArchived) -
+    // archiveContact / ContactStateRepository.bulkSetContactsArchived) -
     // deliveries are kept for audit/reporting, but the PII they carried
     // independently of contactId (which is already SET NULL on delete)
     // shouldn't outlive the contact's own retention.

@@ -60,7 +60,7 @@ export type { PersistPublicFormSubmissionInput } from "./public-form-submission-
 /**
  * Public, unauthenticated lookups and writes behind the hosted signup form
  * and its submission endpoint. Intentionally not workspace-scoped, like
- * {@link MessagingWorkerRepository}: the first call resolves the workspace
+ * {@link MessagingProviderEventRepository}: the first call resolves the workspace
  * from the public slug pair, and callers pass the resolved id to every call
  * after that.
  */

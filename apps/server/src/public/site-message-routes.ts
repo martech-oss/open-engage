@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { WebRepository } from "@openengage/database/web";
+import { VisitorMessageRepository } from "@openengage/database/web";
 
 import type { AppEnvironment } from "../env";
 import { processPendingPublicFormEvent } from "../runtime/contact-event-service";
@@ -33,7 +33,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     ) {
       return context.json({ data: [] });
     }
-    const repository = new WebRepository(database, { workspaceId: workspace.id });
+    const repository = new VisitorMessageRepository(database, { workspaceId: workspace.id });
     const visitor =
       visitorToken && context.req.query("consent") === "true"
         ? await new VisitorIdentityService(database, context.env).resolve(
@@ -84,7 +84,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return context.json({ data: { accepted: false } }, 202);
-    const repository = new WebRepository(database, { workspaceId: workspace.id });
+    const repository = new VisitorMessageRepository(database, { workspaceId: workspace.id });
     const visitor = await new VisitorIdentityService(database, context.env).resolve(
       workspace.id,
       parsed.data.visitorToken,

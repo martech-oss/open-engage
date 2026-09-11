@@ -20,7 +20,7 @@ import { member, user } from "../auth/schema";
 import { auditLogs } from "../platform/schema";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { decodeBriefDefinition } from "./project-brief-persistence";
-import { ProjectResourceLinkRepository } from "./project-resource-link-repository";
+import { ProjectResourceQueryRepository } from "./project-resource-query-repository";
 import {
   projectBriefReviews,
   projectBriefs,
@@ -162,7 +162,7 @@ export class ProjectBriefQueryRepository extends WorkspaceRepository<WorkspaceCo
           ),
         )
         .orderBy(desc(auditLogs.createdAt)),
-      new ProjectResourceLinkRepository(this.database, this.context).list(projectId, row.revision),
+      new ProjectResourceQueryRepository(this.database, this.context).list(projectId, row.revision),
     ]);
     const names = await this.userNames([
       row.ownerUserId,

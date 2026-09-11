@@ -12,8 +12,12 @@ import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   LifecycleRepository,
   ContactRepository,
-  ContactResourceRepository,
+  ContactResourceQueryRepository,
+  ContactTagRepository,
+  ContactSegmentMembershipRepository,
+  ContactStateRepository,
 } from "@openengage/database/contacts";
+import { ManualScoringRepository } from "@openengage/database/scoring";
 import { isConstraintError, uuidv7 } from "@openengage/database/shared";
 
 import { resourceSlug } from "../platform/values";
@@ -31,7 +35,7 @@ export async function getContactOptions(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<ContactOptions> {
-  const rows = await new ContactResourceRepository(database, workspace).getContactOptionRows();
+  const rows = await new ContactResourceQueryRepository(database, workspace).getContactOptionRows();
   return {
     tags: rows.tags,
     segments: rows.segments.map((row) => ({
@@ -65,7 +69,7 @@ export async function getContactProfile(
 ): Promise<ContactProfile | null> {
   const contact = await new ContactRepository(database, workspace).getContact(contactId);
   if (!contact) return null;
-  const rows = await new ContactResourceRepository(database, workspace).getContactProfileRows(
+  const rows = await new ContactResourceQueryRepository(database, workspace).getContactProfileRows(
     contactId,
   );
   const lifecycle = new LifecycleRepository(database, workspace);
@@ -109,7 +113,7 @@ export async function createTag(
   const id = uuidv7();
   const slug = resourceSlug(input.name, id);
   try {
-    await new ContactResourceRepository(database, workspace).createTag({
+    await new ContactTagRepository(database, workspace).createTag({
       id,
       slug,
       name: input.name,
@@ -129,7 +133,7 @@ export async function updateTag(
 ): Promise<{ id: string; name: string; slug: string; color: string } | null> {
   const slug = resourceSlug(input.name, input.id);
   try {
-    return await new ContactResourceRepository(database, workspace).updateTag({
+    return await new ContactTagRepository(database, workspace).updateTag({
       id: input.id,
       slug,
       name: input.name,
@@ -146,7 +150,7 @@ export function addContactTag(
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<boolean> {
-  return new ContactResourceRepository(database, workspace).addContactTag(
+  return new ContactTagRepository(database, workspace).addContactTag(
     input.contactId,
     input.resourceId,
   );
@@ -157,7 +161,7 @@ export function removeContactTag(
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<boolean> {
-  return new ContactResourceRepository(database, workspace).removeContactTag(
+  return new ContactTagRepository(database, workspace).removeContactTag(
     input.contactId,
     input.resourceId,
   );
@@ -188,10 +192,10 @@ export async function removeContactSegment(
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<void> {
-  const removed = await new ContactResourceRepository(database, workspace).removeContactSegment(
-    input.contactId,
-    input.resourceId,
-  );
+  const removed = await new ContactSegmentMembershipRepository(
+    database,
+    workspace,
+  ).removeContactSegment(input.contactId, input.resourceId);
   if (removed) {
     await updateSegmentMemberCount(database, workspace.workspaceId, input.resourceId);
   }
@@ -203,7 +207,7 @@ export async function adjustContactScore(
   contactId: string,
   input: ContactScoreAdjust,
 ): Promise<Contact | null> {
-  const adjusted = await new ContactResourceRepository(database, workspace).adjustContactScore(
+  const adjusted = await new ManualScoringRepository(database, workspace).adjustContactScore(
     contactId,
     input,
   );
@@ -233,11 +237,13 @@ export async function applyContactBulkAction(
   workspace: WorkspaceContext,
   input: ContactBulkAction,
 ): Promise<BulkActionOutcome> {
-  const repository = new ContactResourceRepository(database, workspace);
+  const contactState = new ContactStateRepository(database, workspace),
+    contactTag = new ContactTagRepository(database, workspace),
+    contactSegmentMembership = new ContactSegmentMembershipRepository(database, workspace);
   if (input.action === "archive" || input.action === "restore") {
     if (!["admin", "owner"].includes(workspace.role)) return { kind: "archive_forbidden" };
     const contactIds = [...new Set(input.contactIds)];
-    const updated = await repository.bulkSetContactsArchived(
+    const updated = await contactState.bulkSetContactsArchived(
       contactIds,
       input.action === "archive",
     );
@@ -248,14 +254,14 @@ export async function applyContactBulkAction(
   const contactIds = [...new Set(input.contactIds)];
   let updated: number;
   if (input.action === "add_tag") {
-    updated = await repository.bulkAddContactTag(contactIds, resourceId);
+    updated = await contactTag.bulkAddContactTag(contactIds, resourceId);
   } else if (input.action === "remove_tag") {
-    updated = await repository.bulkRemoveContactTag(contactIds, resourceId);
+    updated = await contactTag.bulkRemoveContactTag(contactIds, resourceId);
   } else if (input.action === "add_segment") {
-    updated = await repository.bulkAddContactSegment(contactIds, resourceId);
+    updated = await contactSegmentMembership.bulkAddContactSegment(contactIds, resourceId);
     if (updated > 0) await updateSegmentMemberCount(database, workspace.workspaceId, resourceId);
   } else {
-    updated = await repository.bulkRemoveContactSegment(contactIds, resourceId);
+    updated = await contactSegmentMembership.bulkRemoveContactSegment(contactIds, resourceId);
     if (updated > 0) await updateSegmentMemberCount(database, workspace.workspaceId, resourceId);
   }
   return { kind: "ok", updated };

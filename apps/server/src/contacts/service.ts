@@ -7,7 +7,7 @@ import type {
 } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { ContactRepository, ContactResourceRepository } from "@openengage/database/contacts";
+import { ContactRepository, ContactResourceQueryRepository } from "@openengage/database/contacts";
 
 export async function listContacts(
   database: OpenEngageDatabase,
@@ -38,7 +38,7 @@ export async function getContactTimeline(
   workspaceId: string,
   contactId: string,
 ): Promise<ContactTimelineEvent[] | null> {
-  const repository = new ContactResourceRepository(database, { workspaceId });
+  const repository = new ContactResourceQueryRepository(database, { workspaceId });
   if (!(await repository.contactExists(contactId))) return null;
   return repository.listContactEvents(contactId, 200);
 }
@@ -96,7 +96,7 @@ async function attachContactRelations(
 ): Promise<ContactSummary[]> {
   if (contacts.length === 0) return [];
   const ids = contacts.map((contact) => contact.id);
-  const relations = await new ContactResourceRepository(database, {
+  const relations = await new ContactResourceQueryRepository(database, {
     workspaceId,
   }).listContactRelations(ids);
   const tagsByContact = new Map<string, ContactSummary["tags"]>();

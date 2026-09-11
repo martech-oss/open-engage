@@ -5,7 +5,7 @@ import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { validateLandingReferences } from "./landing-design-service";
+import { validateLandingReferences } from "./landing-reference-validation";
 import { sanitizeLandingHtml } from "./landing-safety";
 
 export const optimizationProcedures = {

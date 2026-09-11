@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod";
 
-import { AutomationRepository } from "@openengage/database/automations";
+import { AutomationQueryRepository } from "@openengage/database/automations";
 import { ContactRepository } from "@openengage/database/contacts";
 
 import { hasWorkspaceRole } from "../../auth/authorization";
@@ -41,9 +41,10 @@ export function registerAutomationTools(server: McpServer, context: McpToolConte
       },
     },
     async ({ automationId }) => {
-      const draft = await new AutomationRepository(context.database, context.workspace).getDraft(
-        automationId,
-      );
+      const draft = await new AutomationQueryRepository(
+        context.database,
+        context.workspace,
+      ).getDraft(automationId);
       return draft
         ? jsonResult({ graph: draft.graph, status: normalizeAutomationStatus(draft.status) })
         : toolError("Automation was not found.");
@@ -69,7 +70,7 @@ export function registerAutomationTools(server: McpServer, context: McpToolConte
     },
     async ({ automationId, contactId }) => {
       const [automation, contact] = await Promise.all([
-        new AutomationRepository(context.database, context.workspace).getDraft(automationId),
+        new AutomationQueryRepository(context.database, context.workspace).getDraft(automationId),
         new ContactRepository(context.database, context.workspace).getContact(contactId),
       ]);
       if (!automation) return toolError("Automation was not found.");

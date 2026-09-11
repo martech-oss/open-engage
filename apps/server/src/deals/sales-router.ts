@@ -1,5 +1,9 @@
 import { ContactRepository } from "@openengage/database/contacts";
-import { DealRepository, DealTaskRepository, SalesRepository } from "@openengage/database/deals";
+import {
+  DealRecordRepository,
+  DealTaskRepository,
+  SalesRepository,
+} from "@openengage/database/deals";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -69,7 +73,7 @@ export const salesProcedures = {
       ? await new ContactRepository(context.database, context.workspace).getContact(input.contactId)
       : null;
     const deal = input.dealId
-      ? await new DealRepository(context.database, context.workspace).getDeal(input.dealId)
+      ? await new DealRecordRepository(context.database, context.workspace).getDeal(input.dealId)
       : null;
     if (
       (input.contactId && !contact) ||

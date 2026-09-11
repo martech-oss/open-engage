@@ -1,4 +1,7 @@
-import { ContactResourceRepository } from "@openengage/database/contacts";
+import {
+  ContactResourceQueryRepository,
+  ContactSegmentMembershipRepository,
+} from "@openengage/database/contacts";
 import { writeAuditLog } from "@openengage/database/platform";
 
 import {
@@ -29,7 +32,7 @@ const createContactCommandService: ContactRouterDependencies["createCommandServi
   });
 
 const recordContactApiEvent: ContactRouterDependencies["recordContactApiEvent"] = async (input) => {
-  const repository = new ContactResourceRepository(input.database, {
+  const repository = new ContactResourceQueryRepository(input.database, {
     workspaceId: input.workspaceId,
   });
   return recordContactApiEventUseCase(input.workspaceId, input.event, {
@@ -48,7 +51,7 @@ const contactRouterDependencies = {
 } satisfies ContactRouterDependencies;
 
 const addContactSegment: ContactResourceRouterDependencies["addContactSegment"] = async (input) => {
-  const repository = new ContactResourceRepository(input.database, input.workspace);
+  const repository = new ContactSegmentMembershipRepository(input.database, input.workspace);
   return addContactSegmentUseCase(input.relation, {
     addMembership: (contactId, segmentId) => repository.addContactSegment(contactId, segmentId),
     updateMemberCount: (segmentId) =>

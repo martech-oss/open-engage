@@ -9,8 +9,9 @@ import {
 } from "@openengage/core/automations";
 import type { SegmentFilter } from "@openengage/core/segments";
 import {
-  AutomationRepository,
-  AutomationEngineRepository,
+  AutomationQueryRepository,
+  AutomationCommandRepository,
+  AutomationJobRepository,
   AutomationJobRecoveryRepository,
   AutomationRunRepository,
 } from "@openengage/database/automations";
@@ -26,6 +27,7 @@ import {
 
 import { dispatchScheduledAutomationRuns } from "../src/automations/run-service";
 import { processAutomationJob } from "../src/automations/worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import {
   graph,
   seedAutomationJob,
@@ -55,8 +57,9 @@ it("rejects a stale publication atomically and preserves the concurrently saved 
   const a = definition(1),
     b = definition(999),
     created = await client.automations.create(a);
-  const repo = new AutomationRepository(db, { workspaceId }),
-    draft = (await repo.findPublishableDraft(created.id))!;
+  const automationQuery = new AutomationQueryRepository(db, { workspaceId }),
+    automationCommand = new AutomationCommandRepository(db, { workspaceId }),
+    draft = (await automationQuery.findPublishableDraft(created.id))!;
   const snapshot = await pinAutomationDependencies(
     created.id,
     a,
@@ -65,7 +68,7 @@ it("rejects a stale publication atomically and preserves the concurrently saved 
   );
   await client.automations.saveDraft({ id: created.id, ...b });
   await expect(
-    repo.publishDraft({
+    automationCommand.publishDraft({
       automationId: created.id,
       draftVersionId: draft.draftVersionId,
       currentVersion: draft.version,
@@ -219,9 +222,13 @@ it("resumes a successfully parked fifth-start delay and recovers already strande
     graph: graph([delay]),
   });
   const db = createDatabase(env.DB),
-    engine = new AutomationEngineRepository(db),
+    engine = new AutomationJobRepository(db),
     recovery = new AutomationJobRecoveryRepository(db);
-  await processAutomationJob(seeded.jobId, "lease", runtimeWithJobsQueue(queueStub()));
+  await processAutomationJob(
+    seeded.jobId,
+    "lease",
+    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+  );
   expect(
     await db.orm.select().from(automationJobs).where(eq(automationJobs.id, seeded.jobId)).get(),
   ).toMatchObject({ status: "pending", attempts: 0, leaseId: null });
@@ -249,7 +256,11 @@ it("resumes a successfully parked fifth-start delay and recovers already strande
       false,
     ),
   ).toBe("retry");
-  await processAutomationJob(seeded.jobId, claim!.leaseId, runtimeWithJobsQueue(queueStub()));
+  await processAutomationJob(
+    seeded.jobId,
+    claim!.leaseId,
+    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+  );
   await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "succeeded", "completed");
 });
 

@@ -212,7 +212,7 @@ export const automationJobs = sqliteTable(
     ),
     // Deliberately NOT workspace-prefixed: the cron claims due jobs across
     // every workspace in one fair-queueing scan (see
-    // AutomationEngineRepository.workspacesWithDueJobs), so a global
+    // AutomationJobRepository.workspacesWithDueJobs), so a global
     // (status, due_at, lease_until) index is the correct shape here.
     index("automation_jobs_due_claim_idx").on(table.status, table.dueAt, table.leaseUntil),
     index("automation_jobs_wait_event_idx").on(

@@ -7,7 +7,6 @@ export * from "./import-part-execution-repository";
 export * from "./import-reconciliation-repository";
 export * from "./import-recovery-repository";
 export * from "./repository";
-export * from "./resource-repository";
 export * from "./resource-query-repository";
 export * from "./segment-membership-repository";
 export * from "./tag-membership-repository";

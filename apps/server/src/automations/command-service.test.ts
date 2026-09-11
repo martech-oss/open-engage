@@ -49,7 +49,7 @@ function harness(overrides: Partial<AutomationCommandPorts> = {}): Harness {
     sequence: 0,
     status: 0,
   };
-  const repository: AutomationCommandPorts["repository"] = {
+  const commands: AutomationCommandPorts["commands"] = {
     createAutomation: async () => {
       counts.create += 1;
       order.push("commit");
@@ -60,11 +60,6 @@ function harness(overrides: Partial<AutomationCommandPorts> = {}): Harness {
       order.push("commit");
       return true;
     },
-    findPublishableDraft: async () => ({
-      draftVersionId: "draft-1",
-      version: 1,
-      graph: validDefinition,
-    }),
     publishDraft: async () => {
       counts.publish += 1;
       order.push("commit");
@@ -76,8 +71,16 @@ function harness(overrides: Partial<AutomationCommandPorts> = {}): Harness {
       return true;
     },
   };
+  const queries: AutomationCommandPorts["queries"] = {
+    findPublishableDraft: async () => ({
+      draftVersionId: "draft-1",
+      version: 1,
+      graph: validDefinition,
+    }),
+  };
   const ports: AutomationCommandPorts = {
-    repository,
+    commands,
+    queries,
     resolveBrief: async () => ({ kind: "ok", brief: undefined }),
     classifyWriteError: () => undefined,
     loadResourceIssues: async () => {
@@ -118,8 +121,8 @@ describe("AutomationCommandService", () => {
   it("returns a brief conflict from create without adding post-commit side effects", async () => {
     const conflict = new Error("brief revision changed");
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      commands: {
+        ...harness().ports.commands,
         createAutomation: async () => {
           throw conflict;
         },
@@ -147,7 +150,7 @@ describe("AutomationCommandService", () => {
 
   it("distinguishes a non-editable draft from a saved draft", async () => {
     const notEditable = harness({
-      repository: { ...harness().ports.repository, saveDraft: async () => false },
+      commands: { ...harness().ports.commands, saveDraft: async () => false },
     });
 
     expect(await notEditable.service.saveDraft({ id: "automation-1", ...validDefinition })).toEqual(
@@ -160,8 +163,8 @@ describe("AutomationCommandService", () => {
 
   it("stops publish before validation or writes when the draft is missing", async () => {
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      queries: {
+        ...harness().ports.queries,
         findPublishableDraft: async () => null,
       },
     });
@@ -176,8 +179,8 @@ describe("AutomationCommandService", () => {
   it("rejects an invalid graph before loading resources or publishing", async () => {
     const invalidDefinition: AutomationDefinition = { ...validDefinition, nodes: [] };
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      queries: {
+        ...harness().ports.queries,
         findPublishableDraft: async () => ({
           draftVersionId: "draft-1",
           version: 1,
@@ -231,8 +234,8 @@ describe("AutomationCommandService", () => {
 
   it("maps a non-changeable status separately from success", async () => {
     const blocked = harness({
-      repository: {
-        ...harness().ports.repository,
+      commands: {
+        ...harness().ports.commands,
         setAutomationStatus: async () => false,
       },
     });

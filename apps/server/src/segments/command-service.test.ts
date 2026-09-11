@@ -59,8 +59,7 @@ function harness(overrides: Partial<SegmentCommandPorts> = {}): Harness {
     setEvaluationState: 0,
     update: 0,
   };
-  const repository: SegmentCommandPorts["repository"] = {
-    isSlugAvailable: async () => true,
+  const commands: SegmentCommandPorts["commands"] = {
     createSegment: async () => {
       counts.create += 1;
       order.push("commit");
@@ -75,7 +74,12 @@ function harness(overrides: Partial<SegmentCommandPorts> = {}): Harness {
       order.push("commit");
       return { filterVersion: 2 };
     },
+  };
+  const queries: SegmentCommandPorts["queries"] = {
+    isSlugAvailable: async () => true,
     findSegmentDefinition: async () => ({ kind: "dynamic", filterVersion: 3 }),
+  };
+  const evaluation: SegmentCommandPorts["evaluation"] = {
     setEvaluationState: async (...args: unknown[]) => {
       counts.setEvaluationState += 1;
       evaluationStateCalls.push(args);
@@ -83,7 +87,9 @@ function harness(overrides: Partial<SegmentCommandPorts> = {}): Harness {
     },
   };
   const ports: SegmentCommandPorts = {
-    repository,
+    queries,
+    commands,
+    evaluation,
     validateFilter: async () => ({ valid: true }),
     resolveBrief: async () => ({ kind: "ok", brief: undefined }),
     nextAvailableSlug: async () => "customers",
@@ -173,8 +179,8 @@ describe("SegmentCommandService", () => {
   it("maps a requested slug collision and does not schedule post-commit work", async () => {
     const conflict = new Error("unique");
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      commands: {
+        ...harness().ports.commands,
         createSegment: async () => {
           throw conflict;
         },
@@ -191,8 +197,8 @@ describe("SegmentCommandService", () => {
 
   it("returns not found from update without queueing or auditing", async () => {
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      commands: {
+        ...harness().ports.commands,
         updateSegment: async () => null,
       },
     });
@@ -217,8 +223,8 @@ describe("SegmentCommandService", () => {
 
   it("does not mutate, queue, or audit when refresh target is missing", async () => {
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      queries: {
+        ...harness().ports.queries,
         findSegmentDefinition: async () => null,
       },
     });
@@ -248,8 +254,8 @@ describe("SegmentCommandService", () => {
 
   it("queues a static recount without leaving the segment pending", async () => {
     const target = harness({
-      repository: {
-        ...harness().ports.repository,
+      queries: {
+        ...harness().ports.queries,
         findSegmentDefinition: async () => ({ kind: "static", filterVersion: 4 }),
       },
     });

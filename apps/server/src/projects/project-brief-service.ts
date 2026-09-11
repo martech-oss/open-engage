@@ -11,7 +11,7 @@ import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   ProjectBriefCommandRepository,
   ProjectBriefQueryRepository,
-  ProjectResourceLinkRepository,
+  ProjectResourceCommandRepository,
   type ProjectBriefCommandOutcome,
 } from "@openengage/database/projects";
 
@@ -251,7 +251,7 @@ export async function addProjectBriefItem(
   if (record.status !== "approved") fail("invalid_state");
   requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
   const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
-  const outcome = await new ProjectResourceLinkRepository(database, workspace).addApproved({
+  const outcome = await new ProjectResourceCommandRepository(database, workspace).addApproved({
     projectId: input.id,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
@@ -278,7 +278,7 @@ export async function removeProjectBriefItem(
   if (record.status !== "approved") fail("invalid_state");
   requireExpectedVersion(record.rowVersion, input.expectedRowVersion);
   const expectedRowVersion = input.expectedRowVersion ?? record.rowVersion;
-  const outcome = await new ProjectResourceLinkRepository(database, workspace).removeApproved({
+  const outcome = await new ProjectResourceCommandRepository(database, workspace).removeApproved({
     projectId: input.id,
     resourceType: input.resourceType,
     resourceId: input.resourceId,

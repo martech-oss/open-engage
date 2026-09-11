@@ -10,7 +10,7 @@ import {
   automationJobs,
   automations,
   automationVersions,
-  claimDueJobs,
+  AutomationJobRepository,
   companyContacts,
   contactTags,
   contacts,
@@ -316,8 +316,7 @@ describe("cross-cutting repositories", () => {
     await seedAutomationJob(first, due, "2026-08-01T00:30:00.000Z");
     await seedAutomationJob(second, due);
 
-    const claimed = await claimDueJobs(
-      env.DB,
+    const claimed = await new AutomationJobRepository(env.DB).claimDueJobs(
       "2026-08-01T00:15:00.000Z",
       "2026-08-01T00:20:00.000Z",
       10,

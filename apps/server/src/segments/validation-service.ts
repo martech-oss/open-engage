@@ -10,7 +10,7 @@ import {
 } from "@openengage/core/segments";
 import { formatIssuePath, type WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { SegmentCatalogRepository, SegmentRepository } from "@openengage/database/segments";
+import { SegmentCatalogRepository } from "@openengage/database/segments";
 
 const SYSTEM_EVENTS = [
   "project_member_joined",
@@ -30,7 +30,7 @@ export async function loadSegmentCatalog(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SegmentGenerationCatalog> {
-  const rows = await new SegmentRepository(database, workspace).loadGenerationCatalogRows();
+  const rows = await new SegmentCatalogRepository(database, workspace).loadGenerationCatalogRows();
   const events = new Map<string, SegmentResourceOption>();
   for (const type of SYSTEM_EVENTS) {
     events.set(type, {

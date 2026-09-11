@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   createDatabase,
   ProjectBriefLinkConflictError,
-  ProjectResourceLinkRepository,
-  SegmentRepository,
+  ProjectResourceCommandRepository,
+  SegmentCommandRepository,
   uuidv7,
 } from "@openengage/database/testing";
 
@@ -82,7 +82,7 @@ describe("project brief authorization", () => {
     );
     await submitProjectBrief(createDatabase(env.DB), owner, id);
     await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Ready");
-    const segment = await new SegmentRepository(env.DB, owner).createSegment({
+    const segment = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Protected audience",
       slug: `protected-${id.slice(-8).toLowerCase()}`,
       kind: "static",
@@ -95,7 +95,7 @@ describe("project brief authorization", () => {
       .bind(owner.workspaceId, id)
       .first<{ rowVersion: number }>();
     await expect(
-      new SegmentRepository(env.DB, otherMarketer).createSegment({
+      new SegmentCommandRepository(env.DB, otherMarketer).createSegment({
         name: "Must not impersonate an admin",
         slug: `impersonation-${id.slice(-8).toLowerCase()}`,
         kind: "static",
@@ -108,7 +108,7 @@ describe("project brief authorization", () => {
       }),
     ).rejects.toBeInstanceOf(ProjectBriefLinkConflictError);
 
-    const outcome = await new ProjectResourceLinkRepository(
+    const outcome = await new ProjectResourceCommandRepository(
       createDatabase(env.DB),
       otherMarketer,
     ).removeApproved({
@@ -145,13 +145,13 @@ describe("project brief authorization", () => {
     );
     await submitProjectBrief(createDatabase(env.DB), owner, id);
     await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Revision 1");
-    const segment = await new SegmentRepository(env.DB, owner).createSegment({
+    const segment = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Audience to reconfirm",
       slug: `reconfirm-${id.slice(-8).toLowerCase()}`,
       kind: "static",
       membershipSource: "Manual",
     });
-    const repository = new ProjectResourceLinkRepository(createDatabase(env.DB), owner);
+    const repository = new ProjectResourceCommandRepository(createDatabase(env.DB), owner);
     const resource = { projectId: id, resourceType: "segment" as const, resourceId: segment.id };
     await expect(repository.addApproved(resource)).resolves.toEqual({
       kind: "done",
@@ -194,7 +194,7 @@ describe("project brief authorization", () => {
     );
     await submitProjectBrief(createDatabase(env.DB), owner, id);
     await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Revision 1");
-    const linked = await new SegmentRepository(env.DB, owner).createSegment({
+    const linked = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Rolling link",
       slug: `rolling-linked-${id.slice(-8).toLowerCase()}`,
       kind: "static",

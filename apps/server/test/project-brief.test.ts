@@ -2,12 +2,12 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import {
-  AutomationRepository,
+  AutomationCommandRepository,
   createDatabase,
   CustomRedirectRepository,
   ProjectBriefLinkConflictError,
   projectItems,
-  SegmentRepository,
+  SegmentCommandRepository,
 } from "@openengage/database/testing";
 
 import {
@@ -132,14 +132,14 @@ describe("project brief workflow", () => {
     });
     expect(context).toMatchObject({ projectId: id, revision: 1, name: input.name });
 
-    const segment = await new SegmentRepository(env.DB, owner).createSegment({
+    const segment = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Approved audience",
       slug: `approved-${id.slice(-8).toLowerCase()}`,
       kind: "static",
       membershipSource: "Approved brief",
       projectLink: { projectId: id, briefRevision: 1, addedByUserId: owner.userId },
     });
-    const automation = await new AutomationRepository(env.DB, owner).createAutomation({
+    const automation = await new AutomationCommandRepository(env.DB, owner).createAutomation({
       name: "Approved onboarding flow",
       description: "Created from approved brief",
       timezone: "UTC",
@@ -301,7 +301,7 @@ describe("project brief workflow", () => {
     const staleLink = { projectId: id, briefRevision: 1, addedByUserId: owner.userId };
     const segmentIdHint = `stale-segment-${id.slice(-8).toLowerCase()}`;
     await expect(
-      new SegmentRepository(env.DB, owner).createSegment({
+      new SegmentCommandRepository(env.DB, owner).createSegment({
         name: "Must not exist",
         slug: segmentIdHint,
         kind: "static",
@@ -311,7 +311,7 @@ describe("project brief workflow", () => {
     ).rejects.toBeInstanceOf(ProjectBriefLinkConflictError);
 
     await expect(
-      new AutomationRepository(env.DB, owner).createAutomation({
+      new AutomationCommandRepository(env.DB, owner).createAutomation({
         name: "Must not exist",
         description: "Stale brief",
         timezone: "UTC",

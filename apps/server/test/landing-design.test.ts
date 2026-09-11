@@ -5,7 +5,8 @@ import { emptyLandingPageDocument } from "@openengage/core/web";
 import { createDatabase } from "@openengage/database/client";
 
 import type { RuntimeEnv } from "../src/env";
-import { processLandingGeneration, publishLandingPage } from "../src/web/landing-design-service";
+import { processLandingGeneration } from "../src/web/landing-generation-service";
+import { publishLandingPage } from "../src/web/landing-publication-service";
 import { seedWorkspaceClient } from "./factory";
 
 const post = (path: string, body: unknown) =>

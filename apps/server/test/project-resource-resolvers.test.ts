@@ -8,7 +8,7 @@ import {
   resolveProjectResources,
 } from "@openengage/database/projects";
 import {
-  ProjectResourceLinkRepository,
+  ProjectResourceQueryRepository,
   automations,
   createDatabase,
   customRedirects,
@@ -87,7 +87,7 @@ describe("project resource resolver registry", () => {
       }),
     ]);
 
-    const links = new ProjectResourceLinkRepository(database, workspace);
+    const links = new ProjectResourceQueryRepository(database, workspace);
     for (const type of PROJECT_RESOURCE_TYPES) {
       await expect(links.isAvailable(type, ids[type])).resolves.toBe(true);
     }

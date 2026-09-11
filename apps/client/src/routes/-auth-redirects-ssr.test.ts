@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { SiteTrackingPage } from "@/features/website/site-tracking-page";
 import { siteTrackingQueryOptions } from "@/features/website/website-api";
+import { appBootstrapQueryOptions } from "@/lib/app-bootstrap";
 import { createQueryClient } from "@/lib/query-client";
 import { WorkspaceTimeProvider } from "@/lib/workspace-time";
 
@@ -89,22 +90,19 @@ describe("SSR router auth redirects", () => {
         manageApiKeys: true,
       },
     };
+    const bootstrap = {
+      viewer: {
+        id: "user-1",
+        email: "owner@example.com",
+        name: "Owner",
+        emailVerified: true,
+      },
+      workspace,
+      workspaces: [{ id: workspace.id, name: workspace.name, slug: workspace.slug }],
+    };
     authState.bindingFetch.mockResolvedValue(
       Response.json({
-        viewer: {
-          id: "user-1",
-          email: "owner@example.com",
-          name: "Owner",
-          emailVerified: true,
-        },
-        workspace,
-        workspaces: [{ id: workspace.id, name: workspace.name, slug: workspace.slug }],
-        session: {
-          id: "session-1",
-          token: "session-sentinel-token-from-upstream",
-          ipAddress: "session-sentinel-ipAddress-from-upstream",
-          userAgent: "session-sentinel-userAgent-from-upstream",
-        },
+        json: bootstrap,
       }),
     );
     const tracking = {
@@ -125,6 +123,7 @@ describe("SSR router auth redirects", () => {
     expect(router.state.matches.at(-1)?.routeId).toBe("/_app/website/tracking");
     const routerMarkup = renderToStaticMarkup(createElement(RouterProvider, { router }));
     expect(authState.bindingFetch).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData(appBootstrapQueryOptions().queryKey)).toEqual(bootstrap);
     let markup = "";
     expect(() => {
       markup = renderToStaticMarkup(

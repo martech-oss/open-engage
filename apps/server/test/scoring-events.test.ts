@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { gradeLetter } from "@openengage/core/scoring";
 import {
   ContactRepository,
-  ContactResourceRepository,
+  ContactTagRepository,
   createDatabase,
   ScoringEngineRepository,
   ScoringRepository,
@@ -218,7 +218,7 @@ describe("archived contact events", () => {
     const scoring = new ScoringRepository(env.DB, { workspaceId });
     const category = await scoring.createCategory({ name: "Product", slug: "product" });
     const tagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId }).createTag({
       id: tagId,
       name: "Engaged",
       slug: "engaged",

@@ -2,10 +2,11 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 
-import { AutomationEngineRepository } from "@openengage/database/automations";
+import { AutomationJobRepository } from "@openengage/database/automations";
 import { contacts, createDatabase } from "@openengage/database/testing";
 
-import { executeNode } from "../src/automations/worker";
+import { executeNode } from "../src/automations/node-execution";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import {
   graph,
   seedAutomationJob,
@@ -34,7 +35,7 @@ it("stores a rich condition result and keeps the same branch after contact chang
     graph: definition,
   });
   const db = createDatabase(env.DB),
-    engine = new AutomationEngineRepository(db);
+    engine = new AutomationJobRepository(db);
   await db.orm.update(contacts).set({ score: 20 }).where(eq(contacts.id, seeded.contactId));
   const job = await engine.findJobForProcessing(seeded.jobId, "lease");
   expect(job).not.toBeNull();
@@ -44,9 +45,7 @@ it("stores a rich condition result and keeps the same branch after contact chang
       definition,
       job!,
       "lease",
-      runtimeWithJobsQueue(queueStub()),
-      db,
-      engine,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
     ),
   ).toMatchObject({ branch: "yes" });
   await db.orm.update(contacts).set({ score: 0 }).where(eq(contacts.id, seeded.contactId));
@@ -57,9 +56,7 @@ it("stores a rich condition result and keeps the same branch after contact chang
       definition,
       retry!,
       "lease",
-      runtimeWithJobsQueue(queueStub()),
-      db,
-      engine,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
     ),
   ).toMatchObject({ branch: "yes" });
 });
@@ -78,7 +75,7 @@ it("advances an already elapsed delay instead of waiting again", async () => {
     graph: definition,
   });
   const db = createDatabase(env.DB),
-    engine = new AutomationEngineRepository(db),
+    engine = new AutomationJobRepository(db),
     job = await engine.findJobForProcessing(seeded.jobId, "lease");
   expect(
     await executeNode(
@@ -86,9 +83,7 @@ it("advances an already elapsed delay instead of waiting again", async () => {
       definition,
       { ...job!, payload: { waiting: true } },
       "lease",
-      runtimeWithJobsQueue(queueStub()),
-      db,
-      engine,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
     ),
   ).toEqual({ branch: "next" });
 });

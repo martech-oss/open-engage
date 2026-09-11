@@ -5,7 +5,7 @@ import type { AutomationDefinition } from "@openengage/core/automations";
 import type { ProjectClonePreview, ProjectProgramDefinition } from "@openengage/core/projects";
 import {
   AutomationCallRepository,
-  AutomationEngineRepository,
+  AutomationJobRepository,
   AutomationRunRepository,
 } from "@openengage/database/automations";
 import { createDatabase } from "@openengage/database/client";
@@ -18,6 +18,7 @@ import {
   processAutomationRun,
 } from "../src/automations/run-service";
 import { processAutomationJob } from "../src/automations/worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { queueStub, runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { createSessionFixtureClient, seedMember, seedWorkspaceClient } from "./factory";
 import { addProjectBriefMember, projectBriefInput } from "./project-brief-test-support";
@@ -301,7 +302,7 @@ it("runs a cloned campaign from acquisition to success", { timeout: 30_000 }, as
   expect(runs[0]).toMatchObject({ slot, targetCount: 1 });
   const runId = runs[0]!.id;
   await processAutomationRun(runId, workspaceId, database, 100, queue);
-  const engine = new AutomationEngineRepository(database);
+  const engine = new AutomationJobRepository(database);
   const calls = new AutomationCallRepository(database);
   const runtime = runtimeWithJobsQueue(queue);
   for (let round = 0; round < 12; round++) {
@@ -310,7 +311,11 @@ it("runs a cloned campaign from acquisition to success", { timeout: 30_000 }, as
       nowIso(),
       new Date(Date.now() + 60_000).toISOString(),
     ))
-      await processAutomationJob(job.id, job.leaseId, runtime);
+      await processAutomationJob(
+        job.id,
+        job.leaseId,
+        createAutomationExecutionDependencies(runtime),
+      );
   }
   await new AutomationRunRepository(database, owner).refresh(runId);
   const completedRun = await client.automations.runDetail({ id: targetParent.targetId, runId });

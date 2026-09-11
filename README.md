@@ -100,27 +100,51 @@ platform / projects / reports / scoring / segments / web / workspaces
 
 ### router / service / repository の責務
 
-`apps/server/src/<domain>/router.ts`は原則`packages/database`の`*Repository`を直接呼びます。
-`service.ts`は本物のオーケストレーション(複数ステップ、監査ログ、外部I/O、DTOに収まらない計算)が
-あるドメインだけに存在します: `assets/service.ts`(R2・checksum・content-typeポリシー)、
-`projects/project-brief-service.ts`(施策ブリーフの状態遷移)、
-`deals/service.ts`(参照検証・get-after-write)、`auth/service.ts`(Better Auth設定)、
-`mcp/`(ツール実行の集約)。単なる1行委譲(`return new XRepository(...).method(...)`)や
-レコード→DTOのフィールドコピーは、前者はrouterへインライン化し、後者はrepository側で
-`coreSchema.parse(...)`を返すこと(`packages/database/src/contacts/repository.ts`の`toContact`が参考実装)。
+Routerは認可、入力の受け渡し、業務上の失敗からoRPCエラーへの変換を担当します。
+参照検証、複数ステップの保存・公開、監査、外部I/Oを伴う操作は、ドメインのserviceにまとめます。
+単純な読み取りや単一の永続化操作は、専用Repositoryを直接利用できます。ただし、
+すでにcommand serviceへ移行したrouterの依存制約は、アーキテクチャ検査の規約に従います。
+
+Webの`router.ts`はリソース別routerの登録を集約します。フォームとページの更新手順は
+それぞれのcommand serviceに置き、LPの参照検証、公開、生成ジョブと復旧も別モジュールで管理します。
+
+Repositoryは読み取り・書き込みなどの責務に対応するものを選び、
+`@openengage/database/<domain>`からimportします。各ドメインの`index.ts`は、
+そのドメインが所有するRepositoryと型の公開窓口です。
+複数のRepositoryを一つに見せる互換用クラスや、単なる1行委譲のserviceは追加しません。
+レコードからDTOへの変換はRepository側で行い、必要に応じて`coreSchema.parse(...)`で検証します
+(`packages/database/src/contacts/repository.ts`の`toContact`が参考実装)。
+
+Queueや他ドメインの操作を組み合わせる実行処理では、`runtime`が依存先を組み立て、
+ドメインの処理へ必要な操作を渡します。依存方向は`runtime`からドメインへ向けます。
+ジョブの実行制御と外部操作の配線を分けても、lease、冪等性キー、D1 batchの境界は維持します。
+Automationの`worker.ts`はジョブ制御を担当し、ノード判定とaction実行は専用モジュールへ委ねます。
+他ドメインのサービスやQueueへの接続は`runtime/automation-execution.ts`で組み立てます。
+
+### アーキテクチャ検査
+
+`pnpm architecture:check`は規約のテストとリポジトリの検査を実行します。
+`scripts/check-architecture.mjs`はCLIで、内部入口は
+`scripts/architecture/index.mjs`の`runArchitectureCheck({ root })`です。
+内部入口は検査ファイル数と違反一覧を返し、表示や終了コードの設定はCLIが担当します。
+
+ファイル収集・モジュール解決、構文とスコープの解析、値の由来の解析、規約判定は
+`scripts/architecture/`内の責務別モジュールで管理します。
+規約を変更するときは、`policy.mjs`・`rules.mjs`と対応する規約別テストを確認してください。
+ファイルを移動する場合も、移動先に同じ規約が適用されることを検証します。
 
 ### apps/client のUI・データ層規約
 
 画面とデータ更新の責務は次の境界に固定します:
 
-| 関心事              | Client (`apps/client`)                                              | Server / Database                                                 |
-| ------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 表示・入力          | 画面構成、入力中のdraft、開閉・選択状態                             | 表示用DTO、選択肢、server capabilityを返す                        |
-| 認可                | server capabilityから表示可否を決める（roleから権限を再構成しない） | Workspace roleと対象resourceを検証し、capabilityを決定する        |
-| 読み取り            | feature APIのquery options/hookを使い、loaderで必要なcacheを温める  | Repositoryを通じてscope済みデータを取得する                       |
-| 単一resource更新    | 1つのmutationを呼び、成功後に関連queryを無効化する                  | 入力検証、認可、永続化、監査を完結する                            |
-| 複数resource更新    | 1つのuser actionにつき1つのserver commandを呼ぶ                     | transaction/補償を含む一連の更新を1 commandとしてatomicに実行する |
-| 外部I/O・長時間処理 | command受付結果と進捗を表示する                                     | Service/Queue/Agentで外部I/O、retry、実行状態を管理する           |
+| 関心事              | Client (`apps/client`)                                              | Server / Database                                          |
+| ------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 表示・入力          | 画面構成、入力中のdraft、開閉・選択状態                             | 表示用DTO、選択肢、server capabilityを返す                 |
+| 認可                | server capabilityから表示可否を決める（roleから権限を再構成しない） | Workspace roleと対象resourceを検証し、capabilityを決定する |
+| 読み取り            | feature APIのquery options/hookを使い、loaderで必要なcacheを温める  | Repositoryを通じてscope済みデータを取得する                |
+| 単一resource更新    | 1つのmutationを呼び、成功後に関連queryを無効化する                  | 入力検証、認可、永続化、監査を完結する                     |
+| 複数resource更新    | 1つのuser actionにつき1つのserver commandを呼ぶ                     | transaction/補償を含む整合性制御を1 commandに集約する      |
+| 外部I/O・長時間処理 | command受付結果と進捗を表示する                                     | Service/Queue/Agentで外部I/O、retry、実行状態を管理する    |
 
 1回のuser actionがContact作成とtag/company割り当てのように複数resourceを変更する場合、
 Clientで`create`後に`assign`を順番に呼んではいけません。oRPC contractに意図を表す単一の
@@ -147,6 +171,13 @@ server commandを定義し、Server側で認可・transaction・監査・失敗�
 差分の大部分が列定義やフォーム本体でpropsに残る場合は、無理にapp-ui化せず機能ドメイン側に
 置いてください(将来の分岐に耐えない巨大な設定propsノブ化を避けるため)。
 
+複雑な画面の非同期処理や状態遷移は、feature内のcontroller hookに置きます。
+表示、controller、純粋な変換処理を責務別に分け、画面固有の状態を汎用hookへ持ち込みません。
+AI提案のcontrollerは`useAiProposalWorkflow`によるリクエスト識別を利用し、
+閉じた画面や変更前の対象に対する生成結果が現在の状態を上書きしないようにします。
+`automation-ai-sheet/`と`clone-panel/`はこの構成の例です。
+複製固有の`ProjectCloneCursor`と対象施策が変わった際のリセットは、複製のcontrollerで扱います。
+
 `hooks/`は特定ドメインに依存しない汎用ロジックです:
 
 | ファイル                   | 内容                                                                                          |
@@ -165,6 +196,8 @@ server commandを定義し、Server側で認可・transaction・監査・失敗�
   意味のあるキャッシュ無効化を`onSuccess`に持たせる。単純なCRUD(作成・更新・アーカイブ)は
   built-in invalidationを持たせる。複数resourceを変更するuser actionは、上記の通りClientで
   複数mutationを連結せず、意図を表す単一server commandとして実装する。
+- 進捗のpolling条件と間隔もfeature APIのquery optionsで管理する。
+  画面のcontrollerは、対象IDや画面固有のページネーション状態を渡す。
 - コンポーネント(`.tsx`)から`orpc`/`orpcQuery`を直接importしないこと。
   `scripts/check-architecture.mjs`がこれを機械的に強制します。
 
@@ -267,7 +300,26 @@ pnpm format:check  # 整形差分を検査
 pnpm lint          # Oxlintを実行
 pnpm lint:fix      # 安全に自動修正できるlintを反映
 pnpm check         # format・lint・型・テスト・ビルドを一括検証
+pnpm cache:check   # Turboのキャッシュが変更に応じて無効化されることを検証
 ```
+
+`pnpm check`はTurborepoで各チェックを実行します。共有パッケージのソース変更は
+`transit`タスクを通じて利用側のキャッシュにも反映します。Clientのビルドと型検査は
+Serverのソース・生成型も参照するため、Serverの`transit`と`cf:types`に依存します。
+Workerの型生成はWrangler設定、entrypoint、TypeScript設定、ローカルの環境変数ファイルを
+入力とし、通常の実装やテストの編集では再生成しません。Wranglerの`main`や参照する設定を
+変更するときは、対応する`cf:types.inputs`も更新してください。生成された宣言ファイル自体は
+実行時テストやリポジトリ全体のキャッシュ入力から除き、型検査とtype-aware lintは型生成を待ちます。
+
+GitHub Actionsは1台のrunnerで同じ`pnpm check`を実行し、同じPR・ブランチの古い実行を
+自動キャンセルします。pnpm storeとTurboの`.turbo/cache`は別々に保存し、Turboの保存キーを
+OS・CPU・Nodeの実バージョン・lockfileで分けています。各タスクの再利用判定はTurboが行います。
+pnpmのバージョンはルートの`packageManager`を参照します。
+
+CIは`pnpm check --summarize`の実行結果を`turbo-run-…` artifactに7日間保存します。
+キャッシュが意図どおり動かない場合は、このJSON内のタスクの入力とhashを比較してください。
+ローカルでも`pnpm check --dry=json`で実行予定とhashを確認できます。
+通常のPRとmainへのpushに加え、Actions画面から手動実行できます。
 
 ## Cloudflareへのデプロイ
 

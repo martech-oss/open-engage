@@ -11,6 +11,10 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "!worker-configuration.d.ts",
+        ".env",
+        ".env.*",
+        ".dev.vars",
+        ".dev.vars.*",
         "$TURBO_ROOT$/tsconfig.base.json"
       ],
       "outputs": ["dist/**"],
@@ -19,7 +23,11 @@
     },
     "test": {
       "dependsOn": ["transit"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/tsconfig.base.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!worker-configuration.d.ts",
+        "$TURBO_ROOT$/tsconfig.base.json"
+      ],
       "outputs": [],
       "env": ["CI", "TZ"],
       "outputLogs": "new-only"
@@ -35,7 +43,15 @@
       "outputLogs": "new-only"
     },
     "cf:types": {
-      "inputs": ["$TURBO_DEFAULT$", "!worker-configuration.d.ts"],
+      "inputs": [
+        "wrangler.jsonc",
+        "tsconfig*.json",
+        ".env",
+        ".env.*",
+        ".dev.vars",
+        ".dev.vars.*",
+        "$TURBO_ROOT$/tsconfig.base.json"
+      ],
       "outputs": ["worker-configuration.d.ts"],
       "env": ["CLOUDFLARE_ENV"],
       "outputLogs": "new-only"
@@ -76,6 +92,8 @@
         "$TURBO_ROOT$/*.jsonc",
         "$TURBO_ROOT$/*.yaml",
         "$TURBO_ROOT$/*.yml",
+        "$TURBO_ROOT$/.gitignore",
+        "!$TURBO_ROOT$/**/worker-configuration.d.ts",
         "!$TURBO_ROOT$/**/dist/**",
         "!$TURBO_ROOT$/**/.turbo/**",
         "!$TURBO_ROOT$/**/.wrangler/**",
@@ -105,7 +123,12 @@
       "outputLogs": "new-only"
     },
     "//#lint": {
-      "dependsOn": ["//#repo-all"],
+      "dependsOn": [
+        "//#repo-code",
+        "@openengage/agent#cf:types",
+        "@openengage/client#cf:types",
+        "@openengage/server#cf:types"
+      ],
       "inputs": ["$TURBO_ROOT$/turbo.json"],
       "outputs": [],
       "outputLogs": "new-only"
@@ -117,6 +140,12 @@
       "outputLogs": "new-only"
     },
     "//#quality:unused": {
+      "dependsOn": ["//#repo-code"],
+      "inputs": ["$TURBO_ROOT$/turbo.json"],
+      "outputs": [],
+      "outputLogs": "new-only"
+    },
+    "//#cache:check": {
       "dependsOn": ["//#repo-code"],
       "inputs": ["$TURBO_ROOT$/turbo.json"],
       "outputs": [],

@@ -1,4 +1,4 @@
-import { AutomationRepository } from "@openengage/database/automations";
+import { AutomationQueryRepository } from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 
 export interface AutomationAnalytics {
@@ -11,5 +11,5 @@ export async function getAutomationAnalytics(
   workspaceId: string,
   automationId: string,
 ): Promise<AutomationAnalytics> {
-  return new AutomationRepository(database, { workspaceId }).analytics(automationId);
+  return new AutomationQueryRepository(database, { workspaceId }).analytics(automationId);
 }

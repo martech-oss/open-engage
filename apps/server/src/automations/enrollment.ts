@@ -1,4 +1,7 @@
-import { AutomationEngineRepository, AutomationRepository } from "@openengage/database/automations";
+import {
+  AutomationInactivityRepository,
+  AutomationEnrollmentRepository,
+} from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { uuidv7 } from "@openengage/database/shared";
 
@@ -26,7 +29,9 @@ export async function enrollAutomationsForEvent(
   database: OpenEngageDatabase,
   event: ContactEvent,
 ): Promise<EnrollmentResult[]> {
-  const repository = new AutomationRepository(database, { workspaceId: event.workspaceId });
+  const repository = new AutomationEnrollmentRepository(database, {
+    workspaceId: event.workspaceId,
+  });
   const triggers = await repository.listActiveTriggersForEvent(
     event.type,
     event.resourceId ?? null,
@@ -48,12 +53,14 @@ export async function enrollInactiveContacts(
   now = new Date(),
   limit = 200,
 ): Promise<number> {
-  const engine = new AutomationEngineRepository(database);
+  const engine = new AutomationInactivityRepository(database);
   const candidates = await engine.listInactiveEnrollmentCandidates(now.toISOString(), limit);
 
   let enrolled = 0;
   for (const candidate of candidates) {
-    const repository = new AutomationRepository(database, { workspaceId: candidate.workspaceId });
+    const repository = new AutomationEnrollmentRepository(database, {
+      workspaceId: candidate.workspaceId,
+    });
     const result = await enrollFromTrigger(repository, candidate, {
       contactId: candidate.contactId,
       sourceEventId: `inactive:${candidate.automationId}:${candidate.contactId}:${candidate.lastActivityAt}`,
@@ -79,7 +86,9 @@ export async function enrollContactManually(
     sourceEventId?: string | undefined;
   },
 ): Promise<ManualEnrollOutcome> {
-  const repository = new AutomationRepository(database, { workspaceId: input.workspaceId });
+  const repository = new AutomationEnrollmentRepository(database, {
+    workspaceId: input.workspaceId,
+  });
   const automation = await repository.findActivePublishedAutomation(input.automationId);
   if (!automation) return { kind: "not_active" };
   const source = automation.graph.nodes.find((node) => node.type === "source");
@@ -110,7 +119,7 @@ export async function enrollPublishedAutomation(
   },
 ): Promise<EnrollmentResult | null> {
   return enrollFromTrigger(
-    new AutomationRepository(database, { workspaceId: input.workspaceId }),
+    new AutomationEnrollmentRepository(database, { workspaceId: input.workspaceId }),
     {
       automationId: input.automationId,
       automationVersionId: input.automationVersionId,
@@ -125,7 +134,7 @@ export async function enrollPublishedAutomation(
 }
 
 async function enrollFromTrigger(
-  repository: AutomationRepository,
+  repository: AutomationEnrollmentRepository,
   trigger: AutomationTriggerRef,
   input: {
     contactId: string;

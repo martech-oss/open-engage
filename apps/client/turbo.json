@@ -3,14 +3,30 @@
   "extends": ["//"],
   "tasks": {
     "cf:types": {
-      "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/apps/server/wrangler.jsonc"]
+      "inputs": [
+        "$TURBO_EXTENDS$",
+        "src/server.ts",
+        "$TURBO_ROOT$/apps/server/wrangler.jsonc",
+        "$TURBO_ROOT$/apps/server/src/index.ts",
+        "$TURBO_ROOT$/apps/server/tsconfig.json"
+      ]
     },
     "build": {
-      "dependsOn": ["$TURBO_EXTENDS$", "cf:types"],
+      "dependsOn": [
+        "$TURBO_EXTENDS$",
+        "cf:types",
+        "@openengage/server#cf:types",
+        "@openengage/server#transit"
+      ],
       "inputs": ["$TURBO_EXTENDS$", "$TURBO_ROOT$/scripts/check-client-bundles.mjs"]
     },
     "typecheck": {
-      "dependsOn": ["$TURBO_EXTENDS$", "cf:types"]
+      "dependsOn": [
+        "$TURBO_EXTENDS$",
+        "cf:types",
+        "@openengage/server#cf:types",
+        "@openengage/server#transit"
+      ]
     },
     "dev": {
       "dependsOn": ["@openengage/server#db:migrate:local"]

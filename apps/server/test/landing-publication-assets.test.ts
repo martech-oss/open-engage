@@ -6,7 +6,7 @@ import { createDatabase } from "@openengage/database/client";
 import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
 
 import type { RuntimeEnv } from "../src/env";
-import { publishLandingPage } from "../src/web/landing-design-service";
+import { publishLandingPage } from "../src/web/landing-publication-service";
 import { seedWorkspaceClient } from "./factory";
 
 it.each(["draft_conflict", "form_write_failure"] as const)(

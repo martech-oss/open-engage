@@ -1,4 +1,4 @@
-import { ReportsRepository } from "@openengage/database/reports";
+import { SiteReportsRepository } from "@openengage/database/reports";
 
 import { primitiveString, toFiniteNumber } from "../platform/values";
 import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";
@@ -8,7 +8,7 @@ export async function siteReport(
   workspaceId: string,
   range: ReportRange,
 ) {
-  const data = await new ReportsRepository(database).siteSummary(workspaceId, range);
+  const data = await new SiteReportsRepository(database).siteSummary(workspaceId, range);
   const pageSummary = data.pageSummary;
   const formSummary = data.formSummary;
   const pageViews = toFiniteNumber(pageSummary["page_views"]);

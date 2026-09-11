@@ -7,7 +7,8 @@ import { ConsentRepository } from "@openengage/database/consent";
 import {
   DeliveryRecoveryRepository,
   EmailTrackingEventRepository,
-  MessagingWorkerRepository,
+  MessagingDeliveryPreparationRepository,
+  MessagingDeliveryWriteRepository,
   type DeliveryLeaseRecord,
 } from "@openengage/database/messaging";
 import { uuidv7 } from "@openengage/database/shared";
@@ -43,11 +44,17 @@ export async function createEmailDelivery(
   database: OpenEngageDatabase,
 ): Promise<void> {
   if (!job.contactEmail) throw new PermanentChannelError("Contact does not have an email");
-  const repository = new MessagingWorkerRepository(database);
-  const template = await repository.findSendableTemplate(job.workspaceId, action.templateId);
+  const messagingDeliveryPreparation = new MessagingDeliveryPreparationRepository(database),
+    messagingDeliveryWrite = new MessagingDeliveryWriteRepository(database);
+  const template = await messagingDeliveryPreparation.findSendableTemplate(
+    job.workspaceId,
+    action.templateId,
+  );
   if (!template) throw new PermanentChannelError("Email template is missing");
-  const message = await repository.readMessageVariables(job.workspaceId);
-  const workspace = await repository.readWorkspaceTemplateContext(job.workspaceId);
+  const message = await messagingDeliveryPreparation.readMessageVariables(job.workspaceId);
+  const workspace = await messagingDeliveryPreparation.readWorkspaceTemplateContext(
+    job.workspaceId,
+  );
   const contact = {
     email: job.contactEmail,
     first_name: job.firstName,
@@ -112,7 +119,7 @@ export async function createEmailDelivery(
     ...rendered,
     html,
   };
-  const created = await repository.insertQueuedDelivery(
+  const created = await messagingDeliveryWrite.insertQueuedDelivery(
     {
       id: deliveryId,
       workspaceId: job.workspaceId,
@@ -141,8 +148,12 @@ export async function createWebhookDelivery(
   env: RuntimeEnv,
   database: OpenEngageDatabase,
 ): Promise<void> {
-  const repository = new MessagingWorkerRepository(database);
-  const endpoint = await repository.findEnabledWebhookEndpoint(job.workspaceId, endpointId);
+  const messagingDeliveryPreparation = new MessagingDeliveryPreparationRepository(database),
+    messagingDeliveryWrite = new MessagingDeliveryWriteRepository(database);
+  const endpoint = await messagingDeliveryPreparation.findEnabledWebhookEndpoint(
+    job.workspaceId,
+    endpointId,
+  );
   if (!endpoint) throw new PermanentChannelError("Webhook endpoint is missing");
   const deliveryId = uuidv7();
   const payload: ChannelMessage = {
@@ -155,7 +166,7 @@ export async function createWebhookDelivery(
       enrollmentId: job.enrollmentId,
     },
   };
-  const created = await repository.insertQueuedDelivery(
+  const created = await messagingDeliveryWrite.insertQueuedDelivery(
     {
       id: deliveryId,
       workspaceId: job.workspaceId,
@@ -235,7 +246,7 @@ export async function deliveryAdapter(
     return new CloudflareEmailAdapter(env.EMAIL);
   }
   if (!endpointId) throw new PermanentChannelError("Webhook endpoint is missing");
-  const endpoint = await new MessagingWorkerRepository(
+  const endpoint = await new MessagingDeliveryPreparationRepository(
     database,
   ).findEnabledWebhookEndpointWithSecret(delivery.workspaceId, endpointId);
   if (!endpoint) throw new PermanentChannelError("Webhook endpoint is disabled or missing");
