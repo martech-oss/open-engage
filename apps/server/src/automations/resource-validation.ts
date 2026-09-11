@@ -9,7 +9,7 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import { AutomationCatalogRepository } from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ConsentRepository } from "@openengage/database/consent";
-import { ContactResourceRepository } from "@openengage/database/contacts";
+import { ContactResourceQueryRepository } from "@openengage/database/contacts";
 import { MessagingRepository } from "@openengage/database/messaging";
 import { SegmentRepository } from "@openengage/database/segments";
 import { WebRepository } from "@openengage/database/web";
@@ -61,7 +61,7 @@ export async function loadAutomationResourceContext(
     new MessagingRepository(database, workspace).listEmailTemplates(false),
     new WebRepository(database, workspace).listSignupForms(),
     new SegmentRepository(database, workspace).listSegments(),
-    new ContactResourceRepository(database, workspace).getContactOptionRows(),
+    new ContactResourceQueryRepository(database, workspace).getContactOptionRows(),
     new WorkspaceSettingsRepository(database, workspace).listWebhookEndpoints(),
     new ConsentRepository(database, workspace).listTopics(),
     new WorkspaceSettingsRepository(database, workspace).getWorkspace(),

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ContactRepository,
-  ContactResourceRepository,
+  ContactTagRepository,
   createDatabase,
   ScoringRepository,
   uuidv7,
@@ -194,7 +194,7 @@ describe("scoring rules", () => {
     });
     await local.scoring.archiveCategory(archivedCategory.id);
     const foreignTagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
       id: foreignTagId,
       name: "Foreign tag",
       slug: "foreign-tag",
@@ -245,7 +245,7 @@ describe("scoring rules", () => {
     });
     await local.scoring.archiveCategory(archivedCategory.id);
     const foreignTagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
       id: foreignTagId,
       name: "Foreign update tag",
       slug: "foreign-update-tag",
@@ -305,7 +305,7 @@ describe("scoring rules", () => {
       slug: "foreign-category-secret",
     });
     const foreignTagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
       id: foreignTagId,
       name: "Foreign tag secret",
       slug: "foreign-tag-secret",
@@ -354,7 +354,7 @@ describe("scoring rules", () => {
     const local = await seed("foreign-tag-execution-local@example.com");
     const foreign = await seed("foreign-tag-execution-owner@example.com");
     const foreignTagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId: foreign.workspaceId }).createTag({
       id: foreignTagId,
       name: "Foreign execution tag",
       slug: "foreign-execution-tag",
@@ -382,7 +382,7 @@ describe("scoring rules", () => {
     });
     await local.scoring.archiveCategory(category.id);
     const tagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId: local.workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId: local.workspaceId }).createTag({
       id: tagId,
       name: "Local tag",
       slug: "local-list-tag",
@@ -413,7 +413,7 @@ describe("scoring rules", () => {
     });
     await local.scoring.archiveCategory(category.id);
     const tagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId: local.workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId: local.workspaceId }).createTag({
       id: tagId,
       name: "Local execution tag",
       slug: "local-execution-tag",

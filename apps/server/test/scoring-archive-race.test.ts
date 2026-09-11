@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   ContactEventRepository,
   ContactRepository,
-  ContactResourceRepository,
+  ContactTagRepository,
   createDatabase,
   ScoringRepository,
   uuidv7,
@@ -20,7 +20,7 @@ describe("scoring archive races", () => {
     const scoring = new ScoringRepository(env.DB, { workspaceId });
     const category = await scoring.createCategory({ name: "Intent", slug: "intent" });
     const tagId = uuidv7();
-    await new ContactResourceRepository(env.DB, { workspaceId }).createTag({
+    await new ContactTagRepository(env.DB, { workspaceId }).createTag({
       id: tagId,
       name: "Engaged",
       slug: "engaged",
