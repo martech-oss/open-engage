@@ -3,6 +3,7 @@ import { extname, relative } from "node:path";
 import {
   handwrittenFileLineLimit,
   clientFunctionLineLimit,
+  clientControllerFunctionPaths,
   task6HotspotFileLineLimit,
   task6HotspotFunctionLineLimit,
   handwrittenLineLimitExceptions,
@@ -318,7 +319,7 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
     }
     if (
       workspacePath.startsWith("apps/client/src/") &&
-      extname(file) === ".tsx" &&
+      (extname(file) === ".tsx" || clientControllerFunctionPaths.has(workspacePath)) &&
       !handwrittenLineLimitExceptions.has(workspacePath)
     ) {
       for (const span of functionLikeSpans) {

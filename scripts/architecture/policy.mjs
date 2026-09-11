@@ -1,3 +1,8 @@
+// Preserve the existing Client function ceiling when these UI controllers move to TS.
+export const clientControllerFunctionPaths = new Set([
+  "apps/client/src/features/automations/automation-ai-sheet/controller.ts",
+  "apps/client/src/features/projects/clone-panel/controller.ts",
+]);
 export const handwrittenFileLineLimit = 500;
 export const clientFunctionLineLimit = 250;
 export const task6HotspotFileLineLimit = 250;

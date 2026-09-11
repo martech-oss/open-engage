@@ -1,6 +1,33 @@
 import { runScenarios, sourceLines, componentLines, classMemberLines } from "./helpers.mjs";
 
 await runScenarios("architecture: size-limits", [
+  ...[
+    "apps/client/src/features/automations/automation-ai-sheet/controller.ts",
+    "apps/client/src/features/projects/clone-panel/controller.ts",
+  ].flatMap((path) => [
+    {
+      name: `allows extracted controller ${path} at 250 function lines`,
+      files: { [path]: componentLines(250) },
+    },
+    {
+      name: `rejects extracted controller ${path} above 250 function lines`,
+      files: { [path]: componentLines(251) },
+      want: "function-like node.*over 250 lines",
+    },
+    {
+      name: `allows extracted controller ${path} at 500 file lines`,
+      files: { [path]: sourceLines(500) },
+    },
+    {
+      name: `rejects extracted controller ${path} above 500 file lines`,
+      files: { [path]: sourceLines(501) },
+      want: "over 500 lines",
+    },
+  ]),
+  {
+    name: "does not expand the controller ceiling to unrelated client TS modules",
+    files: { "apps/client/src/lib/example.ts": componentLines(251) },
+  },
   {
     name: "allows focused Task 6 files and functions at their ratchet limits",
     files: {

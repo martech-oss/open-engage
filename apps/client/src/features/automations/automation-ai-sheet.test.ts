@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AutomationDefinition } from "@openengage/core/automations";
 
-import { definitionDiff } from "./automation-ai-sheet";
+import { definitionDiff } from "./automation-ai-sheet/definition-diff";
 
 function definition(): AutomationDefinition {
   return {
