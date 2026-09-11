@@ -300,7 +300,26 @@ pnpm format:check  # 整形差分を検査
 pnpm lint          # Oxlintを実行
 pnpm lint:fix      # 安全に自動修正できるlintを反映
 pnpm check         # format・lint・型・テスト・ビルドを一括検証
+pnpm cache:check   # Turboのキャッシュが変更に応じて無効化されることを検証
 ```
+
+`pnpm check`はTurborepoで各チェックを実行します。共有パッケージのソース変更は
+`transit`タスクを通じて利用側のキャッシュにも反映します。Clientのビルドと型検査は
+Serverのソース・生成型も参照するため、Serverの`transit`と`cf:types`に依存します。
+Workerの型生成はWrangler設定、entrypoint、TypeScript設定、ローカルの環境変数ファイルを
+入力とし、通常の実装やテストの編集では再生成しません。Wranglerの`main`や参照する設定を
+変更するときは、対応する`cf:types.inputs`も更新してください。生成された宣言ファイル自体は
+実行時テストやリポジトリ全体のキャッシュ入力から除き、型検査とtype-aware lintは型生成を待ちます。
+
+GitHub Actionsは1台のrunnerで同じ`pnpm check`を実行し、同じPR・ブランチの古い実行を
+自動キャンセルします。pnpm storeとTurboの`.turbo/cache`は別々に保存し、Turboの保存キーを
+OS・CPU・Nodeの実バージョン・lockfileで分けています。各タスクの再利用判定はTurboが行います。
+pnpmのバージョンはルートの`packageManager`を参照します。
+
+CIは`pnpm check --summarize`の実行結果を`turbo-run-…` artifactに7日間保存します。
+キャッシュが意図どおり動かない場合は、このJSON内のタスクの入力とhashを比較してください。
+ローカルでも`pnpm check --dry=json`で実行予定とhashを確認できます。
+通常のPRとmainへのpushに加え、Actions画面から手動実行できます。
 
 ## Cloudflareへのデプロイ
 

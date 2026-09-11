@@ -2,6 +2,9 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    "cf:types": {
+      "inputs": ["$TURBO_EXTENDS$", "src/index.ts"]
+    },
     "build": {
       "dependsOn": ["$TURBO_EXTENDS$", "cf:types"]
     },
