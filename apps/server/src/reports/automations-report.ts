@@ -1,4 +1,4 @@
-import { ReportsRepository } from "@openengage/database/reports";
+import { AutomationsReportsRepository } from "@openengage/database/reports";
 
 import { primitiveString, toFiniteNumber } from "../platform/values";
 import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";
@@ -8,7 +8,10 @@ export async function automationReport(
   workspaceId: string,
   range: ReportRange,
 ) {
-  const data = await new ReportsRepository(database).automationsSummary(workspaceId, range);
+  const data = await new AutomationsReportsRepository(database).automationsSummary(
+    workspaceId,
+    range,
+  );
   const automations = data.automations.map((row) => ({
     id: primitiveString(row["id"]),
     name: primitiveString(row["name"]),

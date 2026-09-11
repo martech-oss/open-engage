@@ -4,7 +4,7 @@ import type { ProjectResourceType } from "@openengage/core/projects";
 
 import { deals } from "../deals/schema";
 import { deliveries } from "../messaging/schema";
-import type { ReportDateRange } from "../reports/repository";
+import type { ReportDateRange } from "../reports/types";
 import { nowIso } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";

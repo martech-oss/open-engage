@@ -21,7 +21,7 @@ export * from "./platform/dead-letter-repository";
 export * from "./platform/idempotency-repository";
 export * from "./platform/maintenance-repository";
 export * from "./projects";
-export * from "./reports/repository";
+export * from "./reports";
 export * from "./schema";
 export * from "./segments/repository";
 export * from "./shared/database-utils";

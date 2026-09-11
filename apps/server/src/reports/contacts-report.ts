@@ -1,4 +1,4 @@
-import { ReportsRepository } from "@openengage/database/reports";
+import { ContactsReportsRepository } from "@openengage/database/reports";
 
 import { primitiveString, toFiniteNumber } from "../platform/values";
 import { publicRange, type ReportDatabase, type ReportRange } from "./shared";
@@ -8,7 +8,7 @@ export async function contactReport(
   workspaceId: string,
   range: ReportRange,
 ) {
-  const data = await new ReportsRepository(database).contactsSummary(workspaceId, range);
+  const data = await new ContactsReportsRepository(database).contactsSummary(workspaceId, range);
   const summary = data.summary;
   return {
     category: "contacts" as const,

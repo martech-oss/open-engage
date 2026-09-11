@@ -1,4 +1,4 @@
-import { ReportsRepository } from "@openengage/database/reports";
+import { DealsReportsRepository } from "@openengage/database/reports";
 
 import { primitiveString, toFiniteNumber } from "../platform/values";
 import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";
@@ -9,7 +9,7 @@ export async function dealReport(
   range: ReportRange,
   requestedCurrency?: string,
 ) {
-  const repository = new ReportsRepository(database);
+  const repository = new DealsReportsRepository(database);
   const currencies = (await repository.listDealCurrencies(workspaceId)).map((row) => row.currency);
   const currency =
     (requestedCurrency && currencies.includes(requestedCurrency) ? requestedCurrency : undefined) ??

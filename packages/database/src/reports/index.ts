@@ -4,7 +4,6 @@ export * from "./contacts-repository";
 export * from "./dashboard-repository";
 export * from "./deals-repository";
 export * from "./emails-repository";
-export * from "./repository";
 export * from "./site-repository";
 export * from "./types";
 export * from "./lifecycle-repository";
