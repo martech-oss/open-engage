@@ -42,7 +42,7 @@ Vitestは合計**1,385件・275ファイル**が通過した。着手時の1,330
 
 Webでは実D1のslug競合、凍結した入力、下書き保存から公開までの順序、生成Queueの送信失敗と復旧を検証した。Automationでは注入した依存を使う17件と実際のQueue dispatchを通す2件を追加し、既存のlease喪失・完了競合・永続化済み判定・子呼び出し・スコアの一度限りの反映も確認した。Clientでは遅れて届くAI応答、参照選択と省略、適用失敗、複製の対象切替・型付き変数・同一キーでの再試行・pollingとinvalidationを確認した。
 
-5項目すべての独立レビューで、修正必須の指摘はなかった。検証ログには一部の異常系テストの期待したエラーログと、既存SSR fixtureの未定義queryデータの警告が含まれる。いずれもテストは通過しており、レビューではテスト出力の軽微な改善事項として記録した。
+5項目すべての独立レビューと全体レビューで、修正必須の指摘はなかった。最終レビューで記録されたテスト出力の軽微な3項目は、4ファイルのfixtureと期待ログの検証を修正して解消した。アプリケーションの処理や既存の振る舞いの検証は維持している。
 
 ## PR一覧
 
@@ -62,6 +62,8 @@ Webでは実D1のslug競合、凍結した入力、下書き保存から公開�
 | [#16](https://github.com/martech-oss/open-engage/pull/16) | Web command・公開・生成処理の分離       | `b18e88d`    |
 | [#17](https://github.com/martech-oss/open-engage/pull/17) | Automationの実行制御とruntime接続の分離 | `f2da3a2`    |
 | [#18](https://github.com/martech-oss/open-engage/pull/18) | Automation AI・施策複製UIの分離         | `04dadc7`    |
+
+README・本書と仕上げの検証は[PR #19](https://github.com/martech-oss/open-engage/pull/19)に分け、UIのPR #18をbaseにしている。
 
 Web RepositoryのPRでは既存の統合テスト2件がCIの5秒制限で一度時間切れになったが、コードや制限時間を変えずに再実行して成功した。
 
