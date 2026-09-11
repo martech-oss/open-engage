@@ -7,7 +7,7 @@ import {
   CustomRedirectRepository,
   ProjectBriefLinkConflictError,
   projectItems,
-  SegmentRepository,
+  SegmentCommandRepository,
 } from "@openengage/database/testing";
 
 import {
@@ -132,7 +132,7 @@ describe("project brief workflow", () => {
     });
     expect(context).toMatchObject({ projectId: id, revision: 1, name: input.name });
 
-    const segment = await new SegmentRepository(env.DB, owner).createSegment({
+    const segment = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Approved audience",
       slug: `approved-${id.slice(-8).toLowerCase()}`,
       kind: "static",
@@ -301,7 +301,7 @@ describe("project brief workflow", () => {
     const staleLink = { projectId: id, briefRevision: 1, addedByUserId: owner.userId };
     const segmentIdHint = `stale-segment-${id.slice(-8).toLowerCase()}`;
     await expect(
-      new SegmentRepository(env.DB, owner).createSegment({
+      new SegmentCommandRepository(env.DB, owner).createSegment({
         name: "Must not exist",
         slug: segmentIdHint,
         kind: "static",

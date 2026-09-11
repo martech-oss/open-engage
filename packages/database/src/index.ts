@@ -15,7 +15,7 @@ export * from "./platform/maintenance-repository";
 export * from "./projects";
 export * from "./reports";
 export * from "./schema";
-export * from "./segments/repository";
+export * from "./segments";
 export * from "./shared/database-utils";
 export * from "./shared/json-codec";
 export * from "./shared/pagination";

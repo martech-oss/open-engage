@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { compileSegmentFilter } from "@openengage/core/segments";
-import { SegmentRepository, createDatabase } from "@openengage/database/testing";
+import { SegmentEvaluationRepository, createDatabase } from "@openengage/database/testing";
 
 import { reconcileContactSegmentMemberships } from "../src/segments/membership-service";
 import { seedWorkspaceClient } from "./factory";
@@ -167,7 +167,7 @@ describe("segment designer support", () => {
     });
     const beforeStaleRefresh = await client.segments.get({ id: created.id });
 
-    const repository = new SegmentRepository(env.DB, {
+    const repository = new SegmentEvaluationRepository(env.DB, {
       workspaceId,
       userId,
       role: "owner",
@@ -208,7 +208,7 @@ describe("segment designer support", () => {
       operator: "eq",
       value: oldContact.email,
     });
-    const repository = new SegmentRepository(env.DB, {
+    const repository = new SegmentEvaluationRepository(env.DB, {
       workspaceId,
       userId,
       role: "owner",
@@ -234,7 +234,7 @@ describe("segment designer support", () => {
         .run();
     });
 
-    await new SegmentRepository(raced, {
+    await new SegmentEvaluationRepository(raced, {
       workspaceId,
       userId,
       role: "owner",

@@ -3,7 +3,11 @@ import type { SegmentFilter, SegmentRow } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { compileWorkspaceSegmentFilter } from "@openengage/database/segments";
-import { SegmentRepository, type SegmentRecord } from "@openengage/database/segments";
+import {
+  SegmentQueryRepository,
+  SegmentEvaluationRepository,
+  type SegmentRecord,
+} from "@openengage/database/segments";
 
 import {
   nullablePrimitiveString,
@@ -17,7 +21,7 @@ export async function listSegments(
   workspace: WorkspaceContext,
   kind?: "static" | "dynamic",
 ): Promise<SegmentRow[]> {
-  const rows = await new SegmentRepository(database, workspace).listSegments(kind);
+  const rows = await new SegmentQueryRepository(database, workspace).listSegments(kind);
   return rows.map(toSegmentRow);
 }
 
@@ -26,7 +30,7 @@ export async function getSegment(
   workspace: WorkspaceContext,
   id: string,
 ): Promise<SegmentRow | null> {
-  const row = await new SegmentRepository(database, workspace).getSegment(id);
+  const row = await new SegmentQueryRepository(database, workspace).getSegment(id);
   return row ? toSegmentRow(row) : null;
 }
 
@@ -63,7 +67,7 @@ export async function previewSegment(
   warnings: string[];
 }> {
   const compiled = compileWorkspaceSegmentFilter(workspace.workspaceId, filter);
-  const repository = new SegmentRepository(database, workspace);
+  const repository = new SegmentEvaluationRepository(database, workspace);
   const [rows, matchedCount] = await Promise.all([
     repository.previewContacts(compiled, PREVIEW_LIMIT),
     repository.previewCount(compiled),

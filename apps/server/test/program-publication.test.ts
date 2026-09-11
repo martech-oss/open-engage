@@ -154,7 +154,7 @@ it.each(["signed_up", "followup"])(
 
 it("keeps version-qualified segment statuses distinct when an ID changes meaning", async () => {
   const { segmentFilterSchema } = await import("@openengage/core/segments");
-  const { compileWorkspaceSegmentFilter, SegmentRepository } =
+  const { compileWorkspaceSegmentFilter, SegmentCatalogRepository } =
     await import("@openengage/database/segments");
   const f = await fixture();
   await f.client.projects.programSave({
@@ -200,7 +200,7 @@ it("keeps version-qualified segment statuses distinct when an ID changes meaning
     statusId: "attended",
     idempotencyKey: crypto.randomUUID(),
   });
-  const catalog = await new SegmentRepository(
+  const catalog = await new SegmentCatalogRepository(
     createDatabase(env.DB),
     f,
   ).loadGenerationCatalogRows();

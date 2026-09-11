@@ -2,7 +2,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SegmentRepository, uuidv7 } from "@openengage/database/testing";
+import { SegmentCommandRepository, uuidv7 } from "@openengage/database/testing";
 import type { contract } from "@openengage/orpc";
 
 import { createFixtureClient, seedWorkspaceClient } from "./factory";
@@ -270,10 +270,10 @@ describe("oRPC mutations", () => {
 
 function rejectNextSegmentWrite(operation: SegmentWrite, error: Error): void {
   if (operation === "create") {
-    vi.spyOn(SegmentRepository.prototype, "createSegment").mockRejectedValueOnce(error);
+    vi.spyOn(SegmentCommandRepository.prototype, "createSegment").mockRejectedValueOnce(error);
     return;
   }
-  vi.spyOn(SegmentRepository.prototype, "updateSegment").mockRejectedValueOnce(error);
+  vi.spyOn(SegmentCommandRepository.prototype, "updateSegment").mockRejectedValueOnce(error);
 }
 
 function callSegmentWrite(client: Client, operation: SegmentWrite): Promise<unknown> {

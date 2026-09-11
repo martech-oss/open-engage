@@ -1,18 +1,18 @@
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { compileWorkspaceSegmentFilter } from "@openengage/database/segments";
-import { SegmentMaintenanceRepository, SegmentRepository } from "@openengage/database/segments";
-
-/** These helpers are called from flows that only carry a workspace id (bulk contact actions, membership refreshes). */
-function segmentRepository(database: OpenEngageDatabase, workspaceId: string): SegmentRepository {
-  return new SegmentRepository(database, { workspaceId });
-}
+import {
+  SegmentMaintenanceRepository,
+  SegmentEvaluationRepository,
+  SegmentQueryRepository,
+  SegmentCatalogRepository,
+} from "@openengage/database/segments";
 
 export async function updateSegmentMemberCount(
   database: OpenEngageDatabase,
   workspaceId: string,
   segmentId: string,
 ): Promise<void> {
-  await segmentRepository(database, workspaceId).updateMemberCount(segmentId);
+  await new SegmentEvaluationRepository(database, { workspaceId }).updateMemberCount(segmentId);
 }
 
 export async function refreshSegmentMemberships(
@@ -21,14 +21,15 @@ export async function refreshSegmentMemberships(
   segmentId: string,
   expectedFilterVersion?: number,
 ): Promise<boolean> {
-  const repository = segmentRepository(database, workspaceId);
-  const segment = await repository.findSegmentDefinition(segmentId);
+  const segmentQuery = new SegmentQueryRepository(database, { workspaceId }),
+    segmentEvaluation = new SegmentEvaluationRepository(database, { workspaceId });
+  const segment = await segmentQuery.findSegmentDefinition(segmentId);
   if (!segment) return false;
   if (expectedFilterVersion !== undefined && segment.filterVersion !== expectedFilterVersion) {
     return true;
   }
   if (segment.kind === "static") {
-    await repository.updateMemberCount(segmentId, {
+    await segmentEvaluation.updateMemberCount(segmentId, {
       kind: "static",
       filterVersion: segment.filterVersion,
     });
@@ -37,11 +38,11 @@ export async function refreshSegmentMemberships(
   if (!segment.filterAst) return false;
   const compiled = compileWorkspaceSegmentFilter(workspaceId, segment.filterAst);
   const definition = { kind: "dynamic" as const, filterVersion: segment.filterVersion };
-  await repository.setEvaluationState(segmentId, "running", null, definition);
+  await segmentEvaluation.setEvaluationState(segmentId, "running", null, definition);
   try {
-    await repository.replaceDynamicMemberships(segmentId, compiled, segment.filterVersion);
+    await segmentEvaluation.replaceDynamicMemberships(segmentId, compiled, segment.filterVersion);
   } catch (error) {
-    await repository.setEvaluationState(
+    await segmentEvaluation.setEvaluationState(
       segmentId,
       "failed",
       safeEvaluationError(error),
@@ -57,8 +58,9 @@ export async function reconcileContactSegmentMemberships(
   workspaceId: string,
   contactId: string,
 ): Promise<void> {
-  const repository = segmentRepository(database, workspaceId);
-  const definitions = await repository.listDynamicDefinitions();
+  const segmentCatalog = new SegmentCatalogRepository(database, { workspaceId }),
+    segmentEvaluation = new SegmentEvaluationRepository(database, { workspaceId });
+  const definitions = await segmentCatalog.listDynamicDefinitions();
   // Compile the complete definition set before issuing a match query. A bad
   // stored definition must not leave earlier segments partially reconciled.
   const evaluations = definitions.map((definition) => ({
@@ -72,7 +74,7 @@ export async function reconcileContactSegmentMemberships(
     matched: boolean;
   }> = [];
   for (const chunk of chunksOf(evaluations, 50)) {
-    const matches = await repository.contactMatchesBatch(
+    const matches = await segmentEvaluation.contactMatchesBatch(
       chunk.map((evaluation) => evaluation.compiled),
       contactId,
     );
@@ -86,7 +88,7 @@ export async function reconcileContactSegmentMemberships(
     }
   }
   for (const chunk of chunksOf(updates, 50)) {
-    await repository.setDynamicMemberships(chunk);
+    await segmentEvaluation.setDynamicMemberships(chunk);
   }
 }
 

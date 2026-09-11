@@ -5,7 +5,7 @@ import {
   createDatabase,
   ProjectBriefLinkConflictError,
   ProjectResourceCommandRepository,
-  SegmentRepository,
+  SegmentCommandRepository,
   uuidv7,
 } from "@openengage/database/testing";
 
@@ -82,7 +82,7 @@ describe("project brief authorization", () => {
     );
     await submitProjectBrief(createDatabase(env.DB), owner, id);
     await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Ready");
-    const segment = await new SegmentRepository(env.DB, owner).createSegment({
+    const segment = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Protected audience",
       slug: `protected-${id.slice(-8).toLowerCase()}`,
       kind: "static",
@@ -95,7 +95,7 @@ describe("project brief authorization", () => {
       .bind(owner.workspaceId, id)
       .first<{ rowVersion: number }>();
     await expect(
-      new SegmentRepository(env.DB, otherMarketer).createSegment({
+      new SegmentCommandRepository(env.DB, otherMarketer).createSegment({
         name: "Must not impersonate an admin",
         slug: `impersonation-${id.slice(-8).toLowerCase()}`,
         kind: "static",
@@ -145,7 +145,7 @@ describe("project brief authorization", () => {
     );
     await submitProjectBrief(createDatabase(env.DB), owner, id);
     await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Revision 1");
-    const segment = await new SegmentRepository(env.DB, owner).createSegment({
+    const segment = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Audience to reconfirm",
       slug: `reconfirm-${id.slice(-8).toLowerCase()}`,
       kind: "static",
@@ -194,7 +194,7 @@ describe("project brief authorization", () => {
     );
     await submitProjectBrief(createDatabase(env.DB), owner, id);
     await reviewProjectBrief(createDatabase(env.DB), approver, id, "approved", "Revision 1");
-    const linked = await new SegmentRepository(env.DB, owner).createSegment({
+    const linked = await new SegmentCommandRepository(env.DB, owner).createSegment({
       name: "Rolling link",
       slug: `rolling-linked-${id.slice(-8).toLowerCase()}`,
       kind: "static",

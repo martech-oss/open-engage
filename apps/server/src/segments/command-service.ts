@@ -3,7 +3,11 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import { writeAuditLog } from "@openengage/database/platform";
 import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
-import { SegmentRepository } from "@openengage/database/segments";
+import {
+  SegmentQueryRepository,
+  SegmentCommandRepository,
+  SegmentEvaluationRepository,
+} from "@openengage/database/segments";
 import { isUniqueConstraintError } from "@openengage/database/shared";
 
 import {
@@ -28,8 +32,7 @@ export type SegmentCreateInput = CommandBriefReference & {
 
 export type SegmentUpdateInput = SegmentDefinition & { id: string };
 
-interface SegmentCommandRepositoryPort {
-  isSlugAvailable(slug: string): Promise<boolean>;
+interface SegmentWritePort {
   createSegment(input: {
     name: string;
     slug: string;
@@ -50,9 +53,16 @@ interface SegmentCommandRepositoryPort {
       membershipSource?: string | null | undefined;
     },
   ): Promise<{ filterVersion: number } | null>;
+}
+
+interface SegmentQueryPort {
+  isSlugAvailable(slug: string): Promise<boolean>;
   findSegmentDefinition(
     id: string,
   ): Promise<{ kind: "static" | "dynamic"; filterVersion: number } | null>;
+}
+
+interface SegmentEvaluationPort {
   setEvaluationState(
     id: string,
     state: "pending",
@@ -64,7 +74,9 @@ interface SegmentCommandRepositoryPort {
 type SegmentAuditAction = "segment.create" | "segment.update" | "segment.refresh";
 
 export interface SegmentCommandPorts {
-  repository: SegmentCommandRepositoryPort;
+  queries: SegmentQueryPort;
+  commands: SegmentWritePort;
+  evaluation: SegmentEvaluationPort;
   validateFilter(filter: SegmentFilter): Promise<{ valid: boolean }>;
   resolveBrief(reference: CommandBriefReference): Promise<CommandBriefResolution>;
   nextAvailableSlug(name: string, isAvailable: (slug: string) => Promise<boolean>): Promise<string>;
@@ -133,13 +145,13 @@ export class SegmentCommandService {
     let slug =
       input.slug ??
       (await this.ports.nextAvailableSlug(input.name, (candidate) =>
-        this.ports.repository.isSlugAvailable(candidate),
+        this.ports.queries.isSlugAvailable(candidate),
       ));
-    let created: Awaited<ReturnType<SegmentCommandRepositoryPort["createSegment"]>>;
+    let created: Awaited<ReturnType<SegmentWritePort["createSegment"]>>;
 
     for (;;) {
       try {
-        created = await this.ports.repository.createSegment({
+        created = await this.ports.commands.createSegment({
           ...definition,
           slug,
           membershipSource:
@@ -161,7 +173,7 @@ export class SegmentCommandService {
         if (classification !== "slug_conflict") throw error;
         if (input.slug) return { kind: "segment_conflict", cause: error };
         slug = await this.ports.nextAvailableSlug(input.name, (candidate) =>
-          this.ports.repository.isSlugAvailable(candidate),
+          this.ports.queries.isSlugAvailable(candidate),
         );
       }
     }
@@ -189,7 +201,7 @@ export class SegmentCommandService {
     const { id, filter, ...definition } = input;
     let updated: { filterVersion: number } | null;
     try {
-      updated = await this.ports.repository.updateSegment(id, {
+      updated = await this.ports.commands.updateSegment(id, {
         ...definition,
         ...(filter ? { filter } : {}),
       });
@@ -212,10 +224,10 @@ export class SegmentCommandService {
   }
 
   public async refresh(id: string): Promise<SegmentRefreshOutcome> {
-    const definition = await this.ports.repository.findSegmentDefinition(id);
+    const definition = await this.ports.queries.findSegmentDefinition(id);
     if (!definition) return { kind: "segment_not_found" };
     if (definition.kind === "dynamic") {
-      await this.ports.repository.setEvaluationState(id, "pending", null, {
+      await this.ports.evaluation.setEvaluationState(id, "pending", null, {
         kind: "dynamic",
         filterVersion: definition.filterVersion,
       });
@@ -247,9 +259,10 @@ export function createSegmentCommandService(input: {
   };
   defer(promise: Promise<unknown>): void;
 }): SegmentCommandService {
-  const repository = new SegmentRepository(input.database, input.workspace);
   return new SegmentCommandService(input.workspace, {
-    repository,
+    queries: new SegmentQueryRepository(input.database, input.workspace),
+    commands: new SegmentCommandRepository(input.database, input.workspace),
+    evaluation: new SegmentEvaluationRepository(input.database, input.workspace),
     validateFilter: (filter) => validateSegmentFilter(input.database, input.workspace, filter),
     resolveBrief: (reference) => resolveCommandBrief(input.database, input.workspace, reference),
     nextAvailableSlug: (name, isAvailable) => availableSlug(name, "segment", isAvailable),
