@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import type { AutomationNode } from "@openengage/core/automations";
 import {
   AutomationActionRepository,
-  AutomationEngineRepository,
+  AutomationJobRepository,
+  AutomationDecisionRepository,
+  AutomationContactActionRepository,
 } from "@openengage/database/automations";
 import { ContactRepository } from "@openengage/database/contacts";
 import {
@@ -62,7 +64,7 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
         graph: definition,
       });
       const db = createDatabase(env.DB);
-      const engine = new AutomationEngineRepository(db);
+      const engine = new AutomationJobRepository(db);
       const contactRepository = new ContactRepository(db, { workspaceId: seeded.workspaceId });
       await db.orm.update(contacts).set({ score: 20 }).where(eq(contacts.id, seeded.contactId));
       if (categoryId) {
@@ -137,7 +139,16 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
       expect(archivedState.events).toEqual([]);
       expect(archivedState.effects).toEqual([]);
       const execute = () =>
-        executeNode(node, definition, job!, leaseId, runtimeWithJobsQueue(queueStub()), db, engine);
+        executeNode(
+          node,
+          definition,
+          job!,
+          leaseId,
+          runtimeWithJobsQueue(queueStub()),
+          db,
+          new AutomationDecisionRepository(db),
+          new AutomationContactActionRepository(db),
+        );
 
       await execute();
       await execute();

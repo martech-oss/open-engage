@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import {
-  AutomationRepository,
+  AutomationCommandRepository,
   createDatabase,
   CustomRedirectRepository,
   ProjectBriefLinkConflictError,
@@ -139,7 +139,7 @@ describe("project brief workflow", () => {
       membershipSource: "Approved brief",
       projectLink: { projectId: id, briefRevision: 1, addedByUserId: owner.userId },
     });
-    const automation = await new AutomationRepository(env.DB, owner).createAutomation({
+    const automation = await new AutomationCommandRepository(env.DB, owner).createAutomation({
       name: "Approved onboarding flow",
       description: "Created from approved brief",
       timezone: "UTC",
@@ -311,7 +311,7 @@ describe("project brief workflow", () => {
     ).rejects.toBeInstanceOf(ProjectBriefLinkConflictError);
 
     await expect(
-      new AutomationRepository(env.DB, owner).createAutomation({
+      new AutomationCommandRepository(env.DB, owner).createAutomation({
         name: "Must not exist",
         description: "Stale brief",
         timezone: "UTC",

@@ -2,7 +2,11 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 
-import { AutomationEngineRepository } from "@openengage/database/automations";
+import {
+  AutomationJobRepository,
+  AutomationDecisionRepository,
+  AutomationContactActionRepository,
+} from "@openengage/database/automations";
 import { contacts, createDatabase } from "@openengage/database/testing";
 
 import { executeNode } from "../src/automations/worker";
@@ -34,7 +38,7 @@ it("stores a rich condition result and keeps the same branch after contact chang
     graph: definition,
   });
   const db = createDatabase(env.DB),
-    engine = new AutomationEngineRepository(db);
+    engine = new AutomationJobRepository(db);
   await db.orm.update(contacts).set({ score: 20 }).where(eq(contacts.id, seeded.contactId));
   const job = await engine.findJobForProcessing(seeded.jobId, "lease");
   expect(job).not.toBeNull();
@@ -46,7 +50,8 @@ it("stores a rich condition result and keeps the same branch after contact chang
       "lease",
       runtimeWithJobsQueue(queueStub()),
       db,
-      engine,
+      new AutomationDecisionRepository(db),
+      new AutomationContactActionRepository(db),
     ),
   ).toMatchObject({ branch: "yes" });
   await db.orm.update(contacts).set({ score: 0 }).where(eq(contacts.id, seeded.contactId));
@@ -59,7 +64,8 @@ it("stores a rich condition result and keeps the same branch after contact chang
       "lease",
       runtimeWithJobsQueue(queueStub()),
       db,
-      engine,
+      new AutomationDecisionRepository(db),
+      new AutomationContactActionRepository(db),
     ),
   ).toMatchObject({ branch: "yes" });
 });
@@ -78,7 +84,7 @@ it("advances an already elapsed delay instead of waiting again", async () => {
     graph: definition,
   });
   const db = createDatabase(env.DB),
-    engine = new AutomationEngineRepository(db),
+    engine = new AutomationJobRepository(db),
     job = await engine.findJobForProcessing(seeded.jobId, "lease");
   expect(
     await executeNode(
@@ -88,7 +94,8 @@ it("advances an already elapsed delay instead of waiting again", async () => {
       "lease",
       runtimeWithJobsQueue(queueStub()),
       db,
-      engine,
+      new AutomationDecisionRepository(db),
+      new AutomationContactActionRepository(db),
     ),
   ).toEqual({ branch: "next" });
 });

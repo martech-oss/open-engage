@@ -1,4 +1,4 @@
-import { AutomationEngineRepository } from "@openengage/database/automations";
+import { AutomationDecisionRepository } from "@openengage/database/automations";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { type ContactEventProjection } from "@openengage/database/contacts";
 
@@ -58,7 +58,7 @@ const projectionHandlers = {
     return completedProjection;
   },
   decision_wake: async (database, event) => {
-    await new AutomationEngineRepository(database).wakeWaitingDecisionJobs({
+    await new AutomationDecisionRepository(database).wakeWaitingDecisionJobs({
       workspaceId: event.workspaceId,
       contactId: event.contactId,
       eventType: event.type,

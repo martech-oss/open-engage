@@ -51,7 +51,7 @@ it("awaits one pinned child, wakes parent once, and cascades explicit cancellati
     });
   expect(enrolled.kind).toBe("enrolled");
   if (enrolled.kind !== "enrolled") return;
-  const engine = new repositories.AutomationEngineRepository(db),
+  const engine = new repositories.AutomationJobRepository(db),
     runtime = runtimeWithJobsQueue(queueStub());
   for (let round = 0; round < 2; round++)
     for (const job of await engine.claimDueJobs(new Date().toISOString(), "2099-01-01T00:00:00Z"))
@@ -138,7 +138,7 @@ it.each(["await", "async"] as const)(
       });
     expect(enrolled.kind).toBe("enrolled");
     if (enrolled.kind !== "enrolled") throw new Error("Expected enrollment");
-    const engine = new repositories.AutomationEngineRepository(db),
+    const engine = new repositories.AutomationJobRepository(db),
       calls = new repositories.AutomationCallRepository(db),
       runtime = runtimeWithJobsQueue(queueStub());
     for (let round = 0; round < 6; round++) {

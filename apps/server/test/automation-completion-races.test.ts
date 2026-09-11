@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationDefinition, AutomationNode } from "@openengage/core/automations";
 import {
-  AutomationEngineRepository,
+  AutomationJobRepository,
+  AutomationDecisionRepository,
   AutomationJobRecoveryRepository,
   automationEnrollments,
   automationJobs,
@@ -30,7 +31,7 @@ describe("automation stale completion races", () => {
     const seeded = await seedRunningJob({ attempts: 5, leaseId: "expired-terminal-lease" });
     const database = createDatabase(env.DB);
     const recovery = new AutomationJobRecoveryRepository(database);
-    const engine = new AutomationEngineRepository(database);
+    const engine = new AutomationJobRepository(database);
 
     await recovery.recoverExpiredJobs("2026-08-20T01:00:00.000Z");
     await engine.completeJobClosingEnrollment(
@@ -55,7 +56,7 @@ describe("automation stale completion races", () => {
     const seeded = await seedRunningJob({ attempts: 2, leaseId: "expired-advancing-lease" });
     const database = createDatabase(env.DB);
     const recovery = new AutomationJobRecoveryRepository(database);
-    const engine = new AutomationEngineRepository(database);
+    const engine = new AutomationJobRepository(database);
 
     await recovery.recoverExpiredJobs("2026-08-20T01:00:00.000Z");
     const claims = await engine.claimDueJobs(
@@ -123,10 +124,10 @@ describe("automation stale completion races", () => {
       graph,
       createdAt: "2026-08-20T02:00:00.000Z",
     });
-    const originalRepository = new AutomationEngineRepository(createDatabase(env.DB));
+    const originalRepository = new AutomationDecisionRepository(createDatabase(env.DB));
     const originalCheck = originalRepository.hasContactEventSince.bind(originalRepository);
     let injected = false;
-    vi.spyOn(AutomationEngineRepository.prototype, "hasContactEventSince").mockImplementation(
+    vi.spyOn(AutomationDecisionRepository.prototype, "hasContactEventSince").mockImplementation(
       async function (workspaceId, contactId, type, since, resourceId) {
         const found = await originalCheck(workspaceId, contactId, type, since, resourceId);
         if (!found && !injected) {

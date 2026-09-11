@@ -9,7 +9,8 @@ import {
 } from "@openengage/core/automations";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
-  AutomationRepository,
+  AutomationQueryRepository,
+  AutomationCommandRepository,
   AutomationPublicationRepository,
   AutomationPublicationConflictError,
 } from "@openengage/database/automations";
@@ -52,12 +53,6 @@ interface AutomationCommandRepositoryPort {
       graph: AutomationDefinition;
     },
   ): Promise<boolean>;
-  findPublishableDraft(automationId: string): Promise<{
-    draftVersionId: string;
-    version: number;
-    graph: AutomationDefinition;
-    rawGraph?: string;
-  } | null>;
   publishDraft(input: {
     automationId: string;
     draftVersionId: string;
@@ -78,12 +73,22 @@ interface AutomationCommandRepositoryPort {
   setAutomationStatus(automationId: string, status: "active" | "paused"): Promise<boolean>;
 }
 
+interface AutomationQueryPort {
+  findPublishableDraft(automationId: string): Promise<{
+    draftVersionId: string;
+    version: number;
+    graph: AutomationDefinition;
+    rawGraph?: string;
+  } | null>;
+}
+
 export interface AutomationCommandPorts {
   preparePublication?(
     id: string,
     definition: AutomationDefinition,
   ): Promise<AutomationExecutionSnapshot>;
-  repository: AutomationCommandRepositoryPort;
+  commands: AutomationCommandRepositoryPort;
+  queries: AutomationQueryPort;
   resolveBrief(reference: CommandBriefReference): Promise<CommandBriefResolution>;
   classifyWriteError(
     error: unknown,
@@ -147,7 +152,7 @@ export class AutomationCommandService {
     if (brief.kind !== "ok") return brief;
     const { projectId: _projectId, briefRevision: _briefRevision, ...definition } = input;
     try {
-      const created = await this.ports.repository.createAutomation({
+      const created = await this.ports.commands.createAutomation({
         name: definition.name,
         description: definition.description,
         timezone: definition.timezone,
@@ -173,7 +178,7 @@ export class AutomationCommandService {
 
   public async saveDraft(input: AutomationSaveDraftInput): Promise<AutomationSaveDraftOutcome> {
     const { id, ...definition } = input;
-    const saved = await this.ports.repository.saveDraft(id, {
+    const saved = await this.ports.commands.saveDraft(id, {
       name: definition.name,
       description: definition.description,
       timezone: definition.timezone,
@@ -183,7 +188,7 @@ export class AutomationCommandService {
   }
 
   public async publish(id: string): Promise<AutomationPublishOutcome> {
-    const row = await this.ports.repository.findPublishableDraft(id);
+    const row = await this.ports.queries.findPublishableDraft(id);
     if (!row) return { kind: "draft_not_found" };
 
     const definition = row.graph;
@@ -216,7 +221,7 @@ export class AutomationCommandService {
     }
     let published: { draftVersionId: string };
     try {
-      published = await this.ports.repository.publishDraft({
+      published = await this.ports.commands.publishDraft({
         automationId: id,
         draftVersionId: row.draftVersionId,
         currentVersion: row.version,
@@ -251,7 +256,7 @@ export class AutomationCommandService {
     id: string,
     status: "active" | "paused",
   ): Promise<AutomationStatusOutcome> {
-    const changed = await this.ports.repository.setAutomationStatus(id, status);
+    const changed = await this.ports.commands.setAutomationStatus(id, status);
     return changed ? { kind: "ok", status } : { kind: "not_changeable" };
   }
 
@@ -305,9 +310,9 @@ export function createAutomationCommandService(input: {
   workspace: WorkspaceContext;
   defer(promise: Promise<unknown>): void;
 }): AutomationCommandService {
-  const repository = new AutomationRepository(input.database, input.workspace);
   return new AutomationCommandService(input.workspace, {
-    repository,
+    queries: new AutomationQueryRepository(input.database, input.workspace),
+    commands: new AutomationCommandRepository(input.database, input.workspace),
     preparePublication: async (id, definition) =>
       pinAutomationDependencies(
         id,

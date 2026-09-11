@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import {
-  AutomationRepository,
+  AutomationQueryRepository,
   DealRecordRepository,
   createDatabase,
 } from "@openengage/database/testing";
@@ -29,7 +29,7 @@ describe("aggregate read-model query plans", () => {
     await client.automations.publish({ id: automation.id });
     const captured = capturePreparedQueries(env.DB);
 
-    const rows = await new AutomationRepository(createDatabase(captured.database), {
+    const rows = await new AutomationQueryRepository(createDatabase(captured.database), {
       workspaceId,
     }).listAutomationsWithCounts();
 

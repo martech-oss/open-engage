@@ -5,7 +5,7 @@ import type { AutomationDefinition } from "@openengage/core/automations";
 import type { ProjectClonePreview, ProjectProgramDefinition } from "@openengage/core/projects";
 import {
   AutomationCallRepository,
-  AutomationEngineRepository,
+  AutomationJobRepository,
   AutomationRunRepository,
 } from "@openengage/database/automations";
 import { createDatabase } from "@openengage/database/client";
@@ -301,7 +301,7 @@ it("runs a cloned campaign from acquisition to success", { timeout: 30_000 }, as
   expect(runs[0]).toMatchObject({ slot, targetCount: 1 });
   const runId = runs[0]!.id;
   await processAutomationRun(runId, workspaceId, database, 100, queue);
-  const engine = new AutomationEngineRepository(database);
+  const engine = new AutomationJobRepository(database);
   const calls = new AutomationCallRepository(database);
   const runtime = runtimeWithJobsQueue(queue);
   for (let round = 0; round < 12; round++) {

@@ -12,7 +12,9 @@ import {
 import {
   AutomationActionRepository,
   AutomationCallRepository,
-  AutomationEngineRepository,
+  AutomationJobRepository,
+  AutomationDecisionRepository,
+  AutomationContactActionRepository,
   AutomationJobRecoveryRepository,
   AUTOMATION_MAX_STARTS,
   type AutomationContactColumn,
@@ -33,7 +35,7 @@ import { dispatchAutomationAction, type AutomationActionExecutorRegistry } from 
 interface AutomationActionExecutionContext {
   actionRepository: AutomationActionRepository;
   database: OpenEngageDatabase;
-  engine: AutomationEngineRepository;
+  contactActions: AutomationContactActionRepository;
   env: RuntimeEnv;
   job: AutomationJobRow;
   leaseId: string;
@@ -89,14 +91,19 @@ const automationActionExecutors = {
     );
   },
   add_tag: async (action, context) => {
-    await context.engine.addContactTag(context.job, context.leaseId, action.tagId, context.now);
+    await context.contactActions.addContactTag(
+      context.job,
+      context.leaseId,
+      action.tagId,
+      context.now,
+    );
   },
   remove_tag: async (action, context) => {
-    await context.engine.removeContactTag(context.job, context.leaseId, action.tagId);
+    await context.contactActions.removeContactTag(context.job, context.leaseId, action.tagId);
   },
   add_segment: async (action, context) => {
     if (
-      await context.engine.addAutomationSegmentMembership(
+      await context.contactActions.addAutomationSegmentMembership(
         context.job,
         context.leaseId,
         action.segmentId,
@@ -114,7 +121,11 @@ const automationActionExecutors = {
     }
   },
   remove_segment: async (action, context) => {
-    await context.engine.removeSegmentMembership(context.job, context.leaseId, action.segmentId);
+    await context.contactActions.removeSegmentMembership(
+      context.job,
+      context.leaseId,
+      action.segmentId,
+    );
   },
   change_score: async (action, context) => {
     await context.actionRepository.adjustContactScoreForJob(
@@ -131,7 +142,7 @@ const automationActionExecutors = {
       context.leaseId,
       action.field,
       action.value,
-      context.engine,
+      context.contactActions,
     );
   },
 } satisfies AutomationActionExecutorRegistry<AutomationActionExecutionContext>;
@@ -142,11 +153,11 @@ export async function processAutomationJob(
   env: RuntimeEnv,
 ): Promise<void> {
   const database = createDatabase(env.DB);
-  const engine = new AutomationEngineRepository(database);
+  const jobs = new AutomationJobRepository(database);
   const recovery = new AutomationJobRecoveryRepository(database);
-  const job = await engine.findJobForProcessing(jobId, leaseId);
+  const job = await jobs.findJobForProcessing(jobId, leaseId);
   if (!job) return;
-  const started = await engine.startLeasedJob(jobId, leaseId, new Date().toISOString());
+  const started = await jobs.startLeasedJob(jobId, leaseId, new Date().toISOString());
   if (!started && job.status !== "running") {
     if (job.attempts >= AUTOMATION_MAX_STARTS) {
       await recovery.failJobAndEnrollmentForLease(
@@ -163,10 +174,19 @@ export async function processAutomationJob(
     const definition = job.graph;
     const node = definition.nodes.find((candidate) => candidate.id === job.nodeId);
     if (!node) throw new PermanentChannelError(`Automation node ${job.nodeId} is missing`);
-    const result = await executeNode(node, definition, job, leaseId, env, database, engine);
+    const result = await executeNode(
+      node,
+      definition,
+      job,
+      leaseId,
+      env,
+      database,
+      new AutomationDecisionRepository(database),
+      new AutomationContactActionRepository(database),
+    );
     if (result.parked) return;
     if (result.waitUntil) {
-      await engine.parkJobUntil(job.id, leaseId, {
+      await jobs.parkJobUntil(job.id, leaseId, {
         dueAt: result.waitUntil,
         payload: JSON.stringify({ waiting: true }),
         now: new Date().toISOString(),
@@ -176,7 +196,7 @@ export async function processAutomationJob(
       });
       return;
     }
-    await finishNode(job, leaseId, definition, result.branch, engine);
+    await finishNode(job, leaseId, definition, result.branch, jobs);
   } catch (error) {
     const failure = await recovery.recordJobFailure(
       job.id,
@@ -196,7 +216,8 @@ export async function executeNode(
   leaseId: string,
   env: RuntimeEnv,
   database: OpenEngageDatabase,
-  engine: AutomationEngineRepository,
+  decisions: AutomationDecisionRepository,
+  contactActions: AutomationContactActionRepository,
 ): Promise<{
   parked?: boolean;
   branch?: AutomationEdge["branch"];
@@ -215,10 +236,12 @@ export async function executeNode(
   }
   if (node.type === "condition") {
     return {
-      branch: await engine.captureCondition(
+      branch: await decisions.captureCondition(
         job,
         leaseId,
-        "filter" in node.config ? node.config.filter : await evaluateCondition(node, job, engine),
+        "filter" in node.config
+          ? node.config.filter
+          : await evaluateCondition(node, job, contactActions),
       ),
     };
   }
@@ -231,7 +254,7 @@ export async function executeNode(
       form_submitted: "form_submitted",
       custom_event: "custom_event",
     }[node.config.event];
-    const found = await engine.hasContactEventSince(
+    const found = await decisions.hasContactEventSince(
       job.workspaceId,
       job.contactId,
       eventType,
@@ -271,7 +294,7 @@ export async function executeNode(
   await dispatchAutomationAction(automationActionExecutors, action, {
     actionRepository,
     database,
-    engine,
+    contactActions,
     env,
     job,
     leaseId,
@@ -288,21 +311,21 @@ export async function finishNode(
   leaseId: string,
   definition: AutomationDefinition,
   branch: AutomationEdge["branch"] | undefined,
-  engine: AutomationEngineRepository,
+  jobs: AutomationJobRepository,
 ): Promise<void> {
   const next = outgoingEdges(definition, job.nodeId, branch ?? "next")[0];
   const now = new Date().toISOString();
   if (!next) {
-    await engine.completeJobClosingEnrollment(job, leaseId, now);
+    await jobs.completeJobClosingEnrollment(job, leaseId, now);
     return;
   }
-  await engine.completeJobAdvancingEnrollment(job, leaseId, next.target, now);
+  await jobs.completeJobAdvancingEnrollment(job, leaseId, next.target, now);
 }
 
 export async function evaluateCondition(
   node: Extract<AutomationNode, { type: "condition" }>,
   job: AutomationJobRow,
-  engine: AutomationEngineRepository,
+  contactActions: AutomationContactActionRepository,
 ): Promise<boolean> {
   if ("filter" in node.config) throw new Error("Rich conditions require durable evaluation");
   const fieldMap: Record<string, unknown> = {
@@ -315,7 +338,7 @@ export async function evaluateCondition(
     ...job.customFields,
   };
   if (node.config.field === "tag") {
-    const tagged = await engine.contactHasTagWithSlug(
+    const tagged = await contactActions.contactHasTagWithSlug(
       job.workspaceId,
       job.contactId,
       String(node.config.value ?? ""),
@@ -350,7 +373,7 @@ export async function updateContactField(
   leaseId: string,
   field: string,
   value: unknown,
-  engine: AutomationEngineRepository,
+  contactActions: AutomationContactActionRepository,
 ): Promise<void> {
   const columns: Record<string, AutomationContactColumn> = {
     first_name: "first_name",
@@ -361,7 +384,7 @@ export async function updateContactField(
   };
   const column = columns[field];
   if (column) {
-    await engine.updateContactColumn(
+    await contactActions.updateContactColumn(
       job,
       leaseId,
       column,
@@ -375,7 +398,7 @@ export async function updateContactField(
   }
   const fields = { ...job.customFields };
   fields[field] = value;
-  await engine.replaceContactCustomFields(
+  await contactActions.replaceContactCustomFields(
     job,
     leaseId,
     JSON.stringify(fields),

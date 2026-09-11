@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { expect, it } from "vitest";
 
 import { emptyLandingPageDocument } from "@openengage/core/web";
-import { claimDueJobs } from "@openengage/database/automations";
+import { AutomationJobRepository } from "@openengage/database/automations";
 import { createDatabase } from "@openengage/database/client";
 
 import { processAutomationJob } from "../src/automations/worker";
@@ -161,8 +161,7 @@ it("connects anonymous LP -> form -> score segment -> handoff -> won deal -> ROI
   await reconcileContactSegmentMemberships(database, workspaceId, contact!.id);
   expect(await retryPendingPublicFormEvents(database, queue)).toEqual([]);
   for (let turn = 0; turn < 4; turn++) {
-    const jobs = await claimDueJobs(
-      database,
+    const jobs = await new AutomationJobRepository(database).claimDueJobs(
       new Date().toISOString(),
       "2099-01-01T00:00:00.000Z",
       20,
