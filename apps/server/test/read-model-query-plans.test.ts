@@ -1,7 +1,11 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { AutomationRepository, DealRepository, createDatabase } from "@openengage/database/testing";
+import {
+  AutomationRepository,
+  DealRecordRepository,
+  createDatabase,
+} from "@openengage/database/testing";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -73,7 +77,7 @@ describe("aggregate read-model query plans", () => {
     });
     const captured = capturePreparedQueries(env.DB);
 
-    const result = await new DealRepository(createDatabase(captured.database), {
+    const result = await new DealRecordRepository(createDatabase(captured.database), {
       workspaceId,
     }).listDeals({ pipelineId: pipeline.id, status: "all" });
 

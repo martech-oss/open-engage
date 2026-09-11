@@ -16,7 +16,13 @@ import type {
 } from "@openengage/core/deals";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
-import { DealRepository } from "@openengage/database/deals";
+import {
+  PipelineDefaultStateRepository,
+  DealOptionsRepository,
+  DealRecordRepository,
+  DealTaskRepository,
+  DealPipelineRepository,
+} from "@openengage/database/deals";
 import { writeAuditLog } from "@openengage/database/platform";
 import { ensureLoaded } from "@openengage/database/shared";
 
@@ -55,9 +61,10 @@ export async function getDealOptions(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<DealOptions> {
-  const repository = new DealRepository(database, workspace);
-  await repository.ensureDefaultPipeline();
-  return repository.getDealOptions();
+  const pipelineDefaultState = new PipelineDefaultStateRepository(database, workspace),
+    dealOptions = new DealOptionsRepository(database, workspace);
+  await pipelineDefaultState.ensureDefaultPipeline();
+  return dealOptions.getDealOptions();
 }
 
 export async function listDeals(
@@ -69,14 +76,16 @@ export async function listDeals(
     q?: string | undefined;
   },
 ): Promise<DealListOutcome> {
-  const repository = new DealRepository(database, workspace);
-  const defaultPipelineId = await repository.ensureDefaultPipeline();
+  const pipelineDefaultState = new PipelineDefaultStateRepository(database, workspace),
+    dealOptions = new DealOptionsRepository(database, workspace),
+    dealRecord = new DealRecordRepository(database, workspace);
+  const defaultPipelineId = await pipelineDefaultState.ensureDefaultPipeline();
   const pipelineId = input.pipelineId ?? defaultPipelineId;
-  if (!(await repository.pipelineExists(pipelineId))) {
+  if (!(await dealOptions.pipelineExists(pipelineId))) {
     return { kind: "pipeline_not_found" };
   }
 
-  const { items, summary } = await repository.listDeals({
+  const { items, summary } = await dealRecord.listDeals({
     pipelineId,
     status: input.status,
     q: input.q,
@@ -103,7 +112,7 @@ export async function listWorkspaceDealTasks(
   status: DealTaskStatus | "all",
   assignedUserId?: string,
 ): Promise<DealTaskListItem[]> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealTaskRepository(database, workspace);
   const rows = await repository.listWorkspaceTasks(status, assignedUserId);
   return rows;
 }
@@ -113,10 +122,11 @@ export async function getDealDetail(
   workspace: WorkspaceContext,
   id: string,
 ): Promise<DealDetailData | null> {
-  const repository = new DealRepository(database, workspace);
-  const deal = await repository.getDeal(id);
+  const dealRecord = new DealRecordRepository(database, workspace),
+    dealTask = new DealTaskRepository(database, workspace);
+  const deal = await dealRecord.getDeal(id);
   if (!deal) return null;
-  const tasks = await repository.listDealTasks(deal.id);
+  const tasks = await dealTask.listDealTasks(deal.id);
   return { deal, tasks };
 }
 
@@ -126,7 +136,7 @@ export async function createDeal(
   input: DealCreate,
   background: Background,
 ): Promise<DealWriteOutcome> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealRecordRepository(database, workspace);
   const referenceError = await repository.validateDealReferences(input);
   if (referenceError) return { kind: "invalid_reference", message: referenceError };
 
@@ -149,7 +159,7 @@ export async function updateDeal(
   input: DealUpdate,
   background: Background,
 ): Promise<DealWriteOutcome> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealRecordRepository(database, workspace);
   const current = await repository.getDeal(id);
   if (!current) return { kind: "not_found" };
 
@@ -196,7 +206,7 @@ export async function moveDeal(
   stageId: string,
   background: Background,
 ): Promise<DealMoveOutcome> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealRecordRepository(database, workspace);
   const deal = await repository.getDeal(id);
   if (!deal) return { kind: "not_found" };
   if (!(await repository.stageExistsInPipeline(deal.pipelineId, stageId))) {
@@ -220,7 +230,7 @@ export async function archiveDeal(
   id: string,
   background: Background,
 ): Promise<boolean> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealRecordRepository(database, workspace);
   if (!(await repository.archiveDeal(id))) return false;
   background.waitUntil(
     writeAuditLog(database, workspace, {
@@ -238,12 +248,13 @@ export async function createDealTask(
   dealId: string,
   input: DealTaskCreate,
 ): Promise<DealTaskOutcome> {
-  const repository = new DealRepository(database, workspace);
-  if (!(await repository.dealExists(dealId))) return { kind: "not_found" };
-  if (input.assignedUserId && !(await repository.memberExists(input.assignedUserId))) {
+  const dealOptions = new DealOptionsRepository(database, workspace),
+    dealTask = new DealTaskRepository(database, workspace);
+  if (!(await dealOptions.dealExists(dealId))) return { kind: "not_found" };
+  if (input.assignedUserId && !(await dealOptions.memberExists(input.assignedUserId))) {
     return { kind: "invalid_assignee" };
   }
-  const task = await repository.createDealTask(dealId, input);
+  const task = await dealTask.createDealTask(dealId, input);
   return { kind: "ok", task };
 }
 
@@ -254,12 +265,13 @@ export async function updateDealTask(
   taskId: string,
   input: DealTaskUpdate,
 ): Promise<DealTaskOutcome> {
-  const repository = new DealRepository(database, workspace);
-  const current = await repository.getTask(dealId, taskId);
+  const dealTask = new DealTaskRepository(database, workspace),
+    dealOptions = new DealOptionsRepository(database, workspace);
+  const current = await dealTask.getTask(dealId, taskId);
   if (!current) return { kind: "not_found" };
   const assignedUserId =
     input.assignedUserId === undefined ? current.assignedUserId : input.assignedUserId;
-  if (assignedUserId && !(await repository.memberExists(assignedUserId))) {
+  if (assignedUserId && !(await dealOptions.memberExists(assignedUserId))) {
     return { kind: "invalid_assignee" };
   }
   const status = input.status ?? current.status;
@@ -267,7 +279,7 @@ export async function updateDealTask(
   // Keep the original completion time when a task was already completed.
   const completedAt =
     status === "completed" ? (current.status === "completed" ? current.completedAt : now) : null;
-  const task = await repository.updateDealTask(dealId, taskId, {
+  const task = await dealTask.updateDealTask(dealId, taskId, {
     type: input.type ?? current.type,
     title: input.title ?? current.title,
     notes: input.notes ?? current.notes,
@@ -286,7 +298,7 @@ export async function deleteDealTask(
   dealId: string,
   taskId: string,
 ): Promise<boolean> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealTaskRepository(database, workspace);
   return repository.deleteDealTask(dealId, taskId);
 }
 
@@ -296,7 +308,7 @@ export async function createDealPipeline(
   input: DealPipelineCreate,
   background: Background,
 ): Promise<PipelineCreateOutcome> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealPipelineRepository(database, workspace);
   const created = await repository.createPipeline(input);
   if (created.kind === "conflict") return { kind: "conflict" };
   const loaded = ensureLoaded(await repository.getPipeline(created.id), "Created deal pipeline");
@@ -317,7 +329,7 @@ export async function updateDealPipeline(
   input: DealPipelineUpdate,
   background: Background,
 ): Promise<PipelineWriteOutcome> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealPipelineRepository(database, workspace);
   const result = await repository.updatePipeline(id, input);
   if (result !== "ok") return { kind: result };
   const loaded = ensureLoaded(await repository.getPipeline(id), "Updated deal pipeline");
@@ -337,7 +349,7 @@ export async function archiveDealPipeline(
   id: string,
   background: Background,
 ): Promise<PipelineArchiveOutcome> {
-  const repository = new DealRepository(database, workspace);
+  const repository = new DealPipelineRepository(database, workspace);
   const result = await repository.archivePipeline(id);
   if (result === "ok") {
     background.waitUntil(

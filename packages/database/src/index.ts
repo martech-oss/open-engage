@@ -12,7 +12,7 @@ export * from "./contacts/import-recovery-repository";
 export * from "./contacts/import-reconciliation-repository";
 export * from "./contacts/repository";
 export * from "./contacts/resource-repository";
-export * from "./deals/repository";
+export * from "./deals";
 export * from "./messaging/repository";
 export * from "./messaging/email-design-repository";
 export * from "./platform/audit-repository";
