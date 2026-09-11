@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDatabase,
   ProjectBriefLinkConflictError,
-  ProjectResourceLinkRepository,
+  ProjectResourceCommandRepository,
   SegmentRepository,
   uuidv7,
 } from "@openengage/database/testing";
@@ -108,7 +108,7 @@ describe("project brief authorization", () => {
       }),
     ).rejects.toBeInstanceOf(ProjectBriefLinkConflictError);
 
-    const outcome = await new ProjectResourceLinkRepository(
+    const outcome = await new ProjectResourceCommandRepository(
       createDatabase(env.DB),
       otherMarketer,
     ).removeApproved({
@@ -151,7 +151,7 @@ describe("project brief authorization", () => {
       kind: "static",
       membershipSource: "Manual",
     });
-    const repository = new ProjectResourceLinkRepository(createDatabase(env.DB), owner);
+    const repository = new ProjectResourceCommandRepository(createDatabase(env.DB), owner);
     const resource = { projectId: id, resourceType: "segment" as const, resourceId: segment.id };
     await expect(repository.addApproved(resource)).resolves.toEqual({
       kind: "done",
