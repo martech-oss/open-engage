@@ -5,7 +5,7 @@ import { PROJECT_PROGRAM_TEMPLATES } from "@openengage/core/projects";
 import { emptyLandingPageDocument } from "@openengage/core/web";
 
 import type { RuntimeEnv } from "../src/env";
-import { processLandingGeneration } from "../src/web/landing-design-service";
+import { processLandingGeneration } from "../src/web/landing-generation-service";
 import { seedWorkspaceClient } from "./factory";
 import { cloneOptions, finishClone, postCloneForm } from "./project-clone-test-support";
 

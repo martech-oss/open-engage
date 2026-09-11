@@ -1,12 +1,17 @@
 import { env } from "cloudflare:workers";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { emptyLandingPageDocument } from "@openengage/core/web";
 import { createDatabase } from "@openengage/database/client";
 import { LandingGenerationRepository } from "@openengage/database/web";
 
 import type { RuntimeEnv } from "../src/env";
-import { processLandingGeneration } from "../src/web/landing-design-service";
+import {
+  processLandingGeneration,
+  queueLandingGeneration,
+  recoverLandingGenerations,
+  retryLandingGeneration,
+} from "../src/web/landing-generation-service";
 import { seedWorkspaceClient } from "./factory";
 
 it("retries a failed request explicitly with the same durable job and rejects stale or foreign retries", async () => {
@@ -100,4 +105,51 @@ it("does not retry a generated document with invalid references", async () => {
   await expect(
     client.website.retryPageGeneration({ pageId: page.id, jobId: job.id }),
   ).rejects.toMatchObject({ code: "PAGE_CONFLICT" });
+});
+
+it("recovers durable generation and retry requests when sending to the queue fails", async () => {
+  const fixture = await seedWorkspaceClient(env.DB);
+  const { client, workspaceId, userId } = fixture;
+  const workspace = { workspaceId, userId, role: "marketer" as const };
+  const database = createDatabase(env.DB);
+  const send = vi
+    .fn<RuntimeEnv["JOBS_QUEUE"]["send"]>()
+    .mockRejectedValue(new Error("Queue unavailable"));
+  const sendBatch = vi.fn<RuntimeEnv["JOBS_QUEUE"]["sendBatch"]>().mockResolvedValue(undefined);
+  const unavailableQueueEnv = {
+    ...env,
+    JOBS_QUEUE: { send, sendBatch },
+  } as unknown as RuntimeEnv;
+  const page = await client.website.createPage({ name: "Recovery" });
+  const queued = await queueLandingGeneration(database, workspace, unavailableQueueEnv, {
+    pageId: page.id,
+    baseVersionId: page.versionId,
+    prompt: "Recover this draft",
+    requestKey: crypto.randomUUID(),
+  });
+  if (queued.kind !== "ok") throw new Error("Expected durable queue request");
+  expect(queued.job.status).toBe("queued");
+  expect(send).toHaveBeenCalledWith({ kind: "landing_generation", jobId: queued.job.id });
+  await recoverLandingGenerations(unavailableQueueEnv);
+  expect(sendBatch).toHaveBeenLastCalledWith(
+    expect.arrayContaining([{ body: { kind: "landing_generation", jobId: queued.job.id } }]),
+  );
+  await processLandingGeneration(queued.job.id, unavailableQueueEnv, async () => {
+    throw new Error("Temporary provider failure");
+  });
+  await expect(
+    retryLandingGeneration(database, workspace, unavailableQueueEnv, {
+      pageId: page.id,
+      jobId: queued.job.id,
+    }),
+  ).resolves.toBe("ok");
+  sendBatch.mockClear();
+  await recoverLandingGenerations(unavailableQueueEnv);
+  expect(sendBatch).toHaveBeenCalledWith(
+    expect.arrayContaining([{ body: { kind: "landing_generation", jobId: queued.job.id } }]),
+  );
+  const design = await client.website.getPageDesign({ id: page.id });
+  expect(design.jobs).toHaveLength(1);
+  expect(design.jobs[0]).toMatchObject({ id: queued.job.id, status: "queued" });
+  expect(design.currentVersionId).toBe(page.versionId);
 });

@@ -17,7 +17,7 @@ import {
   reconcileContactSegmentMemberships,
   refreshSegmentMemberships,
 } from "../segments/membership-service";
-import { processLandingGeneration } from "../web/landing-design-service";
+import { processLandingGeneration } from "../web/landing-generation-service";
 import { processPendingPublicFormEvent } from "./contact-event-service";
 import {
   deliveryQueueMessageSchema,

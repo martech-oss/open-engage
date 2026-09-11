@@ -21,7 +21,7 @@ import { recoverProjectClones } from "../projects/clone-service";
 import { recoverProgramMemberImports } from "../projects/program-import-service";
 import { runScoringDecay } from "../scoring/decay-service";
 import { listDynamicSegmentsForCorrection } from "../segments/membership-service";
-import { recoverLandingGenerations } from "../web/landing-design-service";
+import { recoverLandingGenerations } from "../web/landing-generation-service";
 import { retryPendingPublicFormEvents } from "./contact-event-service";
 import { dispatchDueAutomationJobs, runScheduledTasks, type ScheduledTask } from "./scheduler";
 import { recoverVisitorHistories } from "./visitor-history-worker";

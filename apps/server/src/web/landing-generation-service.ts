@@ -1,13 +1,7 @@
-import type { ProgramBinding } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { landingGenerationResultSchema, type LandingPageDocument } from "@openengage/core/web";
-import { AssetRepository } from "@openengage/database/assets";
+import { landingGenerationResultSchema } from "@openengage/core/web";
 import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
-import {
-  EmailDesignRepository,
-  GeneratedEmailImageRepository,
-} from "@openengage/database/messaging";
-import { FormProgramRepository } from "@openengage/database/projects";
+import { EmailDesignRepository } from "@openengage/database/messaging";
 import { isConstraintError } from "@openengage/database/shared";
 import {
   LandingDesignRepository,
@@ -20,84 +14,54 @@ import type { RuntimeEnv } from "../env";
 import { generateEmailImage } from "../messaging/email-image-generation-service";
 import { logError } from "../observability";
 import { resolveProjectVariables } from "../projects/variable-service";
-import { hasTurnstileConfiguration } from "./config";
+import { validateLandingReferences } from "./landing-reference-validation";
 import { sanitizeLandingDocument } from "./landing-safety";
-import { resolveLandingVariablePublication } from "./variable-publication-service";
 
-export async function validateLandingReferences(
+type LandingGenerationQueueOutcome =
+  | { kind: "ok"; job: NonNullable<Awaited<ReturnType<LandingDesignRepository["queue"]>>> }
+  | { kind: "not_found" }
+  | { kind: "conflict" }
+  | { kind: "invalid" };
+
+export async function queueLandingGeneration(
   database: OpenEngageDatabase,
-  workspaceId: string,
-  document: LandingPageDocument,
+  workspace: WorkspaceContext,
   env: RuntimeEnv,
-  publishing = false,
-): Promise<void> {
-  const repository = new LandingDesignRepository(database, { workspaceId });
-  if (document.variableProjectId && !(await repository.validProject(document.variableProjectId)))
-    throw new Error("変数のProjectが見つかりません");
-  if (
-    document.measurement.projectId &&
-    !(await repository.validProject(document.measurement.projectId))
-  )
-    throw new Error("キャンペーンが見つかりません");
-  for (const form of document.forms) {
-    if (form.formId && !(await repository.validForm(form.formId)))
-      throw new Error("参照フォームが見つかりません");
-    if (publishing && form.turnstileEnabled && !hasTurnstileConfiguration(env))
-      throw new Error("Turnstileの設定が必要です");
+  input: Omit<Parameters<LandingDesignRepository["queue"]>[0], "userId">,
+): Promise<LandingGenerationQueueOutcome> {
+  const repository = new LandingDesignRepository(database, workspace);
+  const page = await repository.page(input.pageId);
+  if (!page) return { kind: "not_found" };
+  if (page.currentVersionId !== input.baseVersionId) return { kind: "conflict" };
+  const job = await repository.queue({ ...input, userId: workspace.userId });
+  if (!job) return { kind: "invalid" };
+  if (job.prompt !== input.prompt || job.baseVersionId !== input.baseVersionId)
+    return { kind: "conflict" };
+  // A durable queued row is authoritative. Scheduled recovery covers queue publication failures.
+  try {
+    await env.JOBS_QUEUE.send({ kind: "landing_generation", jobId: job.id });
+  } catch {
+    /* recovered on the next scheduled run */
   }
-  const assets = new AssetRepository(database, { workspaceId });
-  const generated = new GeneratedEmailImageRepository(database);
-  for (const image of document.images) {
-    const asset = await assets.getById(image.assetId);
-    if (!asset || asset.archivedAt || asset.kind !== "image")
-      throw new Error("画像が見つかりません");
-    if (
-      asset.visibility !== "public" &&
-      !(await generated.getForPreview(workspaceId, image.assetId, new Date().toISOString()))
-    )
-      throw new Error("画像は公開アセットまたは生成画像を指定してください");
-    if (publishing && !(await env.ASSETS_BUCKET.head(asset.r2Key)))
-      throw new Error("画像ファイルの準備が完了していません");
-  }
+  return { kind: "ok", job };
 }
 
-export async function publishLandingPage(
+export async function retryLandingGeneration(
   database: OpenEngageDatabase,
-  workspaceId: string,
+  workspace: WorkspaceContext,
   env: RuntimeEnv,
-  input: { id: string; versionId: string; baseVersionId: string },
-) {
-  const repository = new LandingDesignRepository(database, { workspaceId });
-  const page = await repository.page(input.id),
-    version = await repository.version(input.id, input.versionId);
-  if (!page || !version) return "not_found" as const;
-  if (page.currentVersionId !== input.baseVersionId) return "conflict" as const;
-  const { snapshot, formSnapshots, document } =
-    version.publishedDocument && version.variableSnapshot
-      ? {
-          snapshot: version.variableSnapshot,
-          formSnapshots: {},
-          document: version.publishedDocument,
-        }
-      : await resolveLandingVariablePublication(database, workspaceId, version.document);
-  await validateLandingReferences(database, workspaceId, document, env, true);
-  const programBindings: Record<string, ProgramBinding | null> = {};
-  if (!version.publishedAt) {
-    const programs = new FormProgramRepository(database, { workspaceId });
-    for (const form of version.document.forms) {
-      const binding = form.formId ? await programs.get(form.formId) : null;
-      programBindings[form.refId] = binding
-        ? await programs.validate(binding, document.measurement.projectId)
-        : null;
-    }
+  input: { pageId: string; jobId: string },
+): Promise<"ok" | "not_found" | "conflict"> {
+  const repository = new LandingDesignRepository(database, workspace);
+  if (!(await repository.page(input.pageId))) return "not_found";
+  if (!(await repository.retryGeneration(input.pageId, input.jobId, workspace.userId)))
+    return "conflict";
+  try {
+    await env.JOBS_QUEUE.send({ kind: "landing_generation", jobId: input.jobId });
+  } catch {
+    /* The persisted queued state is retried by scheduled recovery. */
   }
-  await repository.publish(input.id, input.versionId, input.baseVersionId, {
-    document,
-    snapshot,
-    formSnapshots,
-    programBindings,
-  });
-  return "ok" as const;
+  return "ok";
 }
 
 export async function processLandingGeneration(

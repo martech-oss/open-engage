@@ -50,6 +50,7 @@ export const sharedErrorMessages = [
 export const drizzleImportAllowlist = [];
 export const routeSsrFalseAllowlist = new Set([]);
 export const migratedCommandRouters = new Set([
+  "apps/server/src/web/router.ts",
   "apps/server/src/automations/router.ts",
   "apps/server/src/contacts/router.ts",
   "apps/server/src/segments/router.ts",

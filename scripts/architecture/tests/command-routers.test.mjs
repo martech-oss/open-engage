@@ -2,6 +2,15 @@ import { runScenarios } from "./helpers.mjs";
 
 await runScenarios("architecture: command-routers", [
   {
+    name: "keeps the web composition router free of database imports",
+    files: {
+      "apps/server/src/web/router.ts":
+        'import { LandingPageRepository } from "@openengage/database/web";\n' +
+        "void LandingPageRepository;\n",
+    },
+    want: "migrated command router.*runtime import @openengage/database",
+  },
+  {
     name: "rejects runtime database imports in migrated command routers",
     files: {
       "apps/server/src/segments/router.ts":
