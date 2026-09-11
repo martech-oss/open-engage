@@ -12,7 +12,7 @@ import { ConsentRepository } from "@openengage/database/consent";
 import { ContactResourceQueryRepository } from "@openengage/database/contacts";
 import { MessagingRepository } from "@openengage/database/messaging";
 import { SegmentQueryRepository } from "@openengage/database/segments";
-import { WebRepository } from "@openengage/database/web";
+import { SignupFormRepository } from "@openengage/database/web";
 import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
 
 import { loadSegmentCatalog, validateSegmentFilter } from "../segments/validation-service";
@@ -59,7 +59,7 @@ export async function loadAutomationResourceContext(
     segmentCatalog,
   ] = await Promise.all([
     new MessagingRepository(database, workspace).listEmailTemplates(false),
-    new WebRepository(database, workspace).listSignupForms(),
+    new SignupFormRepository(database, workspace).listSignupForms(),
     new SegmentQueryRepository(database, workspace).listSegments(),
     new ContactResourceQueryRepository(database, workspace).getContactOptionRows(),
     new WorkspaceSettingsRepository(database, workspace).listWebhookEndpoints(),

@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { createDatabase } from "@openengage/database/client";
-import { WebRepository } from "@openengage/database/web";
+import { VisitorMessageRepository } from "@openengage/database/web";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -50,7 +50,9 @@ describe("anonymous site messages", () => {
       startsAt: "2026-09-01T00:00:00.000Z",
       endsAt: "2026-09-02T00:00:00.000Z",
     });
-    const repository = new WebRepository(createDatabase(env.DB), { workspaceId: f.workspaceId });
+    const repository = new VisitorMessageRepository(createDatabase(env.DB), {
+      workspaceId: f.workspaceId,
+    });
     expect(await repository.listActiveSiteMessagesForVisitor("2026-08-31T23:59:59.999Z")).toEqual(
       [],
     );

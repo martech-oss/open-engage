@@ -22,7 +22,7 @@ export * from "./shared/pagination";
 export * from "./shared/repository-base";
 export * from "./shared/uuid";
 export * from "./scoring/repository";
-export * from "./web/repository";
+export * from "./web";
 export * from "./workspaces/repository";
 export * from "./workspaces/bootstrap-query-repository";
 export * from "./workspaces/settings-repository";

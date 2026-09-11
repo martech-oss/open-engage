@@ -4,7 +4,13 @@ import { VariableResolutionError } from "@openengage/core/projects";
 import { emptyLandingPageDocument, siteMessageScheduleSchema } from "@openengage/core/web";
 import { VariableRepositoryError } from "@openengage/database/projects";
 import { isConstraintError, isUniqueConstraintError } from "@openengage/database/shared";
-import { CustomRedirectRepository, WebRepository } from "@openengage/database/web";
+import {
+  CustomRedirectRepository,
+  SignupFormRepository,
+  LandingPageRepository,
+  SiteMessageRepository,
+  SiteTrackingRepository,
+} from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -22,7 +28,7 @@ const FORM_SLUG_UNIQUE_COLUMNS = ["forms.workspace_id", "forms.slug"] as const;
 const PAGE_SLUG_UNIQUE_COLUMNS = ["landing_pages.workspace_id", "landing_pages.slug"] as const;
 
 export const listFormsProcedure = authed.website.listForms.handler(({ context }) =>
-  new WebRepository(context.database, context.workspace).listSignupForms(),
+  new SignupFormRepository(context.database, context.workspace).listSignupForms(),
 );
 
 export const createFormProcedure = authed.website.createForm.handler(
@@ -35,11 +41,11 @@ export const createFormProcedure = authed.website.createForm.handler(
     ) {
       throw errors.TURNSTILE_NOT_CONFIGURED();
     }
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new SignupFormRepository(context.database, context.workspace);
     let slug =
       input.slug ??
       (await availableSlug(input.name, "signup-form", (candidate) =>
-        repository.isSignupFormSlugAvailable(candidate),
+        repository.isSlugAvailable(candidate),
       ));
     for (;;) {
       try {
@@ -54,7 +60,7 @@ export const createFormProcedure = authed.website.createForm.handler(
         if (!isUniqueConstraintError(error, FORM_SLUG_UNIQUE_COLUMNS)) throw error;
         if (input.slug) throw errors.FORM_SLUG_TAKEN({ cause: error });
         slug = await availableSlug(input.name, "signup-form", (candidate) =>
-          repository.isSignupFormSlugAvailable(candidate),
+          repository.isSlugAvailable(candidate),
         );
       }
     }
@@ -72,7 +78,7 @@ export const updateFormProcedure = authed.website.updateForm.handler(
       throw errors.TURNSTILE_NOT_CONFIGURED();
     }
     const { id, ...changes } = input;
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new SignupFormRepository(context.database, context.workspace);
     try {
       if (!(await repository.updateSignupForm(id, changes))) {
         throw errors.FORM_NOT_FOUND();
@@ -96,7 +102,7 @@ export const updateFormProcedure = authed.website.updateForm.handler(
 export const archiveFormProcedure = authed.website.archiveForm.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new SignupFormRepository(context.database, context.workspace);
     if (!(await repository.archiveSignupForm(input.id))) {
       throw errors.FORM_NOT_FOUND();
     }
@@ -105,7 +111,7 @@ export const archiveFormProcedure = authed.website.archiveForm.handler(
 );
 
 export const listPagesProcedure = authed.website.listPages.handler(({ context }) =>
-  new WebRepository(context.database, context.workspace).listLandingPages(),
+  new LandingPageRepository(context.database, context.workspace).listLandingPages(),
 );
 
 export const createPageProcedure = authed.website.createPage.handler(
@@ -125,11 +131,11 @@ export const createPageProcedure = authed.website.createPage.handler(
         throw errors.PAGE_INVALID({ cause: error });
       }
     }
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new LandingPageRepository(context.database, context.workspace);
     let slug =
       input.slug ??
       (await availableSlug(input.name, "landing-page", (candidate) =>
-        repository.isLandingPageSlugAvailable(candidate),
+        repository.isSlugAvailable(candidate),
       ));
     for (;;) {
       try {
@@ -154,7 +160,7 @@ export const createPageProcedure = authed.website.createPage.handler(
         if (!isUniqueConstraintError(error, PAGE_SLUG_UNIQUE_COLUMNS)) throw error;
         if (input.slug) throw errors.PAGE_SLUG_TAKEN({ cause: error });
         slug = await availableSlug(input.name, "landing-page", (candidate) =>
-          repository.isLandingPageSlugAvailable(candidate),
+          repository.isSlugAvailable(candidate),
         );
       }
     }
@@ -181,10 +187,10 @@ export const updatePageProcedure = authed.website.updatePage.handler(
     }
     let outcome;
     try {
-      outcome = await new WebRepository(context.database, context.workspace).updateLandingPage(
-        id,
-        changes,
-      );
+      outcome = await new LandingPageRepository(
+        context.database,
+        context.workspace,
+      ).updateLandingPage(id, changes);
     } catch (error) {
       if (isUniqueConstraintError(error, PAGE_SLUG_UNIQUE_COLUMNS)) {
         throw errors.PAGE_SLUG_TAKEN({ cause: error });
@@ -202,7 +208,7 @@ export const updatePageProcedure = authed.website.updatePage.handler(
 export const archivePageProcedure = authed.website.archivePage.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new LandingPageRepository(context.database, context.workspace);
     if (!(await repository.archiveLandingPage(input.id))) {
       throw errors.PAGE_NOT_FOUND();
     }
@@ -211,7 +217,7 @@ export const archivePageProcedure = authed.website.archivePage.handler(
 );
 
 export const listMessagesProcedure = authed.website.listMessages.handler(({ context }) =>
-  new WebRepository(context.database, context.workspace).listSiteMessages(),
+  new SiteMessageRepository(context.database, context.workspace).listSiteMessages(),
 );
 
 export const createMessageProcedure = authed.website.createMessage.handler(
@@ -220,7 +226,7 @@ export const createMessageProcedure = authed.website.createMessage.handler(
     if (!siteMessageScheduleSchema.safeParse(input).success) {
       throw errors.SITE_MESSAGE_SCHEDULE_INVALID();
     }
-    return new WebRepository(context.database, context.workspace).createSiteMessage(input);
+    return new SiteMessageRepository(context.database, context.workspace).createSiteMessage(input);
   },
 );
 
@@ -231,7 +237,7 @@ export const updateMessageProcedure = authed.website.updateMessage.handler(
       throw errors.SITE_MESSAGE_SCHEDULE_INVALID();
     }
     const { id, ...changes } = input;
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new SiteMessageRepository(context.database, context.workspace);
     if (!(await repository.updateSiteMessage(id, changes))) {
       throw errors.SITE_MESSAGE_NOT_FOUND();
     }
@@ -242,7 +248,7 @@ export const updateMessageProcedure = authed.website.updateMessage.handler(
 export const archiveMessageProcedure = authed.website.archiveMessage.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
-    const repository = new WebRepository(context.database, context.workspace);
+    const repository = new SiteMessageRepository(context.database, context.workspace);
     if (!(await repository.archiveSiteMessage(input.id))) {
       throw errors.SITE_MESSAGE_NOT_FOUND();
     }
@@ -251,7 +257,7 @@ export const archiveMessageProcedure = authed.website.archiveMessage.handler(
 );
 
 export const getTrackingProcedure = authed.website.getTracking.handler(({ context }) =>
-  new WebRepository(context.database, context.workspace).getTracking(),
+  new SiteTrackingRepository(context.database, context.workspace).getTracking(),
 );
 
 export const updateTrackingProcedure = authed.website.updateTracking.handler(
@@ -261,7 +267,7 @@ export const updateTrackingProcedure = authed.website.updateTracking.handler(
     const allowedDomains = input.allowedDomains.map((domain) => normalizeDomain(domain));
     if (allowedDomains.some((domain) => !isValidDomain(domain))) throw errors.INVALID_DOMAIN();
     if (input.enabled && allowedDomains.length === 0) throw errors.TRACKING_DOMAIN_REQUIRED();
-    await new WebRepository(context.database, context.workspace).saveTrackingSettings({
+    await new SiteTrackingRepository(context.database, context.workspace).saveTrackingSettings({
       enabled: input.enabled,
       allowedDomains,
     });
