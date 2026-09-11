@@ -1,6 +1,26 @@
 import { runScenarios } from "./helpers.mjs";
 
 await runScenarios("architecture: domain-boundaries", [
+  ...["worker", "node-execution", "action-execution", "execution-dependencies"].map((module) => ({
+    name: `rejects automation ${module} dependencies on runtime composition`,
+    files: {
+      [`apps/server/src/automations/${module}.ts`]:
+        'import { createAutomationExecutionDependencies } from "../runtime/automation-execution";\n' +
+        "void createAutomationExecutionDependencies;\n",
+      "apps/server/src/runtime/automation-execution.ts":
+        "export const createAutomationExecutionDependencies = () => undefined;\n",
+    },
+    want: "automations domain must not depend on runtime composition",
+  })),
+  {
+    name: "allows runtime composition of automation execution modules",
+    files: {
+      "apps/server/src/automations/action-execution.ts":
+        "export const executeAutomationAction = () => undefined;\n",
+      "apps/server/src/runtime/automation-execution.ts":
+        'import { executeAutomationAction } from "../automations/action-execution";\nvoid executeAutomationAction;\n',
+    },
+  },
   {
     name: "rejects contacts domain dependencies on runtime composition",
     files: {

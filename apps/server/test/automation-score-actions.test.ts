@@ -2,11 +2,7 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 
-import {
-  AutomationJobRepository,
-  AutomationDecisionRepository,
-  AutomationContactActionRepository,
-} from "@openengage/database/automations";
+import { AutomationJobRepository } from "@openengage/database/automations";
 import {
   contacts,
   contactCategoryScores,
@@ -14,7 +10,8 @@ import {
   createDatabase,
 } from "@openengage/database/testing";
 
-import { executeNode } from "../src/automations/worker";
+import { executeNode } from "../src/automations/node-execution";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import {
   graph,
   seedAutomationJob,
@@ -67,10 +64,7 @@ it.each([false, true])("sets score exactly once with category=%s", async (catego
       definition,
       job,
       "lease",
-      runtimeWithJobsQueue(queueStub()),
-      db,
-      new AutomationDecisionRepository(db),
-      new AutomationContactActionRepository(db),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
     );
   const contact = await db.orm
     .select({ score: contacts.score })

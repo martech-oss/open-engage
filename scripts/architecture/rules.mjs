@@ -104,6 +104,19 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
       );
     }
     if (
+      workspacePath.startsWith("apps/server/src/automations/") &&
+      !isTest &&
+      edges.some((edge) => {
+        const target = resolveModuleSpecifier(file, edge.specifier);
+        return target && relative(root, target).startsWith("apps/server/src/runtime/");
+      })
+    ) {
+      violations.push(
+        `${workspacePath}: automations domain must not depend on runtime composition; ` +
+          `wire execution dependencies from apps/server/src/runtime instead`,
+      );
+    }
+    if (
       workspacePath.startsWith("apps/server/src/") &&
       !isTest &&
       !isBetterAuthAdapter &&

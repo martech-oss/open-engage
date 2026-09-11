@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import type { RuntimeEnv } from "../src/env";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { seedWorkspaceClient, seedMember } from "./factory";
 
 describe("sales handoff and unified tasks", () => {
@@ -281,8 +282,16 @@ it("executes the automation handoff action once per enrollment and permits expli
     )
       .bind(job!.id)
       .run();
-    await processAutomationJob(job!.id, "sales-test", runtime);
-    await processAutomationJob(job!.id, "sales-test", runtime);
+    await processAutomationJob(
+      job!.id,
+      "sales-test",
+      createAutomationExecutionDependencies(runtime),
+    );
+    await processAutomationJob(
+      job!.id,
+      "sales-test",
+      createAutomationExecutionDependencies(runtime),
+    );
   }
   expect(await fixture.client.deals.listTasks({ status: "all" })).toHaveLength(2);
   expect(await fixture.client.deals.notifications({})).toHaveLength(2);

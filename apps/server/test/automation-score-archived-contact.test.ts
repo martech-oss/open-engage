@@ -6,8 +6,6 @@ import type { AutomationNode } from "@openengage/core/automations";
 import {
   AutomationActionRepository,
   AutomationJobRepository,
-  AutomationDecisionRepository,
-  AutomationContactActionRepository,
 } from "@openengage/database/automations";
 import { ContactRepository } from "@openengage/database/contacts";
 import {
@@ -20,7 +18,8 @@ import {
   uuidv7,
 } from "@openengage/database/testing";
 
-import { executeNode } from "../src/automations/worker";
+import { executeNode } from "../src/automations/node-execution";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import {
   expectJobAndEnrollment,
   graph,
@@ -144,10 +143,7 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
           definition,
           job!,
           leaseId,
-          runtimeWithJobsQueue(queueStub()),
-          db,
-          new AutomationDecisionRepository(db),
-          new AutomationContactActionRepository(db),
+          createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
         );
 
       await execute();

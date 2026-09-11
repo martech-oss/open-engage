@@ -18,6 +18,7 @@ import {
 
 import { processAutomationJob } from "../src/automations/worker";
 import type { RuntimeEnv } from "../src/env";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { seedWorkspace } from "./factory";
 
@@ -149,7 +150,7 @@ describe("automation stale completion races", () => {
     await processAutomationJob(
       seeded.jobId,
       "decision-barrier-lease",
-      runtimeWithJobsQueue(queueStub()),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
     );
 
     expect(await readJobDueAt(seeded.jobId)).toEqual({

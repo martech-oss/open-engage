@@ -6,6 +6,7 @@ import type { AutomationNode } from "@openengage/core/automations";
 import { createDatabase } from "@openengage/database/testing";
 
 import { processAutomationJob } from "../src/automations/worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { scheduled } from "../src/runtime/dispatch";
 import {
@@ -35,7 +36,7 @@ describe("decision node recovery", () => {
     await processAutomationJob(
       seeded.jobId,
       "pre-node-event-lease",
-      runtimeWithJobsQueue(queueStub()),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
     );
     await recordContactEvent(createDatabase(env.DB), {
       workspaceId: seeded.workspaceId,
@@ -65,7 +66,11 @@ describe("decision node recovery", () => {
       enteredAt: "2026-08-20T11:00:00.000Z",
       createdAt: "2026-08-20T11:00:00.000Z",
     });
-    await processAutomationJob(seeded.jobId, "waiting-lease", runtimeWithJobsQueue(queueStub()));
+    await processAutomationJob(
+      seeded.jobId,
+      "waiting-lease",
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+    );
 
     vi.setSystemTime(new Date("2026-08-20T11:02:00.000Z"));
     await recordContactEvent(createDatabase(env.DB), {
@@ -112,7 +117,11 @@ describe("decision node recovery", () => {
       enteredAt: "2026-08-20T12:00:00.000Z",
       createdAt: "2026-08-20T12:00:00.000Z",
     });
-    await processAutomationJob(seeded.jobId, "deadline-lease", runtimeWithJobsQueue(queueStub()));
+    await processAutomationJob(
+      seeded.jobId,
+      "deadline-lease",
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+    );
 
     vi.setSystemTime(new Date("2026-08-20T12:10:00.000Z"));
     await scheduled(
@@ -126,7 +135,11 @@ describe("decision node recovery", () => {
       .bind(seeded.enrollmentId, decision.id)
       .first<{ id: string; leaseId: string }>();
     if (!claimed) throw new Error("decision job was not claimed at its deadline");
-    await processAutomationJob(claimed.id, claimed.leaseId, runtimeWithJobsQueue(queueStub()));
+    await processAutomationJob(
+      claimed.id,
+      claimed.leaseId,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+    );
 
     const next = await env.DB.prepare(
       "SELECT node_id AS nodeId, status FROM automation_jobs WHERE enrollment_id = ? AND node_id = ?",

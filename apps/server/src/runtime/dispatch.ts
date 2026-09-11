@@ -18,6 +18,7 @@ import {
   refreshSegmentMemberships,
 } from "../segments/membership-service";
 import { processLandingGeneration } from "../web/landing-generation-service";
+import { createAutomationExecutionDependencies } from "./automation-execution";
 import { processPendingPublicFormEvent } from "./contact-event-service";
 import {
   deliveryQueueMessageSchema,
@@ -66,7 +67,11 @@ export const jobsQueueHandlers = {
     await processVisitorHistory(env, message.workspaceId, message.visitorId);
   },
   automation_job: async (message, env) => {
-    await processAutomationJob(message.jobId, message.leaseId, env);
+    await processAutomationJob(
+      message.jobId,
+      message.leaseId,
+      createAutomationExecutionDependencies(env),
+    );
   },
   contact_event: async (message, env) => {
     await processPendingPublicFormEvent(createDatabase(env.DB), message.eventId, env.JOBS_QUEUE);

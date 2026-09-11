@@ -27,6 +27,7 @@ import {
 
 import { dispatchScheduledAutomationRuns } from "../src/automations/run-service";
 import { processAutomationJob } from "../src/automations/worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import {
   graph,
   seedAutomationJob,
@@ -223,7 +224,11 @@ it("resumes a successfully parked fifth-start delay and recovers already strande
   const db = createDatabase(env.DB),
     engine = new AutomationJobRepository(db),
     recovery = new AutomationJobRecoveryRepository(db);
-  await processAutomationJob(seeded.jobId, "lease", runtimeWithJobsQueue(queueStub()));
+  await processAutomationJob(
+    seeded.jobId,
+    "lease",
+    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+  );
   expect(
     await db.orm.select().from(automationJobs).where(eq(automationJobs.id, seeded.jobId)).get(),
   ).toMatchObject({ status: "pending", attempts: 0, leaseId: null });
@@ -251,7 +256,11 @@ it("resumes a successfully parked fifth-start delay and recovers already strande
       false,
     ),
   ).toBe("retry");
-  await processAutomationJob(seeded.jobId, claim!.leaseId, runtimeWithJobsQueue(queueStub()));
+  await processAutomationJob(
+    seeded.jobId,
+    claim!.leaseId,
+    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+  );
   await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "succeeded", "completed");
 });
 

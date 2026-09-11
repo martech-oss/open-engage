@@ -7,6 +7,7 @@ import { createDatabase } from "@openengage/database/client";
 
 import { processAutomationJob } from "../src/automations/worker";
 import type { RuntimeEnv } from "../src/env";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { retryPendingPublicFormEvents } from "../src/runtime/contact-event-service";
 import { processVisitorHistory } from "../src/runtime/visitor-history-worker";
 import { reconcileContactSegmentMemberships } from "../src/segments/membership-service";
@@ -168,8 +169,16 @@ it("connects anonymous LP -> form -> score segment -> handoff -> won deal -> ROI
       workspaceId,
     );
     for (const job of jobs) {
-      await processAutomationJob(job.id, job.leaseId, runtime);
-      await processAutomationJob(job.id, job.leaseId, runtime);
+      await processAutomationJob(
+        job.id,
+        job.leaseId,
+        createAutomationExecutionDependencies(runtime),
+      );
+      await processAutomationJob(
+        job.id,
+        job.leaseId,
+        createAutomationExecutionDependencies(runtime),
+      );
     }
   }
   expect(await client.deals.contactTasks({ contactId: contact!.id })).toHaveLength(1);

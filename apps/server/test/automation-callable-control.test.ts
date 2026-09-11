@@ -11,6 +11,7 @@ import {
 
 import { enrollContactManually } from "../src/automations/enrollment";
 import { processAutomationJob } from "../src/automations/worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { queueStub, runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { seedWorkspaceClient } from "./factory";
 it("awaits one pinned child, wakes parent once, and cascades explicit cancellation", async () => {
@@ -55,7 +56,11 @@ it("awaits one pinned child, wakes parent once, and cascades explicit cancellati
     runtime = runtimeWithJobsQueue(queueStub());
   for (let round = 0; round < 2; round++)
     for (const job of await engine.claimDueJobs(new Date().toISOString(), "2099-01-01T00:00:00Z"))
-      await processAutomationJob(job.id, job.leaseId, runtime);
+      await processAutomationJob(
+        job.id,
+        job.leaseId,
+        createAutomationExecutionDependencies(runtime),
+      );
   const detail = await new repositories.AutomationExecutionRepository(db, {
     workspaceId,
   }).enrollmentDetail(enrolled.result.enrollmentId);
@@ -144,7 +149,11 @@ it.each(["await", "async"] as const)(
     for (let round = 0; round < 6; round++) {
       await calls.recover(new Date().toISOString());
       for (const job of await engine.claimDueJobs(new Date().toISOString(), "2099-01-01T00:00:00Z"))
-        await processAutomationJob(job.id, job.leaseId, runtime).catch(() => undefined);
+        await processAutomationJob(
+          job.id,
+          job.leaseId,
+          createAutomationExecutionDependencies(runtime),
+        ).catch(() => undefined);
     }
     const detail = (await new repositories.AutomationExecutionRepository(db, {
       workspaceId,

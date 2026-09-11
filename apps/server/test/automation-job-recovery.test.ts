@@ -13,6 +13,7 @@ import {
 
 import { processAutomationJob } from "../src/automations/worker";
 import { persistDeadLetter } from "../src/platform/maintenance-worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { scheduled } from "../src/runtime/dispatch";
 import {
   expectJobAndEnrollment,
@@ -119,7 +120,7 @@ describe("automation job recovery", () => {
       processAutomationJob(
         seeded.jobId,
         "permanent-error-lease",
-        runtimeWithJobsQueue(queueStub()),
+        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
       ),
     ).rejects.toThrow("Automation node missing-node is missing");
 
@@ -148,7 +149,11 @@ describe("automation job recovery", () => {
     ).run();
 
     await expect(
-      processAutomationJob(seeded.jobId, "fifth-start-lease", runtimeWithJobsQueue(queueStub())),
+      processAutomationJob(
+        seeded.jobId,
+        "fifth-start-lease",
+        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      ),
     ).resolves.toBeUndefined();
 
     await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "failed", "failed");
@@ -212,14 +217,18 @@ describe("automation job recovery", () => {
     ).run();
 
     await expect(
-      processAutomationJob(seeded.jobId, "score-effect-lease", runtimeWithJobsQueue(queueStub())),
+      processAutomationJob(
+        seeded.jobId,
+        "score-effect-lease",
+        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      ),
     ).rejects.toThrow("injected completion failure");
     await env.DB.prepare("DROP TRIGGER inject_completion_failure").run();
 
     await processAutomationJob(
       seeded.jobId,
       "score-effect-lease",
-      runtimeWithJobsQueue(queueStub()),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
     );
 
     const effect = await env.DB.prepare(
@@ -268,10 +277,12 @@ describe("automation job recovery", () => {
     const processing = processAutomationJob(
       seeded.jobId,
       "stale-action-lease",
-      runtimeWithJobsQueue(
-        queueStub(async (messages) => {
-          reconciliationMessages.push(...[...messages].map((message) => message.body));
-        }),
+      createAutomationExecutionDependencies(
+        runtimeWithJobsQueue(
+          queueStub(async (messages) => {
+            reconciliationMessages.push(...[...messages].map((message) => message.body));
+          }),
+        ),
       ),
     );
 
@@ -353,7 +364,7 @@ describe("automation job recovery", () => {
     const processing = processAutomationJob(
       seeded.jobId,
       "stale-delivery-lease",
-      runtimeWithQueues(jobsQueue, deliveryQueue),
+      createAutomationExecutionDependencies(runtimeWithQueues(jobsQueue, deliveryQueue)),
     );
 
     await insertObserved;

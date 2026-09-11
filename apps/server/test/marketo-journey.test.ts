@@ -18,6 +18,7 @@ import {
   processAutomationRun,
 } from "../src/automations/run-service";
 import { processAutomationJob } from "../src/automations/worker";
+import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { queueStub, runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { createSessionFixtureClient, seedMember, seedWorkspaceClient } from "./factory";
 import { addProjectBriefMember, projectBriefInput } from "./project-brief-test-support";
@@ -310,7 +311,11 @@ it("runs a cloned campaign from acquisition to success", { timeout: 30_000 }, as
       nowIso(),
       new Date(Date.now() + 60_000).toISOString(),
     ))
-      await processAutomationJob(job.id, job.leaseId, runtime);
+      await processAutomationJob(
+        job.id,
+        job.leaseId,
+        createAutomationExecutionDependencies(runtime),
+      );
   }
   await new AutomationRunRepository(database, owner).refresh(runId);
   const completedRun = await client.automations.runDetail({ id: targetParent.targetId, runId });
