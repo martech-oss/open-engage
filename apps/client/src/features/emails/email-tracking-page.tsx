@@ -1,10 +1,8 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Info } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { ErrorAlert, LoadingButton, PageLayout } from "@/components/app-ui";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorAlert, HelpTooltip, LoadingButton, PageLayout } from "@/components/app-ui";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Field,
@@ -40,10 +38,23 @@ export function EmailTrackingPage(): ReactNode {
 
   return (
     <PageLayout title="メール計測">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="max-w-3xl">
         <Card>
           <CardHeader>
-            <CardTitle>計測設定</CardTitle>
+            <CardTitle className="flex flex-wrap items-center gap-1">
+              計測設定
+              <HelpTooltip label="メール計測">
+                <p className="mb-1 font-medium">計測できるもの・できないもの</p>
+                計測した開封・クリックはレポートの開封率／クリック率と、オートメーションの分岐
+                （開封待ち・クリック待ち）に反映されます。
+                プレーンテキスト版のリンクは書き換えないため、HTMLを表示しない受信者のクリックは記録されません。
+                <p className="mt-3 mb-1 font-medium">数値の読み方に注意してください</p>
+                Apple Mail
+                のプライバシー保護は受信時に画像を先読みするため、開封数は実際より多くなります。
+                また企業のリンク検査によって、人が押していないクリックが記録される場合があります。
+                同一配信の重複は除外していますが、これらの過大計上は完全には避けられません。
+              </HelpTooltip>
+            </CardTitle>
             <CardDescription>
               オートメーションから送信するメールにのみ適用されます。
               {data.updatedAt ? `最終更新: ${formatDateTime(data.updatedAt)}` : null}
@@ -90,28 +101,6 @@ export function EmailTrackingPage(): ReactNode {
             </form>
           </CardContent>
         </Card>
-
-        <div className="flex flex-col gap-4">
-          <Alert>
-            <Info />
-            <AlertTitle>計測できるもの・できないもの</AlertTitle>
-            <AlertDescription>
-              計測した開封・クリックはレポートの開封率／クリック率と、オートメーションの分岐
-              （開封待ち・クリック待ち）に反映されます。
-              プレーンテキスト版のリンクは書き換えないため、HTMLを表示しない受信者のクリックは記録されません。
-            </AlertDescription>
-          </Alert>
-          <Alert>
-            <Info />
-            <AlertTitle>数値の読み方に注意してください</AlertTitle>
-            <AlertDescription>
-              Apple Mail
-              のプライバシー保護は受信時に画像を先読みするため、開封数は実際より多くなります。
-              また企業のリンク検査によって、人が押していないクリックが記録される場合があります。
-              同一配信の重複は除外していますが、これらの過大計上は完全には避けられません。
-            </AlertDescription>
-          </Alert>
-        </div>
       </div>
     </PageLayout>
   );

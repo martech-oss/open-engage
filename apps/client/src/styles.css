@@ -1,65 +1,59 @@
 @import "tailwindcss";
+@source "./";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 @import "@fontsource-variable/noto-sans-jp";
 
-/*
- * Warm-neutral palette from the 新デザイン画面 design doc: every grey carries a
- * hue-40 tint so the chrome reads as paper rather than as the stock zero-chroma
- * shadcn grey, and the brand red doubles as the single accent (active nav,
- * primary buttons, focus ring).
- */
+/* Monitoring workspace: quiet surfaces, blue actions, semantic status colors. */
 :root {
-  --background: oklch(0.978 0.002 60);
-  --foreground: oklch(0.18 0.01 40);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.01 40);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.01 40);
-  --primary: oklch(0.58 0.16 25);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.965 0.005 40);
-  --secondary-foreground: oklch(0.28 0.012 40);
-  --muted: oklch(0.965 0.005 40);
-  --muted-foreground: oklch(0.52 0.012 40);
-  --accent: oklch(0.955 0.028 25);
-  --accent-foreground: oklch(0.45 0.15 25);
-  --destructive: oklch(0.577 0.245 27);
-  --success: oklch(0.59 0.145 163);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.77 0.16 75);
-  --warning-foreground: oklch(0.22 0.04 75);
-  --border: oklch(0.915 0.006 40);
-  --input: oklch(0.91 0.006 40);
-  --ring: oklch(0.58 0.16 25);
-  --chart-1: oklch(0.59 0.145 163);
-  --chart-2: oklch(0.77 0.16 75);
-  --chart-3: oklch(0.577 0.245 27);
-  --chart-4: oklch(0.55 0.11 255);
-  --chart-5: oklch(0.58 0.16 25);
-  --radius: 0.5625rem;
-  --sidebar: oklch(0.975 0.004 40);
-  --sidebar-foreground: oklch(0.36 0.012 40);
-  --sidebar-primary: oklch(0.58 0.16 25);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.955 0.028 25);
-  --sidebar-accent-foreground: oklch(0.45 0.15 25);
-  --sidebar-border: oklch(0.905 0.006 40);
-  --sidebar-ring: oklch(0.58 0.16 25);
-  /* Row/header hairlines inside dense tables, lighter than --border. */
-  --row-border: oklch(0.965 0.004 40);
-  --table-header: oklch(0.985 0.003 40);
+  --background: #f7f8fa;
+  --foreground: #20252b;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --primary: #2457c5;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f5;
+  --secondary-foreground: #414b58;
+  --muted: #eef1f5;
+  --muted-foreground: #626d7a;
+  --text-secondary: #485360;
+  --text-tertiary: #626d7a;
+  --text-disabled: #89929d;
+  --accent: #eaf0fd;
+  --accent-foreground: #214dab;
+  --destructive: #bc303b;
+  --success: #24734e;
+  --success-foreground: #ffffff;
+  --warning: #a36916;
+  --warning-foreground: #775018;
+  --border: #e1e5eb;
+  --input: #cbd2db;
+  --control-background: #f2f4f7;
+  --ring: var(--primary);
+  --chart-1: #2457c5;
+  --chart-2: #24734e;
+  --chart-3: #a36916;
+  --chart-4: #687fa1;
+  --chart-5: #414b58;
+  --radius: 0.5rem;
+  --sidebar: var(--background);
+  --sidebar-foreground: #485360;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --row-border: #edf0f4;
+  --table-header: #f7f8fa;
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
-  /*
-   * Geist first so latin text and the many tabular figures in this UI keep
-   * their metrics, with Noto Sans JP picking up every kana/kanji Geist has no
-   * glyph for — the same pairing the design doc loads from Google Fonts.
-   */
   --font-sans: "Geist Variable", "Noto Sans JP Variable", sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
   --color-row-border: var(--row-border);
@@ -99,14 +93,17 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  /* Cards are `rounded-xl`; the design draws them at ~10px, not at the stock 1.4x. */
-  --radius-xl: calc(var(--radius) * 1.1);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+  --color-control-background: var(--control-background);
+  --radius-sm: 0.25rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
+  --radius-4xl: 1.5rem;
 }
 
 @layer base {
@@ -119,7 +116,8 @@
   }
 
   body {
-    @apply min-h-screen min-w-80 bg-background text-foreground antialiased;
+    @apply min-h-screen min-w-80 bg-background text-sm text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
   }
 
   button:not(:disabled),

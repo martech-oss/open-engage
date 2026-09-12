@@ -1,6 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   ErrorAlert,
@@ -10,6 +10,7 @@ import {
   PageLayout,
 } from "@/components/app-ui";
 import { AppDialog } from "@/components/app-ui/dialogs";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/hooks/use-form-submission";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
@@ -20,10 +21,11 @@ import { ProjectBriefsPage } from "./project-brief-list-page";
 export function ProjectsPage({
   search,
 }: {
-  search: ProjectBriefSearch & { view: "projects" | "briefs" };
+  search: ProjectBriefSearch & { view: "projects" | "briefs"; q?: string | undefined };
 }) {
   const { data } = useSuspenseQuery(projectsQueryOptions());
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(search.q ?? "");
+  useEffect(() => setQuery(search.q ?? ""), [search.q]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -31,42 +33,72 @@ export function ProjectsPage({
   const create = useCreateProject();
   const navigate = useNavigate();
   const { formatDateTime } = useWorkspaceFormatters();
+  function updateQuery(value: string) {
+    setQuery(value);
+    void navigate({ to: "/projects", search: { ...search, q: value || undefined }, replace: true });
+  }
   async function save() {
     setError("");
     try {
       const result = await create.mutateAsync({ name, description });
-      await navigate({ to: "/projects/$id", params: { id: result.id } });
+      await navigate({
+        to: "/projects/$id",
+        params: { id: result.id },
+        search: { q: query || undefined },
+      });
     } catch (cause) {
       setError(getErrorMessage(cause, "施策を作成できませんでした"));
     }
   }
-  const tabs = (
-    <nav className="flex gap-4 border-b pb-3 text-sm">
-      <Link
-        to="/projects"
-        search={{ view: "projects" }}
-        className={search.view === "projects" ? "font-semibold" : ""}
-      >
-        施策一覧
-      </Link>
-      <Link
-        to="/projects"
-        search={{ view: "briefs" }}
-        className={search.view === "briefs" ? "font-semibold" : ""}
-      >
-        施策ブリーフ
-      </Link>
-    </nav>
+  const filteredProjects = data.projects.filter((project) =>
+    `${project.name} ${project.description}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
-  if (search.view === "briefs")
-    return (
-      <div className="flex h-full flex-col">
-        <div className="px-6 pt-4">{tabs}</div>
-        <div className="min-h-0 flex-1">
-          <ProjectBriefsPage search={search} />
-        </div>
-      </div>
-    );
+  const columns: DataTableColumn<(typeof data.projects)[number]>[] = [
+    {
+      key: "name",
+      header: "施策名",
+      sortValue: (project) => project.name,
+      cell: (project) => (
+        <Link
+          to="/projects/$id"
+          params={{ id: project.id }}
+          search={{ q: query || undefined }}
+          className="font-medium hover:underline"
+        >
+          {project.name}
+        </Link>
+      ),
+    },
+    {
+      key: "description",
+      header: "説明",
+      cell: (project) => (
+        <span
+          className="block max-w-xl truncate text-muted-foreground"
+          title={project.description ?? undefined}
+        >
+          {project.description || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "itemCount",
+      header: "リソース数",
+      sortValue: (project) => project.itemCount,
+      cell: (project) => `${project.itemCount.toLocaleString()}件`,
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "updatedAt",
+      header: "更新日時",
+      sortValue: (project) => project.updatedAt,
+      cell: (project) => formatDateTime(project.updatedAt),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums whitespace-nowrap",
+    },
+  ];
+  if (search.view === "briefs") return <ProjectBriefsPage search={search} />;
   return (
     <PageLayout
       title="施策"
@@ -76,53 +108,37 @@ export function ProjectsPage({
         ) : undefined
       }
     >
-      {tabs}
       <p className="text-sm text-muted-foreground">
         資料請求・問い合わせ・イベントの参加者と成果を管理します。ブリーフなしでも利用できます。
       </p>
       <FormInput
         name="project-query"
         label="施策を検索"
-        placeholder="施策名"
+        placeholder="施策名・説明で検索"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => updateQuery(e.target.value)}
       />
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-muted">
-            <tr>
-              <th className="p-3">施策</th>
-              <th className="p-3">リンク済みリソース</th>
-              <th className="p-3">更新日時</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.projects
-              .filter((p) =>
-                `${p.name} ${p.description}`.toLowerCase().includes(query.toLowerCase()),
-              )
-              .map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td className="p-3">
-                    <Link
-                      to="/projects/$id"
-                      params={{ id: p.id }}
-                      className="font-medium underline underline-offset-4"
-                    >
-                      {p.name}
-                    </Link>
-                    <p className="mt-1 text-muted-foreground">{p.description}</p>
-                  </td>
-                  <td className="p-3">{p.itemCount}</td>
-                  <td className="p-3">{formatDateTime(p.updatedAt)}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-        {data.projects.length === 0 && (
-          <p className="p-8 text-center text-muted-foreground">最初の施策を作成してください</p>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={filteredProjects}
+        rowKey={(project) => project.id}
+        caption="施策一覧"
+        emptyTitle={query.trim() ? "検索条件に一致する施策はありません" : "施策はまだありません"}
+        emptyDescription={
+          query.trim()
+            ? "施策名や説明のキーワードを変更してください。"
+            : data.allowedActions.create
+              ? "最初の施策を作成して、参加者と成果の管理を始めましょう。"
+              : "閲覧できる施策が作成されると、ここに表示されます。"
+        }
+        emptyAction={
+          query.trim() ? (
+            <Button variant="outline" onClick={() => updateQuery("")}>
+              検索をクリア
+            </Button>
+          ) : undefined
+        }
+      />
       {open && (
         <AppDialog open title="施策を作成" onOpenChange={setOpen}>
           <form

@@ -73,22 +73,22 @@ export function SimpleBarChart({
   return (
     <div className="w-full" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey={xKey}
             tickFormatter={(value: string) => formatShortDate(value)}
-            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+            tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={{ stroke: "var(--border)" }}
             interval="preserveStartEnd"
             minTickGap={24}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+            tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
             tickLine={false}
             axisLine={false}
-            width={36}
+            width={56}
             allowDecimals={false}
             tickFormatter={(value: number) => valueFormat(value)}
             {...(yDomain ? { domain: yDomain } : {})}
@@ -100,6 +100,7 @@ export function SimpleBarChart({
           {series.map((item, index) => (
             <Bar
               key={item.key}
+              isAnimationActive={false}
               dataKey={item.key}
               name={item.label}
               fill={item.color}

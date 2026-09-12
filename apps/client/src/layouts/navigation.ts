@@ -1,131 +1,112 @@
-import { linkOptions } from "@tanstack/react-router";
 import {
+  Activity,
+  BarChart3,
   BriefcaseBusiness,
-  Gauge,
-  Globe,
-  Mail,
+  FolderKanban,
+  Layers,
   Settings,
   Spline,
-  Target,
   UsersRound,
 } from "lucide-react";
 
 export interface NavLink {
   to: string;
   label: string;
+  search?: { view: string };
 }
-
 export interface NavSection extends NavLink {
-  icon: typeof Gauge;
-  /** Nested sidebar links for the section, empty for leaf sections. */
+  icon: typeof Activity;
   tabs: readonly NavLink[];
 }
 
-/**
- * The sidebar's six sections plus 設定. Nested `tabs` render under the active
- * section in the sidebar.
- *
- * Single source of truth: the sidebar reads both the sections and the tabs of
- * whichever section {@link activeSection} resolves for the current URL.
- * That resolution walks the tabs too, so ホーム stays lit on `/reports` even
- * though `/reports` does not sit under `/dashboard`.
- */
+/** Stable destinations grouped by the operator's work, independently of URL prefixes. */
 export const navigationSections: readonly NavSection[] = [
+  { to: "/dashboard", label: "モニター", icon: Activity, tabs: [] },
+  { to: "/reports", label: "分析", icon: BarChart3, tabs: [] },
   {
-    to: "/dashboard",
-    label: "ホーム",
-    icon: Gauge,
-    tabs: linkOptions([
-      { to: "/dashboard", label: "ダッシュボード" },
-      { to: "/reports", label: "レポート" },
-    ]),
+    to: "/projects",
+    label: "施策",
+    icon: FolderKanban,
+    tabs: [
+      { to: "/projects", label: "施策一覧", search: { view: "projects" } },
+      { to: "/projects", label: "施策ブリーフ", search: { view: "briefs" } },
+    ],
   },
   {
     to: "/contacts",
-    label: "オーディエンス",
+    label: "顧客",
     icon: UsersRound,
-    tabs: linkOptions([
+    tabs: [
       { to: "/contacts", label: "連絡先" },
       { to: "/companies", label: "会社" },
       { to: "/lists", label: "リスト" },
       { to: "/segments", label: "セグメント" },
       { to: "/tags", label: "タグ" },
-    ]),
+      { to: "/scoring/rules", label: "スコアルール" },
+      { to: "/scoring/grading", label: "グレード・カテゴリ" },
+    ],
   },
   {
     to: "/automations",
-    label: "オートメーション",
+    label: "配信・自動化",
     icon: Spline,
-    tabs: linkOptions([
-      { to: "/projects", label: "施策" },
+    tabs: [
       { to: "/automations", label: "フロー" },
-    ]),
+      { to: "/emails/tracking", label: "メール計測" },
+      { to: "/emails/archive", label: "メールアーカイブ" },
+    ],
   },
   {
-    to: "/emails",
-    label: "メール",
-    icon: Mail,
-    tabs: linkOptions([
-      { to: "/emails/templates", label: "テンプレート" },
+    to: "/emails/templates",
+    label: "コンテンツ・接点",
+    icon: Layers,
+    tabs: [
+      { to: "/emails/templates", label: "メールテンプレート" },
       { to: "/emails/variables", label: "メッセージ変数" },
-      { to: "/emails/tracking", label: "計測" },
-      { to: "/emails/archive", label: "アーカイブ" },
-    ]),
-  },
-  {
-    to: "/scoring",
-    label: "スコアリング",
-    icon: Target,
-    tabs: linkOptions([
-      { to: "/scoring/rules", label: "ルール" },
-      { to: "/scoring/grading", label: "グレード・カテゴリ" },
-    ]),
-  },
-  {
-    to: "/website",
-    label: "Website",
-    icon: Globe,
-    tabs: linkOptions([
       { to: "/website/forms", label: "フォーム" },
       { to: "/website/pages", label: "ランディングページ" },
       { to: "/website/assets", label: "アセット" },
       { to: "/website/messages", label: "サイトメッセージ" },
       { to: "/website/redirects", label: "計測用リンク" },
       { to: "/website/tracking", label: "サイトトラッキング" },
-    ]),
+    ],
   },
   {
     to: "/deals",
-    label: "セール",
+    label: "営業",
     icon: BriefcaseBusiness,
-    tabs: linkOptions([
+    tabs: [
       { to: "/deals", label: "パイプライン" },
-      { to: "/deal-reports", label: "レポート" },
+      { to: "/deal-reports", label: "営業レポート" },
       { to: "/tasks", label: "タスク" },
-    ]),
+    ],
   },
 ];
-
 export const settingsSection: NavSection = {
   to: "/settings",
   label: "設定",
   icon: Settings,
   tabs: [],
 };
-
 const allSections = [...navigationSections, settingsSection];
-
 function matches(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
-
-/** The section owning `pathname`, picked by longest matching section or tab path. */
 export function activeSection(pathname: string): NavSection | undefined {
+  // Entry routes redirect to these destinations; editor routes share their section.
+  const normalized =
+    pathname === "/emails" || /^\/emails\/[^/]+\/edit/.test(pathname)
+      ? "/emails/templates"
+      : pathname === "/website"
+        ? "/website/forms"
+        : pathname === "/scoring"
+          ? "/scoring/rules"
+          : pathname;
   let best: NavSection | undefined;
   let bestLength = 0;
   for (const section of allSections) {
     for (const path of [section.to, ...section.tabs.map((tab) => tab.to)]) {
-      if (matches(pathname, path) && path.length > bestLength) {
+      if (matches(normalized, path) && path.length > bestLength) {
         best = section;
         bestLength = path.length;
       }
@@ -133,16 +114,17 @@ export function activeSection(pathname: string): NavSection | undefined {
   }
   return best;
 }
-
-/**
- * Whether `tab` should only highlight on an exact URL match — true when another
- * tab in the same section lives underneath it.
- */
-function isTabExact(section: NavSection, tab: NavLink): boolean {
-  return section.tabs.some((other) => other.to !== tab.to && other.to.startsWith(`${tab.to}/`));
-}
-
-/** Whether `tab` is the current nested sidebar item for `pathname`. */
-export function isNavTabActive(pathname: string, section: NavSection, tab: NavLink): boolean {
-  return isTabExact(section, tab) ? pathname === tab.to : matches(pathname, tab.to);
+export function isNavTabActive(
+  pathname: string,
+  section: NavSection,
+  tab: NavLink,
+  search: Record<string, unknown> = {},
+): boolean {
+  if (tab.search) {
+    return matches(pathname, tab.to) && (search.view ?? "projects") === tab.search.view;
+  }
+  const exact = section.tabs.some(
+    (other) => other.to !== tab.to && other.to.startsWith(`${tab.to}/`),
+  );
+  return exact ? pathname === tab.to : matches(pathname, tab.to);
 }

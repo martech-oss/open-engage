@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
 import {
@@ -8,9 +8,11 @@ import {
   segmentOptionsQueryOptions,
 } from "@/features/automations/automation-api";
 import { AutomationBuilder } from "@/features/automations/automation-editor-page";
+import { validateAutomationListSearch } from "@/features/automations/automation-list-search";
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 
 export const Route = createFileRoute("/_app/automations/$id")({
+  validateSearch: validateAutomationListSearch,
   loader: async ({ params, context }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(automationDraftQueryOptions(params.id)),
@@ -26,12 +28,22 @@ export const Route = createFileRoute("/_app/automations/$id")({
 
 function AutomationRoute() {
   const { id } = Route.useParams();
+  const search = Route.useSearch();
   const { data: draft } = useSuspenseQuery(automationDraftQueryOptions(id));
   const { data: templates } = useSuspenseQuery(emailTemplateOptionsQueryOptions());
   const { data: forms } = useSuspenseQuery(formOptionsQueryOptions());
   const { data: segments } = useSuspenseQuery(segmentOptionsQueryOptions());
   return (
     <AutomationBuilder
+      returnToList={
+        <Link
+          to="/automations"
+          search={search}
+          className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+        >
+          ← フロー一覧に戻る
+        </Link>
+      }
       key={id}
       id={id}
       initialDraft={draft}

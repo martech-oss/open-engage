@@ -5,8 +5,8 @@ import { MetricCard, MetricGrid } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import type { EmailsReport } from "@/features/reports/report-api";
-import { formatPercent } from "@/lib/format";
 
+import { formatReportRate } from "../report-format";
 import { ReportTableCard, sourceTypeLabel, TrendCard } from "../report-widgets";
 
 export function EmailsReportView({ report }: { report: EmailsReport }): ReactNode {
@@ -25,14 +25,14 @@ export function EmailsReportView({ report }: { report: EmailsReport }): ReactNod
     },
     {
       key: "sends",
-      header: "送信",
+      header: "送信（通）",
       cell: (source) => source.sends.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "delivered",
-      header: "到達",
+      header: "到達（通）",
       cell: (source) => source.delivered.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
@@ -40,27 +40,27 @@ export function EmailsReportView({ report }: { report: EmailsReport }): ReactNod
     {
       key: "openRate",
       header: "開封率",
-      cell: (source) => formatPercent(source.openRate),
+      cell: (source) => formatReportRate(source.openRate, source.delivered),
       headClassName: "text-right",
-      cellClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
     },
     {
       key: "clickRate",
       header: "クリック率",
-      cell: (source) => formatPercent(source.clickRate),
+      cell: (source) => formatReportRate(source.clickRate, source.delivered),
       headClassName: "text-right",
-      cellClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
     },
     {
       key: "bounces",
-      header: "バウンス",
+      header: "バウンス（通）",
       cell: (source) => source.bounces.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "unsubscribes",
-      header: "配信停止",
+      header: "配信停止（通）",
       cell: (source) => source.unsubscribes.toLocaleString(),
       headClassName: "px-4 text-right",
       cellClassName: "px-4 text-right tabular-nums",
@@ -69,12 +69,36 @@ export function EmailsReportView({ report }: { report: EmailsReport }): ReactNod
   return (
     <>
       <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="送信" value={report.summary.sends} icon={<Send />} />
-        <MetricCard label="到達率" value={formatPercent(report.summary.deliveryRate)} />
-        <MetricCard label="開封率" value={formatPercent(report.summary.openRate)} />
-        <MetricCard label="クリック率" value={formatPercent(report.summary.clickRate)} />
-        <MetricCard label="CTOR" value={formatPercent(report.summary.clickToOpenRate)} />
-        <MetricCard label="バウンス率" value={formatPercent(report.summary.bounceRate)} />
+        <MetricCard
+          label="送信"
+          value={`${report.summary.sends.toLocaleString()}通`}
+          icon={<Send />}
+        />
+        <MetricCard
+          label="到達率"
+          help="到達数 ÷ 送信数。送信数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.deliveryRate, report.summary.sends)}
+        />
+        <MetricCard
+          label="開封率"
+          help="ユニーク開封数 ÷ 到達数。到達数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.openRate, report.summary.delivered)}
+        />
+        <MetricCard
+          label="クリック率"
+          help="ユニーククリック数 ÷ 到達数。到達数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.clickRate, report.summary.delivered)}
+        />
+        <MetricCard
+          label="CTOR"
+          help="Click To Open Rate。ユニーククリック数 ÷ ユニーク開封数。開封数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.clickToOpenRate, report.summary.opens)}
+        />
+        <MetricCard
+          label="バウンス率"
+          help="バウンス数 ÷ 送信数。送信数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.bounceRate, report.summary.sends)}
+        />
       </MetricGrid>
       <TrendCard
         title="メールパフォーマンス"

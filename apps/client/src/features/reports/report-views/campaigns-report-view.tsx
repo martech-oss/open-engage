@@ -1,9 +1,8 @@
-import { Handshake, Megaphone, MousePointerClick, UsersRound } from "lucide-react";
+import { Handshake, Megaphone } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { MetricCard, MetricGrid } from "@/components/app-ui";
+import { HelpTooltip, MetricCard, MetricGrid } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { CampaignsReport } from "@/features/reports/report-api";
 import { formatMoney } from "@/lib/format";
 
@@ -14,13 +13,6 @@ type CampaignRow = CampaignsReport["campaigns"][number];
 
 export function CampaignsReportView({ report }: { report: CampaignsReport }): ReactNode {
   const columns: DataTableColumn<CampaignRow>[] = [
-    { key: "cost", header: "期間費用", cell: (row) => formatMoney(row.cost, report.currency) },
-    {
-      key: "attributedValue",
-      header: "配賦売上",
-      cell: (row) => formatMoney(row.attributedValue, report.currency),
-    },
-    { key: "roi", header: "ROI", cell: (row) => (row.roi === null ? "算出不可" : `${row.roi}%`) },
     {
       key: "name",
       header: "キャンペーン",
@@ -37,6 +29,13 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
       headClassName: "px-4",
       cellClassName: "px-4",
     },
+    { key: "cost", header: "期間費用", cell: (row) => formatMoney(row.cost, report.currency) },
+    {
+      key: "attributedValue",
+      header: "配賦売上",
+      cell: (row) => formatMoney(row.attributedValue, report.currency),
+    },
+    { key: "roi", header: "ROI", cell: (row) => (row.roi === null ? "—" : `${row.roi}%`) },
     {
       key: "touches",
       header: "接点",
@@ -97,22 +96,12 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
         <MetricCard
           label="接点"
           value={report.summary.touches.toLocaleString()}
-          description={
-            <div className="flex items-center gap-2 text-sm">
-              <MousePointerClick />
-              期間内に記録された接触
-            </div>
-          }
+          help="期間内に記録された接触"
         />
         <MetricCard
           label="接触した連絡先"
           value={report.summary.contacts.toLocaleString()}
-          description={
-            <div className="flex items-center gap-2 text-sm">
-              <UsersRound />
-              キャンペーンごとの延べ人数
-            </div>
-          }
+          help="キャンペーンごとの延べ人数"
         />
         <MetricCard
           label={
@@ -129,24 +118,35 @@ export function CampaignsReportView({ report }: { report: CampaignsReport }): Re
       </MetricGrid>
       <div className="flex flex-wrap gap-6 text-sm">
         <span>期間費用: {formatMoney(report.summary.cost, report.currency)}</span>
-        <span>ROI: {report.summary.roi === null ? "算出不可" : `${report.summary.roi}%`}</span>
+        <span className="inline-flex items-center gap-1">
+          ROI: {report.summary.roi === null ? "—" : `${report.summary.roi}%`}
+          <HelpTooltip label="ROI">
+            ROI = （配賦売上 − 費用）÷ 費用 × 100。費用が0の場合、ROIは —
+            を表示します。選択期間の計上費用と受注売上を使い、通貨間の合算・換算は行いません。
+          </HelpTooltip>
+        </span>
       </div>
-      <p className="text-sm text-muted-foreground">
-        ROI = （配賦売上 − 費用）÷ 費用 ×
-        100。選択期間の計上費用と受注売上を使い、通貨間の合算・換算は行いません。
-      </p>
-      <Alert>
-        <Megaphone />
-        <AlertTitle>3つの金額は足し合わせないでください</AlertTitle>
-        <AlertDescription>
-          「関与金額」は受注に接触したすべてのキャンペーンに同じ金額を計上するため、合計は売上を超えます。
-          「初回接点」「最終接点」はそれぞれ売上を重複なく1回だけ配分します。
-          接点は、プロジェクトに紐付けたメール・フォーム・セグメント・計測用リンクへの反応から記録されます。
-        </AlertDescription>
-      </Alert>
-      <ReportTableCard title="キャンペーン別のアトリビューション">
+      <ReportTableCard
+        title="キャンペーン別のアトリビューション"
+        help={
+          <>
+            3つの金額は足し合わせないでください。
+            「関与金額」は受注に接触したすべてのキャンペーンに同じ金額を計上するため、合計は売上を超えます。
+            「初回接点」「最終接点」はそれぞれ売上を重複なく1回だけ配分します。
+            接点は、プロジェクトに紐付けたメール・フォーム・セグメント・計測用リンクへの反応から記録されます。
+          </>
+        }
+      >
         <DataTable
-          columns={columns}
+          columns={columns.map((column) =>
+            column.key === "name"
+              ? column
+              : {
+                  ...column,
+                  headClassName: "text-right whitespace-nowrap",
+                  cellClassName: "text-right tabular-nums whitespace-nowrap",
+                },
+          )}
           rows={report.campaigns}
           rowKey={(row) => row.id}
           caption="キャンペーン別のアトリビューション"

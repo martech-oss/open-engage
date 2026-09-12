@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ErrorAlert, FormInput, MetricCard, MetricGrid } from "@/components/app-ui";
+import { ErrorAlert, FormInput, HelpTooltip, MetricCard, MetricGrid } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceTime } from "@/lib/workspace-time";
 
@@ -25,10 +25,12 @@ export function ProgramCohortPanel({ id }: { id: string }) {
   return (
     <section className="space-y-4">
       <div>
-        <h2 className="font-semibold">参加日コホートの成果</h2>
-        <p className="text-sm text-muted-foreground">
-          期間内に参加した人を母数に、集計時点までの成果を表示します。訂正はその記録時点から反映します。売上配分やROIとは別の指標です。
-        </p>
+        <h2 className="flex items-center gap-1 font-semibold">
+          参加日コホートの成果
+          <HelpTooltip label="参加日コホートの成果">
+            期間内に参加した人を母数に、集計時点までの成果を表示します。訂正はその記録時点から反映します。売上配分やROIとは別の指標です。
+          </HelpTooltip>
+        </h2>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <FormInput
@@ -61,7 +63,11 @@ export function ProgramCohortPanel({ id }: { id: string }) {
         <MetricGrid>
           <MetricCard label="コホート参加者" value={query.data.members} />
           <MetricCard label="成果人数" value={query.data.succeeded} />
-          <MetricCard label="成果率" value={`${(query.data.rate * 100).toFixed(1)}%`} />
+          <MetricCard
+            label="成果率"
+            value={query.data.members > 0 ? `${(query.data.rate * 100).toFixed(1)}%` : "—"}
+            description={`分母：参加者 ${query.data.members.toLocaleString()}人`}
+          />
           <MetricCard
             label="初回成果までの平均"
             value={
@@ -69,7 +75,7 @@ export function ProgramCohortPanel({ id }: { id: string }) {
                 ? "—"
                 : `${(query.data.averageTimeToSuccessSeconds / 86400).toFixed(2)}日`
             }
-            description="成果を達成した参加者の平均"
+            help="成果を達成した参加者の平均"
           />
         </MetricGrid>
       )}

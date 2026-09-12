@@ -1,16 +1,9 @@
 import { type ReactNode } from "react";
 
-import { EmptyState } from "@/components/app-ui";
+import { EmptyState, HelpTooltip } from "@/components/app-ui";
 import { SimpleBarChart } from "@/components/app-ui/bar-chart";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
 
@@ -28,8 +21,10 @@ export function TrendCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardTitle className="flex items-center gap-1">
+          {title}
+          <HelpTooltip label={title}>{description}</HelpTooltip>
+        </CardTitle>
         <CardAction>
           <div className="flex flex-wrap justify-end gap-3 text-xs text-muted-foreground">
             {series.map((item) => (
@@ -61,8 +56,10 @@ export function RankingCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardTitle className="flex items-center gap-1">
+          {title}
+          <HelpTooltip label={title}>{description}</HelpTooltip>
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {items.map((item) => (
@@ -88,15 +85,20 @@ export function RankingCard({
 
 export function ReportTableCard({
   title,
+  help,
   children,
 }: {
   title: string;
+  help?: ReactNode;
   children: ReactNode;
 }): ReactNode {
   return (
     <Card>
       <CardHeader className="border-b">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="flex items-center gap-1">
+          {title}
+          {help ? <HelpTooltip label={title}>{help}</HelpTooltip> : null}
+        </CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto px-0">{children}</CardContent>
     </Card>

@@ -13,8 +13,12 @@ import {
 import { ProjectsPage } from "@/features/projects/projects-page";
 export const Route = createFileRoute("/_app/projects/")({
   validateSearch: (
-    search: Partial<ProjectBriefSearch> & { view?: string } & SearchSchemaInput,
+    search: Partial<ProjectBriefSearch> & {
+      view?: string;
+      q?: string | undefined;
+    } & SearchSchemaInput,
   ) => ({
+    q: typeof search.q === "string" && search.q ? search.q : undefined,
     ...parseProjectBriefSearch(search as Record<string, unknown>),
     view: search.view === "briefs" ? ("briefs" as const) : ("projects" as const),
   }),

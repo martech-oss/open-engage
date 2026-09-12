@@ -28,7 +28,9 @@ export function AutomationBuilder({
   id,
   initialDraft,
   options,
+  returnToList,
 }: {
+  returnToList?: ReactNode;
   id: string;
   initialDraft: AutomationDraft;
   options: AutomationOptions;
@@ -97,12 +99,13 @@ export function AutomationBuilder({
   }
 
   return (
-    <div className="-m-4 lg:-m-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-5 py-4 lg:px-8">
-        <div className="min-w-64">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3 sm:px-6">
+        <div className="min-w-0 flex-1 basis-64">
+          {returnToList}
           <Input
             aria-label="オートメーション名"
-            className="h-auto border-0 px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
+            className="h-10 border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:px-2"
             value={definition.name}
             onChange={(event) => setDefinition({ ...definition, name: event.target.value })}
           />
@@ -158,8 +161,8 @@ export function AutomationBuilder({
             公開
           </Button>
         </div>
-      </div>
-      <div className="flex gap-2 border-b px-5 py-2">
+      </header>
+      <div className="flex shrink-0 gap-2 border-b px-4 py-2 sm:px-6">
         <Button variant={view === "flow" ? "secondary" : "ghost"} onClick={() => setView("flow")}>
           フロー編集
         </Button>
@@ -167,36 +170,38 @@ export function AutomationBuilder({
           実行履歴
         </Button>
       </div>
-      {view === "runs" ? (
-        <AutomationRunsPanel
-          id={id}
-          canStart={status === "active" && initialDraft.publishedTriggerSource === "batch"}
-        />
-      ) : (
-        <>
-          <AutomationContextSettings definition={definition} onChange={setDefinition} />
-          {blockingIssues.length > 0 ? (
-            <Alert variant="default" className="m-4 lg:mx-8">
-              <TriangleAlert />
-              <AlertTitle>公開前の対応が必要です</AlertTitle>
-              <AlertDescription>{blockingIssues.join(" / ")}</AlertDescription>
-            </Alert>
-          ) : null}
-          <Suspense
-            fallback={
-              <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] place-items-center bg-muted/60">
-                <Spinner />
-              </div>
-            }
-          >
-            <AutomationFlowCanvas
-              definition={definition}
-              options={options}
-              onDefinitionChange={setDefinition}
-            />
-          </Suspense>
-        </>
-      )}
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+        {view === "runs" ? (
+          <AutomationRunsPanel
+            id={id}
+            canStart={status === "active" && initialDraft.publishedTriggerSource === "batch"}
+          />
+        ) : (
+          <>
+            <AutomationContextSettings definition={definition} onChange={setDefinition} />
+            {blockingIssues.length > 0 ? (
+              <Alert variant="default" className="m-4 sm:mx-6">
+                <TriangleAlert />
+                <AlertTitle>公開前の対応が必要です</AlertTitle>
+                <AlertDescription>{blockingIssues.join(" / ")}</AlertDescription>
+              </Alert>
+            ) : null}
+            <Suspense
+              fallback={
+                <div className="grid h-[calc(100vh-8.5rem)] min-h-[600px] place-items-center bg-muted/60">
+                  <Spinner />
+                </div>
+              }
+            >
+              <AutomationFlowCanvas
+                definition={definition}
+                options={options}
+                onDefinitionChange={setDefinition}
+              />
+            </Suspense>
+          </>
+        )}
+      </div>
       <Suspense fallback={null}>
         {aiOpen ? (
           <AutomationAiSheet

@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { MetricCard, MetricGrid } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import type { SiteReport } from "@/features/reports/report-api";
-import { formatPercent } from "@/lib/format";
 
+import { formatReportRate } from "../report-format";
 import { ReportStatusBadge, ReportTableCard, TrendCard } from "../report-widgets";
 
 export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
@@ -23,21 +23,21 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
     },
     {
       key: "views",
-      header: "PV",
+      header: "PV（回）",
       cell: (page) => page.views.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "uniqueVisitors",
-      header: "訪問者",
+      header: "訪問者（人）",
       cell: (page) => page.uniqueVisitors.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "identifiedContacts",
-      header: "特定済み",
+      header: "特定済み（人）",
       cell: (page) => page.identifiedContacts.toLocaleString(),
       headClassName: "px-4 text-right",
       cellClassName: "px-4 text-right tabular-nums",
@@ -58,14 +58,14 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
     },
     {
       key: "submissions",
-      header: "送信",
+      header: "送信（件）",
       cell: (form) => form.submissions.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "contacts",
-      header: "連絡先",
+      header: "連絡先（人）",
       cell: (form) => form.contacts.toLocaleString(),
       headClassName: "px-4 text-right",
       cellClassName: "px-4 text-right tabular-nums",
@@ -86,14 +86,14 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
     },
     {
       key: "impressions",
-      header: "表示",
+      header: "表示（回）",
       cell: (message) => message.impressions.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "clicks",
-      header: "クリック",
+      header: "クリック（回）",
       cell: (message) => message.clicks.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
@@ -101,24 +101,41 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
     {
       key: "clickRate",
       header: "クリック率",
-      cell: (message) => formatPercent(message.clickRate),
+      cell: (message) => formatReportRate(message.clickRate, message.impressions),
       headClassName: "px-4 text-right",
-      cellClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right tabular-nums",
     },
   ];
   return (
     <>
       <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="ページビュー" value={report.summary.pageViews} icon={<Globe2 />} />
-        <MetricCard label="ユニーク訪問者" value={report.summary.uniqueVisitors} />
+        <MetricCard
+          label="ページビュー"
+          value={`${report.summary.pageViews.toLocaleString()}回`}
+          icon={<Globe2 />}
+        />
+        <MetricCard
+          label="ユニーク訪問者"
+          value={`${report.summary.uniqueVisitors.toLocaleString()}人`}
+        />
         <MetricCard
           label="特定済み率"
-          value={formatPercent(report.summary.identificationRate)}
+          help="特定済み連絡先数 ÷ ユニーク訪問者数。訪問者数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.identificationRate, report.summary.uniqueVisitors)}
           icon={<UserCheck />}
         />
-        <MetricCard label="フォーム送信" value={report.summary.submissions} />
-        <MetricCard label="メッセージ表示" value={report.summary.messageImpressions} />
-        <MetricCard label="メッセージクリック" value={report.summary.messageClicks} />
+        <MetricCard
+          label="フォーム送信"
+          value={`${report.summary.submissions.toLocaleString()}件`}
+        />
+        <MetricCard
+          label="メッセージ表示"
+          value={`${report.summary.messageImpressions.toLocaleString()}回`}
+        />
+        <MetricCard
+          label="メッセージクリック"
+          value={`${report.summary.messageClicks.toLocaleString()}回`}
+        />
       </MetricGrid>
       <TrendCard
         title="サイトアクティビティ"
@@ -151,7 +168,10 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
           />
         </ReportTableCard>
       </div>
-      <ReportTableCard title="サイトメッセージ（累計）">
+      <ReportTableCard
+        title="サイトメッセージ（累計）"
+        help="クリック率はクリック数 ÷ 表示数です。表示数が0の場合は — を表示します。"
+      >
         <DataTable
           columns={messageColumns}
           rows={report.messages}

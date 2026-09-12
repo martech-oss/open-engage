@@ -1,9 +1,15 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Plus, Sparkles } from "lucide-react";
+import { ChevronDown, Plus, Sparkles } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import {
   emailArchivedTemplatesQueryOptions,
   emailTemplateOptionsQueryOptions,
@@ -89,16 +95,23 @@ function EmailCenterPage({
 
   const action =
     view === "templates" ? (
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => openTemplateForm(null, false)}>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button />}>
           <Plus data-icon="inline-start" />
-          手動で作成
-        </Button>
-        <Button onClick={() => openTemplateForm(null, true)}>
-          <Sparkles data-icon="inline-start" />
-          AIでメールを作成
-        </Button>
-      </div>
+          メールを作成
+          <ChevronDown />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => openTemplateForm(null, false)}>
+            <Plus />
+            手動で作成
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openTemplateForm(null, true)}>
+            <Sparkles />
+            AIでメールを作成
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     ) : view === "variables" ? (
       <Button
         onClick={() => {

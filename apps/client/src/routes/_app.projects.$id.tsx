@@ -5,6 +5,9 @@ import { programQueryOptions } from "@/features/projects/program-api";
 import { projectBriefOptionsQueryOptions } from "@/features/projects/project-brief-api";
 import { ProjectProgramPage } from "@/features/projects/project-program-page";
 export const Route = createFileRoute("/_app/projects/$id")({
+  validateSearch: (search: Record<string, unknown>): { q?: string | undefined } => ({
+    q: typeof search.q === "string" && search.q ? search.q : undefined,
+  }),
   loader: async ({ context, params }) => {
     await Promise.all([
       context.queryClient.ensureQueryData(programQueryOptions(params.id)),
@@ -12,5 +15,11 @@ export const Route = createFileRoute("/_app/projects/$id")({
     ]);
   },
   ...routeStatusComponents,
-  component: () => <ProjectProgramPage key={Route.useParams().id} id={Route.useParams().id} />,
+  component: () => (
+    <ProjectProgramPage
+      key={Route.useParams().id}
+      id={Route.useParams().id}
+      listQuery={Route.useSearch().q}
+    />
+  ),
 });
