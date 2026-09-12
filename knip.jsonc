@@ -25,8 +25,19 @@
         "src/routeTree.gen.ts",
         "src/routes/**/*.tsx",
         "!src/routes/**/*.test.tsx",
+        "preview/main.tsx",
+        "preview/*.smoke.{ts,tsx}",
+        "preview/*.config.ts",
+        // Loaded through Vite aliases and the preview-shell route transform.
+        "preview/mock-*.ts",
+        "preview/preview-root.tsx",
       ],
-      "project": ["src/**/*.{ts,tsx,css}", "vite.config.ts", "vitest.config.ts"],
+      "project": [
+        "src/**/*.{ts,tsx,css}",
+        "preview/**/*.{ts,tsx}",
+        "vite.config.ts",
+        "vitest.config.ts",
+      ],
       // `cloudflare:workers` is a Workers runtime virtual module, not an npm dependency.
       "ignoreDependencies": ["cloudflare"],
     },

@@ -17,6 +17,7 @@ import { dashboardQueryOptions } from "@/features/dashboard/dashboard-api";
 import { formatMoney } from "@/lib/format";
 import { CONTACT_EVENT_LABELS, contactEventTone } from "@/lib/status-labels";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
+import type { Dashboard } from "@openengage/core/reports";
 
 import { AutomationRows, DeltaChip, Panel } from "./dashboard-widgets";
 
@@ -34,7 +35,6 @@ export function DashboardPage(): ReactNode {
   const { data } = query;
   const [contactId, setContactId] = useState<string | null>(null);
   const contactTrigger = useRef<HTMLButtonElement | null>(null);
-  const health = data.deliveries.health;
   const hasAttention =
     data.deliveries.failed > 0 || data.briefs.overdueReviews > 0 || data.deals.overdueTasks > 0;
   const reportSearch = {
@@ -135,63 +135,7 @@ export function DashboardPage(): ReactNode {
               </Link>
             }
           >
-            <div className="space-y-3 p-4">
-              <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-                <p>
-                  <span className="mr-2 text-xs text-muted-foreground">30日間の配信</span>
-                  <strong className="text-lg font-semibold">
-                    {data.deliveries.sent.toLocaleString()}
-                  </strong>
-                  <span className="ml-1 text-xs">件</span>
-                </p>
-                <p>
-                  <span className="mr-2 inline-flex items-center text-xs text-muted-foreground">
-                    到達率
-                    <HelpTooltip label="到達率">
-                      到達件数 ÷ 送信件数。送信件数が0の場合は — を表示します。
-                    </HelpTooltip>
-                  </span>
-                  <strong className="text-lg font-semibold">
-                    {data.deliveries.sent ? `${data.deliveries.deliveryRate}%` : "—"}
-                  </strong>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  到達率の直近7日比較{" "}
-                  <DeltaChip value={data.deliveries.deliveryRateChangePoints} unit="pt" />
-                </p>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                合計：{data.deliveries.totalsRange.from} 〜 {data.deliveries.totalsRange.to}
-              </p>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>
-                  日別件数：{health.from} 〜 {health.to}
-                </span>
-                <div className="flex gap-4">
-                  <Legend color="bg-primary">到達</Legend>
-                  <span className="inline-flex items-center">
-                    <Legend color="bg-chart-4">到達未確認</Legend>
-                    <HelpTooltip label="到達未確認">
-                      送信数と到達数の差です。配信失敗の確定件数とは異なります。
-                    </HelpTooltip>
-                  </span>
-                </div>
-              </div>
-              {health.points.every((point) => point.sends === 0) ? (
-                <SimpleEmpty compact label="この期間の配信データはありません" />
-              ) : (
-                <SimpleBarChart
-                  data={health.points.map((point) => ({ ...point }))}
-                  height={180}
-                  stacked
-                  valueFormat={(value) => `${value.toLocaleString()}件`}
-                  series={[
-                    { key: "delivered", label: "到達", color: "var(--primary)" },
-                    { key: "undelivered", label: "到達未確認", color: "var(--chart-4)" },
-                  ]}
-                />
-              )}
-            </div>
+            <DeliveryTrend deliveries={data.deliveries} />
           </Panel>
           <Panel
             title="稼働フロー"
@@ -308,5 +252,65 @@ function Legend({ color, children }: { color: string; children: ReactNode }) {
       <span aria-hidden className={`size-2 rounded-sm ${color}`} />
       {children}
     </span>
+  );
+}
+
+function DeliveryTrend({ deliveries }: { deliveries: Dashboard["deliveries"] }) {
+  const health = deliveries.health;
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+        <p>
+          <span className="mr-2 text-xs text-muted-foreground">30日間の配信</span>
+          <strong className="text-lg font-semibold">{deliveries.sent.toLocaleString()}</strong>
+          <span className="ml-1 text-xs">件</span>
+        </p>
+        <p>
+          <span className="mr-2 inline-flex items-center text-xs text-muted-foreground">
+            到達率
+            <HelpTooltip label="到達率">
+              到達件数 ÷ 送信件数。送信件数が0の場合は — を表示します。
+            </HelpTooltip>
+          </span>
+          <strong className="text-lg font-semibold">
+            {deliveries.sent ? `${deliveries.deliveryRate}%` : "—"}
+          </strong>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          到達率の直近7日比較 <DeltaChip value={deliveries.deliveryRateChangePoints} unit="pt" />
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        合計：{deliveries.totalsRange.from} 〜 {deliveries.totalsRange.to}
+      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          日別件数：{health.from} 〜 {health.to}
+        </span>
+        <div className="flex gap-4">
+          <Legend color="bg-primary">到達</Legend>
+          <span className="inline-flex items-center">
+            <Legend color="bg-chart-4">到達未確認</Legend>
+            <HelpTooltip label="到達未確認">
+              送信数と到達数の差です。配信失敗の確定件数とは異なります。
+            </HelpTooltip>
+          </span>
+        </div>
+      </div>
+      {health.points.every((point) => point.sends === 0) ? (
+        <SimpleEmpty compact label="この期間の配信データはありません" />
+      ) : (
+        <SimpleBarChart
+          data={health.points.map((point) => ({ ...point }))}
+          height={180}
+          stacked
+          valueFormat={(value) => `${value.toLocaleString()}件`}
+          series={[
+            { key: "delivered", label: "到達", color: "var(--primary)" },
+            { key: "undelivered", label: "到達未確認", color: "var(--chart-4)" },
+          ]}
+        />
+      )}
+    </div>
   );
 }

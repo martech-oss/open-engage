@@ -55,6 +55,7 @@
     "typescript": "catalog:",
     "vite": "^7.0.6",
     "vitest": "catalog:",
-    "wrangler": "^4.115.0"
+    "wrangler": "^4.115.0",
+    "zod": "catalog:"
   }
 }
