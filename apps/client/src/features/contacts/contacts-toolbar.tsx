@@ -50,12 +50,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
   );
 }
 
-/**
- * The filters, result count and list controls the design collapses into a single
- * toolbar strip above the table. Everything that used to live in the card
- * header — search, status, resource pickers, sort — reads from and writes to the
- * same `useContactFilters` state, so the URL stays the single source of truth.
- */
+/** Search conditions and result controls share the existing URL filter state. */
 export function ContactsToolbar({
   filters,
   options,
@@ -83,70 +78,79 @@ export function ContactsToolbar({
   const selectedSegment = options.segments.find((segment) => segment.id === filters.segmentId);
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3.5 py-2.5">
-      <InputGroup className="h-8 w-56 shrink-0">
-        <InputGroupAddon>
-          <Search />
-        </InputGroupAddon>
-        <InputGroupInput
-          placeholder="名前、メール、電話番号で検索"
-          className="text-xs"
-          value={filters.query}
-          onChange={(event) => filters.setQuery(event.target.value)}
-        />
-        {filters.query && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              size="icon-xs"
-              onClick={() => filters.setQuery("")}
-              aria-label="検索をクリア"
-            >
-              <X />
-            </InputGroupButton>
+    <div className="shrink-0 border-b">
+      <fieldset aria-label="連絡先の検索条件" className="flex flex-wrap items-center gap-2 p-3">
+        <InputGroup className="h-10 w-full sm:w-72">
+          <InputGroupAddon>
+            <Search />
           </InputGroupAddon>
-        )}
-      </InputGroup>
+          <InputGroupInput
+            aria-label="連絡先を検索"
+            placeholder="名前、メール、電話番号で検索"
+            className="text-sm"
+            value={filters.query}
+            onChange={(event) => filters.setQuery(event.target.value)}
+          />
+          {filters.query && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
+                onClick={() => filters.setQuery("")}
+                aria-label="検索をクリア"
+              >
+                <X />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
 
-      <ToggleGroup
-        value={[filters.status]}
-        onValueChange={(values) => {
-          const nextStatus = values[0] as ContactStatus | undefined;
-          if (nextStatus) filters.setStatus(nextStatus);
-        }}
-        variant="outline"
-        size="sm"
-        spacing={0}
-        className="shrink-0"
+        <ToggleGroup
+          value={[filters.status]}
+          onValueChange={(values) => {
+            const nextStatus = values[0] as ContactStatus | undefined;
+            if (nextStatus) filters.setStatus(nextStatus);
+          }}
+          variant="outline"
+          size="sm"
+          spacing={0}
+          className="shrink-0"
+        >
+          <ToggleGroupItem value="active">有効</ToggleGroupItem>
+          <ToggleGroupItem value="all">すべて</ToggleGroupItem>
+          <ToggleGroupItem value="archived">アーカイブ</ToggleGroupItem>
+          <ToggleGroupItem value="anonymous">匿名</ToggleGroupItem>
+        </ToggleGroup>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn("shrink-0", advancedOpen && "border-primary text-primary")}
+          aria-expanded={advancedOpen}
+          onClick={onToggleAdvanced}
+        >
+          <Plus data-icon="inline-start" />
+          条件を追加
+        </Button>
+      </fieldset>
+      {chips.length ? (
+        <div aria-label="適用中の条件" className="flex flex-wrap gap-2 px-3 pb-3">
+          {chips.map((chip) => (
+            <FilterChip key={chip.label} label={chip.label} onRemove={chip.onRemove} />
+          ))}
+        </div>
+      ) : null}
+      <fieldset
+        aria-label="検索結果と表示設定"
+        className="flex flex-wrap items-center gap-3 border-t px-3 py-2"
       >
-        <ToggleGroupItem value="active">有効</ToggleGroupItem>
-        <ToggleGroupItem value="all">すべて</ToggleGroupItem>
-        <ToggleGroupItem value="archived">アーカイブ</ToggleGroupItem>
-        <ToggleGroupItem value="anonymous">匿名</ToggleGroupItem>
-      </ToggleGroup>
-
-      {chips.map((chip) => (
-        <FilterChip key={chip.label} label={chip.label} onRemove={chip.onRemove} />
-      ))}
-
-      <Button
-        variant="outline"
-        size="sm"
-        className={cn("shrink-0", advancedOpen && "border-primary text-primary")}
-        onClick={onToggleAdvanced}
-      >
-        <Plus data-icon="inline-start" />
-        条件を追加
-      </Button>
-
-      <div className="ml-auto flex shrink-0 items-center gap-2.5">
-        <span className="text-xs font-medium tabular-nums">
+        <output className="mr-auto text-sm font-medium tabular-nums">
           {total.toLocaleString()}
           <span className="text-muted-foreground"> 件</span>
-        </span>
+        </output>
         <Button
           variant="link"
           size="sm"
-          className="h-7 px-0"
+          className="h-10 px-2"
           disabled={!canSaveSegment}
           onClick={onSaveSegment}
         >
@@ -161,7 +165,7 @@ export function ContactsToolbar({
             filters.setDirection(nextDirection === "asc" ? "asc" : "desc");
           }}
         >
-          <SelectTrigger size="sm" className="h-8 min-w-0 text-xs" aria-label="並び順">
+          <SelectTrigger size="sm" className="h-10 min-w-0 text-sm" aria-label="並び順">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -193,7 +197,7 @@ export function ContactsToolbar({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </fieldset>
     </div>
   );
 }
@@ -246,11 +250,11 @@ export function BulkActionBar({
   onClear: () => void;
 }): ReactNode {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-primary/15 bg-accent px-3.5 py-2">
-      <span className="text-xs font-medium text-accent-foreground">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-primary/15 bg-accent px-3 py-2">
+      <output className="text-sm font-medium text-accent-foreground">
         {count.toLocaleString()}件を選択中
-      </span>
-      <span className="h-3.5 w-px bg-primary/20" />
+      </output>
+      <span aria-hidden="true" className="h-4 w-px bg-primary/20" />
       {children}
       <Button variant="ghost" size="sm" className="ml-auto" onClick={onClear}>
         選択解除

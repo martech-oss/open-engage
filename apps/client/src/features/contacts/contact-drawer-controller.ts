@@ -29,14 +29,14 @@ export function useContactDrawerController(contactId: string, onChanged: () => P
   const queryClient = useQueryClient();
   const [ui, setUi] = useState({
     contactId,
-    activeTab: "details" as DrawerTab,
+    activeTab: "activity" as DrawerTab,
     error: "",
     busy: false,
   });
   const currentUi =
     ui.contactId === contactId
       ? ui
-      : { contactId, activeTab: "details" as DrawerTab, error: "", busy: false };
+      : { contactId, activeTab: "activity" as DrawerTab, error: "", busy: false };
 
   async function refresh(companyId?: string): Promise<void> {
     await Promise.all([

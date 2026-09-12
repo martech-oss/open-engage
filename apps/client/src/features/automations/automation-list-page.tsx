@@ -1,47 +1,33 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { GitBranch, Mail, Pause, Play, Plus, Sparkles } from "lucide-react";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { ChevronDown, GitBranch, Mail, Plus, Sparkles } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  FormInput,
-  FormNativeSelect,
-  FormSelectOption,
-  PageLayout,
-  SimpleEmpty,
-} from "@/components/app-ui";
+import { FormInput, FormNativeSelect, FormSelectOption, PageLayout } from "@/components/app-ui";
 import { AppDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { FieldGroup } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 import { getErrorMessage } from "@/hooks/use-form-submission";
-import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
-import type { AutomationRow } from "@openengage/core/automations";
+import { useWorkspaceTime } from "@/lib/workspace-time";
 
-import {
-  automationsQueryOptions,
-  useCreateAutomation,
-  useSetAutomationStatus,
-} from "./automation-api";
-import { triggerLabel } from "./automation-labels";
+import { automationsQueryOptions, useCreateAutomation } from "./automation-api";
+import { AutomationMonitoringTable } from "./automation-monitoring-table";
 import {
   createBlankAutomation,
   createPresetAutomation,
   type PresetId,
   presets,
 } from "./automation-presets";
-import { AutomationStatusBadge } from "./automation-status-badge";
 
 const AutomationAiSheet = lazy(async () => ({
   default: (await import("./automation-ai-sheet")).AutomationAiSheet,
@@ -50,10 +36,12 @@ const EmailSequenceAiSheet = lazy(async () => ({
   default: (await import("./email-sequence-ai-sheet")).EmailSequenceAiSheet,
 }));
 
+const listRoute = getRouteApi("/_app/automations/");
+
 export function AutomationsPage(): ReactNode {
   const { timeZone } = useWorkspaceTime();
-  const { formatDateTime } = useWorkspaceFormatters();
   const navigate = useNavigate();
+  const search = listRoute.useSearch();
   const { data: automations } = useSuspenseQuery(automationsQueryOptions());
   const { data: allTemplates } = useSuspenseQuery(emailTemplateOptionsQueryOptions());
   const templates = useMemo(
@@ -68,7 +56,6 @@ export function AutomationsPage(): ReactNode {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
   const createAutomation = useCreateAutomation();
-  const setAutomationStatus = useSetAutomationStatus();
 
   function selectPreset(value: PresetId | "blank"): void {
     setPreset(value);
@@ -91,7 +78,7 @@ export function AutomationsPage(): ReactNode {
           : { ...createPresetAutomation(name.trim(), preset, template!), timezone: timeZone },
       );
       setCreateOpen(false);
-      await navigate({ to: "/automations/$id", params: { id: created.id } });
+      await navigate({ to: "/automations/$id", params: { id: created.id }, search });
     } catch (error) {
       toast.error(getErrorMessage(error, "オートメーションを作成できません"));
     } finally {
@@ -99,86 +86,50 @@ export function AutomationsPage(): ReactNode {
     }
   }
 
-  async function changeStatus(automation: AutomationRow): Promise<void> {
-    const status = automation.status === "active" ? "paused" : "active";
-    try {
-      await setAutomationStatus.mutateAsync({ id: automation.id, status });
-      toast.success(status === "active" ? "オートメーションを再開しました" : "一時停止しました");
-    } catch (error) {
-      toast.error(getErrorMessage(error, "更新できませんでした"));
-    }
-  }
-
   return (
     <PageLayout
       title="オートメーション"
       action={
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setSequenceOpen(true)}>
-            <Mail data-icon="inline-start" />
-            AIメールシーケンス
-          </Button>
-          <Button variant="outline" onClick={() => setAiOpen(true)}>
-            <Sparkles data-icon="inline-start" />
-            AIで作成
-          </Button>
-          <Button onClick={() => setCreateOpen(true)}>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button />}>
             <Plus data-icon="inline-start" />
             フローを作成
-          </Button>
-        </div>
+            <ChevronDown />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => {
+                  selectPreset("blank");
+                  setCreateOpen(true);
+                }}
+              >
+                <Plus />
+                空のフローから作成
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  selectPreset(presets[0]!.id);
+                  setCreateOpen(true);
+                }}
+              >
+                <GitBranch />
+                プリセットから作成
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAiOpen(true)}>
+                <Sparkles />
+                AIで作成
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSequenceOpen(true)}>
+                <Mail />
+                AIメールシーケンス
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       }
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {automations.map((automation) => (
-          <Card key={automation.id} className="transition-shadow hover:shadow-md">
-            <CardHeader>
-              <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <GitBranch className="size-4" />
-              </div>
-              <CardTitle>{automation.name}</CardTitle>
-              <CardDescription>{triggerLabel(automation.triggerSource)}</CardDescription>
-              <CardAction>
-                <AutomationStatusBadge status={automation.status} />
-              </CardAction>
-            </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-3">
-              <Metric label="登録" value={automation.enrollmentCount} />
-              <Metric label="進行中" value={automation.activeCount} />
-              <Metric label="完了" value={automation.completedCount} />
-            </CardContent>
-            <CardFooter className="justify-between gap-2">
-              <span className="text-xs text-muted-foreground">
-                {formatDateTime(automation.updatedAt)}
-              </span>
-              <div className="flex gap-1">
-                {automation.status === "active" || automation.status === "paused" ? (
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={automation.status === "active" ? "一時停止" : "再開"}
-                    onClick={() => void changeStatus(automation)}
-                  >
-                    {automation.status === "active" ? <Pause /> : <Play />}
-                  </Button>
-                ) : null}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    void navigate({ to: "/automations/$id", params: { id: automation.id } })
-                  }
-                >
-                  編集
-                </Button>
-              </div>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-      {automations.length === 0 ? (
-        <SimpleEmpty label="テンプレートから最初のオートメーションを作成しましょう" />
-      ) : null}
+      <AutomationMonitoringTable automations={automations} search={search} />
       <AppDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -268,7 +219,7 @@ export function AutomationsPage(): ReactNode {
             onApply={async (definition) => {
               const created = await createAutomation.mutateAsync(definition);
               setAiOpen(false);
-              await navigate({ to: "/automations/$id", params: { id: created.id } });
+              await navigate({ to: "/automations/$id", params: { id: created.id }, search });
             }}
           />
         ) : null}
@@ -279,20 +230,15 @@ export function AutomationsPage(): ReactNode {
             onOpenChange={setSequenceOpen}
             onApplied={async (created) => {
               setSequenceOpen(false);
-              await navigate({ to: "/automations/$id", params: { id: created.automationId } });
+              await navigate({
+                to: "/automations/$id",
+                params: { id: created.automationId },
+                search,
+              });
             }}
           />
         ) : null}
       </Suspense>
     </PageLayout>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }): ReactNode {
-  return (
-    <div>
-      <div className="text-lg font-semibold tabular-nums">{value.toLocaleString()}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </div>
   );
 }

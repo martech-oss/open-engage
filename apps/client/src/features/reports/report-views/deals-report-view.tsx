@@ -1,13 +1,20 @@
 import { CircleDollarSign } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { FormNativeSelect, FormSelectOption, MetricCard, MetricGrid } from "@/components/app-ui";
+import {
+  HelpTooltip,
+  FormNativeSelect,
+  FormSelectOption,
+  MetricCard,
+  MetricGrid,
+} from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DealsReport } from "@/features/reports/report-api";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 
+import { formatReportRate } from "../report-format";
 import { NoReportData, ProgressRow, ReportTableCard, TrendCard } from "../report-widgets";
 
 export function DealsReportView({
@@ -27,28 +34,28 @@ export function DealsReportView({
     },
     {
       key: "created",
-      header: "作成",
+      header: "作成（件）",
       cell: (owner) => owner.created.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "won",
-      header: "獲得",
+      header: "獲得（件）",
       cell: (owner) => owner.won.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "lost",
-      header: "失注",
+      header: "失注（件）",
       cell: (owner) => owner.lost.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "openCount",
-      header: "進行中",
+      header: "進行中（件）",
       cell: (owner) => owner.openCount.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
@@ -78,10 +85,14 @@ export function DealsReportView({
         </FormNativeSelect>
       </div>
       <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="作成" value={report.summary.created} />
-        <MetricCard label="獲得" value={report.summary.won} />
-        <MetricCard label="失注" value={report.summary.lost} />
-        <MetricCard label="勝率" value={formatPercent(report.summary.winRate)} />
+        <MetricCard label="作成" value={`${report.summary.created.toLocaleString()}件`} />
+        <MetricCard label="獲得" value={`${report.summary.won.toLocaleString()}件`} />
+        <MetricCard label="失注" value={`${report.summary.lost.toLocaleString()}件`} />
+        <MetricCard
+          label="勝率"
+          help="獲得数 ÷（獲得数＋失注数）。獲得・失注ともに0の場合は — を表示します。"
+          value={formatReportRate(report.summary.winRate, report.summary.won + report.summary.lost)}
+        />
         <MetricCard
           label="獲得金額"
           value={formatMoney(report.summary.wonValue, report.currency)}
@@ -115,8 +126,9 @@ export function DealsReportView({
         </ReportTableCard>
         <Card>
           <CardHeader>
-            <CardTitle>タスク概要</CardTitle>
-            <CardDescription>現在の未完了と期間内の完了</CardDescription>
+            <CardTitle className="flex items-center gap-1">
+              タスク概要<HelpTooltip label="タスク概要">現在の未完了と期間内の完了</HelpTooltip>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <ProgressRow
@@ -140,10 +152,12 @@ export function DealsReportView({
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>商談フォーキャスト</CardTitle>
-          <CardDescription>
-            完了予定日が期間内にある進行中商談を、ステージ確度で加重
-          </CardDescription>
+          <CardTitle className="flex items-center gap-1">
+            商談フォーキャスト
+            <HelpTooltip label="商談フォーキャスト">
+              完了予定日が期間内にある進行中商談を、ステージ確度で加重
+            </HelpTooltip>
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {report.forecast.map((stage) => (

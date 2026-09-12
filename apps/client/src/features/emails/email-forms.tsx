@@ -78,46 +78,20 @@ export function TemplateForm({
       open={open}
       onOpenChange={onOpenChange}
       title={template ? "メールテンプレートを編集" : "メールテンプレートを作成"}
-      description="構造化された下書きからReact Emailが安全なHTMLとplain textを生成します。"
+      description="件名と本文を編集し、プレビューで確認してから保存します。"
       className="sm:max-w-3xl"
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}
       submitLabel={template ? "下書きを保存" : "テンプレートを作成"}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 p-3">
-        <div>
-          <p className="text-sm font-medium">AIメールデザイナー</p>
-          <p className="text-sm text-muted-foreground">
-            提案を確認してから、この下書きへ反映します。
-          </p>
-        </div>
-        <Button type="button" onClick={() => setAiOpen(true)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold">メール内容</h2>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAiOpen(true)}>
           <Sparkles data-icon="inline-start" />
           {template ? "AIで改善" : "AIで作成"}
         </Button>
       </div>
-      <Field data-disabled={Boolean(template)}>
-        <FieldLabel>用途</FieldLabel>
-        <ToggleGroup
-          value={[purpose]}
-          disabled={Boolean(template)}
-          onValueChange={(next) => {
-            const selected = next[0] as EmailPurpose | undefined;
-            if (selected) setPurpose(selected);
-          }}
-          variant="outline"
-          spacing={0}
-        >
-          <ToggleGroupItem value="transactional">Transactional</ToggleGroupItem>
-          <ToggleGroupItem value="marketing">Marketing</ToggleGroupItem>
-        </ToggleGroup>
-        <FieldDescription>
-          {purpose === "marketing"
-            ? "作成・プレビュー・公開に対応しています。実送信とAutomation利用はまだ無効です。"
-            : "公開後にAutomationから送信できます。用途は作成後に変更できません。"}
-        </FieldDescription>
-      </Field>
       <FormInput
         label="管理名"
         name="name"
@@ -136,6 +110,34 @@ export function TemplateForm({
         required
       />
       <EmailDocumentEditor value={content} onChange={setContent} />
+      <details className="rounded-md border p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          配信設定 · {purpose === "marketing" ? "Marketing" : "Transactional"}
+        </summary>
+        <div className="pt-4">
+          <Field data-disabled={Boolean(template)}>
+            <FieldLabel>用途</FieldLabel>
+            <ToggleGroup
+              value={[purpose]}
+              disabled={Boolean(template)}
+              onValueChange={(next) => {
+                const selected = next[0] as EmailPurpose | undefined;
+                if (selected) setPurpose(selected);
+              }}
+              variant="outline"
+              spacing={0}
+            >
+              <ToggleGroupItem value="transactional">Transactional</ToggleGroupItem>
+              <ToggleGroupItem value="marketing">Marketing</ToggleGroupItem>
+            </ToggleGroup>
+            <FieldDescription>
+              {purpose === "marketing"
+                ? "作成・プレビュー・公開に対応しています。実送信とAutomation利用はまだ無効です。"
+                : "公開後にAutomationから送信できます。用途は作成後に変更できません。"}
+            </FieldDescription>
+          </Field>
+        </div>
+      </details>
       <Button
         type="button"
         variant="outline"

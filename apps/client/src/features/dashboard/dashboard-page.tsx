@@ -1,194 +1,312 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
+import { RefreshCw } from "lucide-react";
+import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
 
-import { PageLayout, SimpleEmpty } from "@/components/app-ui";
-import { SimpleBarChart } from "@/components/app-ui/bar-chart";
-import { dashboardQueryOptions, TREND_WINDOW } from "@/features/dashboard/dashboard-api";
 import {
-  ActivityRows,
-  AutomationRows,
-  DeltaChip,
-  KpiCard,
-  KpiGrid,
-  MeterBar,
-  NoticeBanner,
-  Panel,
-  PanelLink,
-  Sparkline,
-} from "@/features/dashboard/dashboard-widgets";
+  ErrorAlert,
+  HelpTooltip,
+  MetricCard,
+  MetricGrid,
+  PageLayout,
+  SimpleEmpty,
+} from "@/components/app-ui";
+import { SimpleBarChart } from "@/components/app-ui/bar-chart";
+import { Button } from "@/components/ui/button";
+import { dashboardQueryOptions } from "@/features/dashboard/dashboard-api";
 import { formatMoney } from "@/lib/format";
-import { CONTACT_EVENT_LABELS, contactEventTone, type EventTone } from "@/lib/status-labels";
+import { CONTACT_EVENT_LABELS, contactEventTone } from "@/lib/status-labels";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
-const TONE_COLORS: Record<EventTone, string> = {
-  success: "var(--color-success)",
-  danger: "var(--color-destructive)",
-  info: "var(--color-chart-4)",
-  neutral: "var(--color-muted-foreground)",
-};
+import { AutomationRows, DeltaChip, Panel } from "./dashboard-widgets";
+
+const MonitorContact = lazy(async () => ({
+  default: (await import("./monitor-contact")).MonitorContact,
+}));
 
 export function DashboardPage(): ReactNode {
-  const { formatRelativeTime } = useWorkspaceFormatters();
-  const { data } = useSuspenseQuery(dashboardQueryOptions());
-  const deliveryHealth = data.deliveries.health.points;
-  const activeAutomations = data.automations.top.map((item) => ({
-    id: item.id,
-    name: item.name,
-    active: item.active,
-    done: item.completed,
-    lastRun: formatRelativeTime(item.updatedAt),
-  }));
-
-  const activity = data.recentActivity.map((event, index) => ({
-    id: `${event.occurredAt}-${index}`,
-    label: CONTACT_EVENT_LABELS[event.type] ?? event.type,
-    type: event.type,
-    at: formatRelativeTime(event.occurredAt),
-    color: TONE_COLORS[contactEventTone(event.type)],
-  }));
-
+  const { formatDateTime, formatRelativeTime } = useWorkspaceFormatters();
+  const query = useSuspenseQuery({
+    ...dashboardQueryOptions(),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const { data } = query;
+  const [contactId, setContactId] = useState<string | null>(null);
+  const contactTrigger = useRef<HTMLButtonElement | null>(null);
+  const health = data.deliveries.health;
+  const hasAttention =
+    data.deliveries.failed > 0 || data.briefs.overdueReviews > 0 || data.deals.overdueTasks > 0;
+  const reportSearch = {
+    view: "emails" as const,
+    from: data.deliveries.totalsRange.from,
+    to: data.deliveries.totalsRange.to,
+    currency: "",
+  };
   return (
-    <PageLayout title="ホーム">
-      {data.deliveries.failed > 0 && (
-        <NoticeBanner
-          message={`配信に失敗したメッセージが ${data.deliveries.failed.toLocaleString()} 件あります`}
-          detail="直近30日・メールレポートで内訳を確認できます"
-          actionLabel="確認する"
-          to="/reports"
-        />
+    <PageLayout
+      title="モニター"
+      action={
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            集計 {formatDateTime(data.asOf)} · {data.timezone}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            <RefreshCw data-icon="inline-start" />
+            {query.isFetching ? "更新中…" : "更新"}
+          </Button>
+        </div>
+      }
+    >
+      {query.isRefetchError ? (
+        <ErrorAlert>
+          更新できませんでした。直前に取得したデータを表示しています。もう一度「更新」を押してください。
+        </ErrorAlert>
+      ) : null}
+      {hasAttention ? (
+        <section aria-label="要確認" className="overflow-hidden rounded-lg border bg-card">
+          <div className="flex items-center gap-2 border-b px-4 py-2">
+            <span aria-hidden className="size-2 rounded-full bg-warning" />
+            <h2 className="text-base font-semibold">要確認</h2>
+          </div>
+          {data.deliveries.failed > 0 ? (
+            <AttentionRow label="配信失敗" detail="直近30日" count={data.deliveries.failed}>
+              <Link to="/reports" search={reportSearch}>
+                レポートを開く
+              </Link>
+            </AttentionRow>
+          ) : null}
+          {data.briefs.overdueReviews > 0 ? (
+            <AttentionRow label="施策レビュー期限超過" count={data.briefs.overdueReviews}>
+              <Link to="/projects" search={{ view: "briefs" }}>
+                施策を開く
+              </Link>
+            </AttentionRow>
+          ) : null}
+          {data.deals.overdueTasks > 0 ? (
+            <AttentionRow label="営業タスク期限超過" count={data.deals.overdueTasks}>
+              <Link to="/tasks">タスクを開く</Link>
+            </AttentionRow>
+          ) : null}
+        </section>
+      ) : (
+        <p className="flex items-center gap-2 py-1 text-sm text-text-secondary">
+          <span aria-hidden className="size-2 rounded-full bg-success" />
+          現在、要確認項目はありません
+        </p>
       )}
-      {data.briefs.overdueReviews > 0 && (
-        <NoticeBanner
-          message={`レビュー期限を超過した施策が ${data.briefs.overdueReviews.toLocaleString()} 件あります`}
-          detail="成果指標と成功基準を確認してください"
-          actionLabel="施策を確認"
-          to="/projects"
-        />
-      )}
-
-      <KpiGrid>
-        <KpiCard
+      <MetricGrid className="grid-cols-1 sm:grid-cols-3">
+        <MetricCard
           label="アクティブ連絡先"
-          value={data.contacts.count.toLocaleString()}
-          delta={<DeltaChip value={data.contacts.changePercent} />}
-        >
-          <Sparkline
-            values={data.contacts.trend.points.slice(-TREND_WINDOW).map((point) => point.added)}
-          />
-        </KpiCard>
-        <KpiCard
-          label="30日間の配信"
-          value={data.deliveries.sent.toLocaleString()}
-          delta={<DeltaChip value={data.deliveries.sendChangePercent} />}
-        >
-          <Sparkline values={deliveryHealth.slice(-TREND_WINDOW).map((point) => point.sends)} />
-        </KpiCard>
-        <KpiCard
-          label="配信到達率"
-          value={`${data.deliveries.deliveryRate}%`}
-          delta={<DeltaChip value={data.deliveries.deliveryRateChangePoints} unit="pt" />}
-        >
-          <MeterBar percent={data.deliveries.deliveryRate} />
-        </KpiCard>
-        <KpiCard
-          label="公開オートメーション"
-          value={data.automations.count.toLocaleString()}
-          delta={
-            <span className="text-[11px] text-muted-foreground">
-              / 下書き {data.automations.draftCount}
-            </span>
+          value={data.contacts.count}
+          description={
+            <>
+              新規登録の直近7日比較 <DeltaChip value={data.contacts.changePercent} />
+            </>
           }
-        >
-          進行中 {data.automations.enrolledCount.toLocaleString()} 件
-        </KpiCard>
-        <KpiCard
-          label="進行中の商談"
+        />
+        <MetricCard
+          label="公開フロー"
+          value={data.automations.count}
+          description={`進行中 ${data.automations.enrolledCount.toLocaleString()} 件 / 下書き ${data.automations.draftCount.toLocaleString()} 件`}
+        />
+        <MetricCard
+          label="進行中商談額"
           value={formatMoney(data.deals.openValue, data.deals.currency)}
-          delta={
-            <span className="text-[11px] text-muted-foreground">
-              / 新規 {data.deals.created.toLocaleString()}
-            </span>
-          }
-        >
-          {data.deals.openCount.toLocaleString()} 件・平均{" "}
-          {formatMoney(Math.round(data.deals.averageOpenValue), data.deals.currency)}
-        </KpiCard>
-        <KpiCard
-          label="期限切れタスク"
-          value={data.deals.overdueTasks.toLocaleString()}
-          emphasis={data.deals.overdueTasks > 0 ? "alert" : "normal"}
-          delta={
-            <span className="text-[11px] text-muted-foreground">
-              / 未完了 {data.deals.openTasks.toLocaleString()}
-            </span>
-          }
-        >
-          完了 {data.deals.completedTasks.toLocaleString()} 件
-        </KpiCard>
-      </KpiGrid>
-
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-        <div className="flex flex-col gap-4">
+          description={`${data.deals.openCount.toLocaleString()} 件・現在の商談残高`}
+        />
+      </MetricGrid>
+      <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
           <Panel
-            title="配信ヘルス"
+            title="配信の推移"
             action={
-              <div className="flex gap-3 text-[11px] text-muted-foreground">
-                <LegendItem color="var(--color-success)" label="到達" />
-                <LegendItem color="var(--color-destructive)" label="未達" />
-              </div>
+              <Link
+                to="/reports"
+                search={reportSearch}
+                className="text-xs text-primary hover:underline"
+              >
+                配信を分析
+              </Link>
             }
           >
-            <div className="px-4 py-3">
-              {deliveryHealth.every((point) => point.delivered + point.undelivered === 0) ? (
+            <div className="space-y-3 p-4">
+              <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                <p>
+                  <span className="mr-2 text-xs text-muted-foreground">30日間の配信</span>
+                  <strong className="text-lg font-semibold">
+                    {data.deliveries.sent.toLocaleString()}
+                  </strong>
+                  <span className="ml-1 text-xs">件</span>
+                </p>
+                <p>
+                  <span className="mr-2 inline-flex items-center text-xs text-muted-foreground">
+                    到達率
+                    <HelpTooltip label="到達率">
+                      到達件数 ÷ 送信件数。送信件数が0の場合は — を表示します。
+                    </HelpTooltip>
+                  </span>
+                  <strong className="text-lg font-semibold">
+                    {data.deliveries.sent ? `${data.deliveries.deliveryRate}%` : "—"}
+                  </strong>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  到達率の直近7日比較{" "}
+                  <DeltaChip value={data.deliveries.deliveryRateChangePoints} unit="pt" />
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                合計：{data.deliveries.totalsRange.from} 〜 {data.deliveries.totalsRange.to}
+              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  日別件数：{health.from} 〜 {health.to}
+                </span>
+                <div className="flex gap-4">
+                  <Legend color="bg-primary">到達</Legend>
+                  <span className="inline-flex items-center">
+                    <Legend color="bg-chart-4">到達未確認</Legend>
+                    <HelpTooltip label="到達未確認">
+                      送信数と到達数の差です。配信失敗の確定件数とは異なります。
+                    </HelpTooltip>
+                  </span>
+                </div>
+              </div>
+              {health.points.every((point) => point.sends === 0) ? (
                 <SimpleEmpty compact label="この期間の配信データはありません" />
               ) : (
                 <SimpleBarChart
-                  data={deliveryHealth.map((point) => ({ ...point }))}
-                  series={[
-                    { key: "delivered", label: "到達", color: "var(--color-success)" },
-                    { key: "undelivered", label: "未達", color: "var(--color-destructive)" },
-                  ]}
-                  height={150}
+                  data={health.points.map((point) => ({ ...point }))}
+                  height={180}
                   stacked
+                  valueFormat={(value) => `${value.toLocaleString()}件`}
+                  series={[
+                    { key: "delivered", label: "到達", color: "var(--primary)" },
+                    { key: "undelivered", label: "到達未確認", color: "var(--chart-4)" },
+                  ]}
                 />
               )}
             </div>
           </Panel>
           <Panel
-            title="稼働中のオートメーション"
-            action={<PanelLink to="/automations">すべて見る</PanelLink>}
+            title="稼働フロー"
+            action={
+              <Link to="/automations" className="text-xs text-primary hover:underline">
+                フロー一覧
+              </Link>
+            }
           >
-            {activeAutomations.length === 0 ? (
-              <SimpleEmpty compact label="稼働中のオートメーションはありません" />
+            {data.automations.top.length ? (
+              <AutomationRows
+                rows={data.automations.top.map((row) => ({
+                  ...row,
+                  updatedAt: formatDateTime(row.updatedAt),
+                }))}
+              />
             ) : (
-              <AutomationRows rows={activeAutomations} />
+              <SimpleEmpty compact label="稼働中のフローはありません" />
             )}
           </Panel>
         </div>
-
         <Panel
-          title="アクティビティ"
-          className="max-h-[560px]"
+          title="最近の接点"
           action={
-            <span className="text-[11px] text-muted-foreground">直近 {activity.length} 件</span>
+            <span className="text-xs text-muted-foreground">
+              直近 {data.recentActivity.length} 件
+            </span>
           }
         >
-          {activity.length === 0 ? (
-            <SimpleEmpty compact label="まだイベントがありません" />
+          {data.recentActivity.length ? (
+            <ol className="divide-y divide-row-border">
+              {data.recentActivity.map((event, index) => (
+                <li
+                  key={`${event.occurredAt}-${index}`}
+                  className="flex min-h-14 items-start justify-between gap-3 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p
+                      className={`text-sm font-medium wrap-anywhere ${contactEventTone(event.type) === "danger" ? "text-destructive" : ""}`}
+                    >
+                      {CONTACT_EVENT_LABELS[event.type] ?? event.type}
+                    </p>
+                    {event.contactId ? (
+                      <button
+                        className="mt-1 rounded-sm text-xs text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={(e) => {
+                          contactTrigger.current = e.currentTarget;
+                          setContactId(event.contactId);
+                        }}
+                      >
+                        連絡先を確認
+                      </button>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">連絡先の関連付けなし</p>
+                    )}
+                  </div>
+                  <time
+                    dateTime={event.occurredAt}
+                    title={formatDateTime(event.occurredAt)}
+                    className="shrink-0 text-xs text-muted-foreground"
+                  >
+                    {formatRelativeTime(event.occurredAt)}
+                  </time>
+                </li>
+              ))}
+            </ol>
           ) : (
-            <ActivityRows events={activity} />
+            <SimpleEmpty compact label="まだ接点の記録はありません" />
           )}
         </Panel>
       </div>
+      {contactId ? (
+        <Suspense fallback={<output>連絡先を読み込んでいます…</output>}>
+          <MonitorContact
+            contactId={contactId}
+            onChanged={async () => {
+              await query.refetch();
+            }}
+            onClose={() => {
+              setContactId(null);
+              requestAnimationFrame(() => contactTrigger.current?.focus());
+            }}
+          />
+        </Suspense>
+      ) : null}
     </PageLayout>
   );
 }
-
-function LegendItem({ color, label }: { color: string; label: string }): ReactNode {
+function AttentionRow({
+  label,
+  detail,
+  count,
+  children,
+}: {
+  label: string;
+  detail?: string;
+  count: number;
+  children: ReactNode;
+}) {
   return (
-    <span className="flex items-center gap-1.5">
-      <span className="size-1.5 rounded-[2px]" style={{ backgroundColor: color }} />
-      {label}
+    <div className="flex min-h-10 flex-wrap items-center gap-x-4 gap-y-1 border-b border-row-border px-4 py-2 last:border-0">
+      <span className="text-sm font-medium">{label}</span>
+      {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}
+      <span className="ml-auto font-semibold tabular-nums">
+        {count.toLocaleString()} <span className="text-xs font-normal">件</span>
+      </span>
+      <span className="text-xs text-primary hover:underline">{children}</span>
+    </div>
+  );
+}
+function Legend({ color, children }: { color: string; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-2">
+      <span aria-hidden className={`size-2 rounded-sm ${color}`} />
+      {children}
     </span>
   );
 }

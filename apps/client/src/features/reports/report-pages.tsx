@@ -12,10 +12,9 @@ import {
 } from "lucide-react";
 import { type FormEvent, type ReactNode } from "react";
 
-import { FormInput, MetricCard, MetricGrid, PageLayout } from "@/components/app-ui";
+import { HelpTooltip, FormInput, MetricCard, MetricGrid, PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldGroup } from "@/components/ui/field";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type AutomationsReport,
   type ContactsReport,
@@ -28,10 +27,11 @@ import {
 } from "@/features/reports/report-api";
 import { exportCsv } from "@/lib/csv";
 import { getFormString } from "@/lib/form-data";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 
 import { reportExport } from "./report-export";
 import { ReportFilterFields } from "./report-filter-fields";
+import { formatReportRate } from "./report-format";
 import {
   AutomationsReportView,
   CampaignsReportView,
@@ -63,7 +63,7 @@ export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
   const exportAction = reportExport(data);
   return (
     <PageLayout
-      title="Reporting"
+      title="レポート"
       action={
         exportAction ? (
           <Button
@@ -77,6 +77,9 @@ export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
       }
     >
       <ReportControls search={search} />
+      <p className="text-xs text-muted-foreground">
+        集計期間：{search.from} 〜 {search.to}（終了日を含む）
+      </p>
       {data.view === "overview" &&
       data.contacts &&
       data.automations &&
@@ -172,25 +175,17 @@ function ReportControls({ search }: { search: ReportSearch }): ReactNode {
           ))}
         </nav>
         <form onSubmit={applyRange} key={`${search.view}-${search.from}-${search.to}`}>
-          <FieldGroup className="flex-row flex-wrap items-end gap-3 border-t pt-4">
-            <FieldGroup className="min-w-44">
-              <FormInput
-                label="開始日"
-                name="from"
-                type="date"
-                defaultValue={search.from}
-                required
-              />
-            </FieldGroup>
-            <FieldGroup className="min-w-44">
-              <FormInput label="終了日" name="to" type="date" defaultValue={search.to} required />
-            </FieldGroup>
+          <div className="grid grid-cols-1 items-end gap-3 border-t pt-4 sm:grid-cols-[repeat(auto-fit,minmax(180px,220px))]">
+            <FormInput label="開始日" name="from" type="date" defaultValue={search.from} required />
+            <FormInput label="終了日" name="to" type="date" defaultValue={search.to} required />
             <ReportFilterFields search={search} />
-            <Button type="submit">条件を適用</Button>
-            <span className="pb-1 text-xs text-muted-foreground">
-              最大366日・終了日を含む期間で集計
-            </span>
-          </FieldGroup>
+            <div className="flex items-center gap-1">
+              <Button type="submit" className="justify-self-start">
+                条件を適用
+              </Button>
+              <HelpTooltip label="集計期間">最大366日・終了日を含む期間で集計します。</HelpTooltip>
+            </div>
+          </div>
         </form>
       </CardContent>
     </Card>
@@ -227,7 +222,7 @@ function ReportsOverview({
       icon: GitBranch,
       value: `${automations.summary.entries.toLocaleString()}件`,
       label: "フローへの参加",
-      detail: `完了率 ${formatPercent(automations.summary.completionRate)}`,
+      detail: `完了率 ${formatReportRate(automations.summary.completionRate, automations.summary.entries)}`,
     },
     {
       view: "emails" as const,
@@ -235,7 +230,7 @@ function ReportsOverview({
       icon: Mail,
       value: `${emails.summary.sends.toLocaleString()}通`,
       label: "メール送信",
-      detail: `開封率 ${formatPercent(emails.summary.openRate)}`,
+      detail: `開封率 ${formatReportRate(emails.summary.openRate, emails.summary.delivered)}`,
     },
     {
       view: "deals" as const,
@@ -243,7 +238,7 @@ function ReportsOverview({
       icon: BriefcaseBusiness,
       value: formatMoney(deals.summary.wonValue, deals.currency),
       label: "獲得金額",
-      detail: `勝率 ${formatPercent(deals.summary.winRate)}`,
+      detail: `勝率 ${formatReportRate(deals.summary.winRate, deals.summary.won + deals.summary.lost)}`,
     },
     {
       view: "site" as const,
@@ -257,7 +252,7 @@ function ReportsOverview({
   return (
     <>
       <section>
-        <h2 className="mb-3 font-heading text-lg font-medium">パフォーマンス概要</h2>
+        <h2 className="mb-3 font-heading text-base font-semibold">パフォーマンス概要</h2>
         <MetricGrid className="md:grid-cols-2 xl:grid-cols-5">
           {cards.map((card) => (
             <MetricCard
@@ -296,8 +291,10 @@ function ReportsOverview({
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>ファネルの状態</CardTitle>
-            <CardDescription>顧客獲得から商談獲得までの主要指標</CardDescription>
+            <CardTitle className="flex items-center gap-1">
+              ファネルの状態
+              <HelpTooltip label="ファネルの状態">顧客獲得から商談獲得までの主要指標</HelpTooltip>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <ProgressRow
@@ -319,8 +316,9 @@ function ReportsOverview({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>注意が必要な指標</CardTitle>
-            <CardDescription>運用上の確認候補</CardDescription>
+            <CardTitle className="flex items-center gap-1">
+              注意が必要な指標<HelpTooltip label="注意が必要な指標">運用上の確認候補</HelpTooltip>
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
             <AttentionItem label="メールバウンス" value={emails.summary.bounces} />

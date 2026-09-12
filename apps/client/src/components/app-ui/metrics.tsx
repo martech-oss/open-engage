@@ -1,15 +1,10 @@
 import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+import { HelpTooltip } from "./help-tooltip";
+
+/** A single comparison band, rather than equal-weight cards competing for attention. */
 export function MetricGrid({
   children,
   className = "sm:grid-cols-2 xl:grid-cols-4",
@@ -17,43 +12,47 @@ export function MetricGrid({
   children: ReactNode;
   className?: string;
 }): ReactNode {
-  return <div className={cn("grid gap-4", className)}>{children}</div>;
+  return (
+    <div className={cn("grid min-w-0 gap-x-6 gap-y-4 border-y bg-card px-4 py-4", className)}>
+      {children}
+    </div>
+  );
 }
-
 export function MetricCard({
   label,
   value,
   icon,
   description,
+  help,
   children,
 }: {
   label: string;
   value: string | number;
   icon?: ReactNode;
   description?: ReactNode;
+  help?: ReactNode;
   children?: ReactNode;
 }): ReactNode {
   return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="truncate text-2xl tabular-nums">
-          {typeof value === "number" ? value.toLocaleString() : value}
-        </CardTitle>
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-h-6 items-center gap-2 text-xs font-medium text-text-secondary">
+        <span>{label}</span>
+        {help ? <HelpTooltip label={label}>{help}</HelpTooltip> : null}
         {icon ? (
-          <CardAction>
-            <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground [&>svg]:size-4">
-              {icon}
-            </span>
-          </CardAction>
+          <span aria-hidden className="[&>svg]:size-4">
+            {icon}
+          </span>
         ) : null}
-      </CardHeader>
+      </div>
+      <div className="text-2xl leading-tight font-semibold wrap-anywhere tabular-nums">
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </div>
       {description || children ? (
-        <CardContent className="flex flex-col gap-3 text-xs text-muted-foreground">
+        <div className="text-xs leading-relaxed text-muted-foreground">
           {description}
           {children}
-        </CardContent>
+        </div>
       ) : null}
-    </Card>
+    </div>
   );
 }

@@ -53,3 +53,36 @@ function renderTable(pagination?: Parameters<typeof DataTable<Row>>[0]["paginati
     />,
   );
 }
+
+describe("row interactions", () => {
+  it("keeps child actions independent from opening a record", async () => {
+    const opened: string[] = [];
+    let actionCount = 0;
+    render(
+      <DataTable
+        rows={rows.slice(0, 1)}
+        rowKey={(row) => row.id}
+        caption="操作のある表"
+        emptyTitle="空"
+        onRowClick={(row) => opened.push(row.id)}
+        columns={[
+          ...columns,
+          {
+            key: "actions",
+            header: "操作",
+            cell: () => <button onClick={() => actionCount++}>一時停止</button>,
+          },
+        ]}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "一時停止" });
+    await userEvent.click(button);
+    await userEvent.keyboard("{Enter}");
+    expect(actionCount).toBe(2);
+    expect(opened).toEqual([]);
+    const row = screen.getAllByRole("row")[1]!;
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toEqual(["b"]);
+  });
+});

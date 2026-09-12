@@ -67,18 +67,22 @@ export function AcquisitionReportView({ report }: { report: AcquisitionReport })
           value={formatMoney(report.summary.wonValue, report.currency)}
         />
       </MetricGrid>
-      <div className="space-y-1 text-sm text-muted-foreground">
-        <p>
-          期間内の活動・成果を、保存中の履歴で最初に記録された流入元に集計しています。初回流入日が期間外でも、期間内の成果は含みます。
-        </p>
-        <p>
-          訪問者は識別済みの同一人物をまとめた数です。MQLは実際の初回到達を数え、商談と受注は選択した通貨だけを集計します。受注も商談作成時点までの流入元に集計し、作成後の訪問元には移しません。
-        </p>
-        <p>
-          同意のない訪問や削除・アーカイブ済みの履歴は復元できません。成果より前の流入情報がない場合は「不明」です。初回流入への集計は因果関係を示すものではありません。
-        </p>
-      </div>
-      <ReportTableCard title="流入元別の成果">
+      <ReportTableCard
+        title="流入元別の成果"
+        help={
+          <div className="space-y-2">
+            <p>
+              期間内の活動・成果を、保存中の履歴で最初に記録された流入元に集計しています。初回流入日が期間外でも、期間内の成果は含みます。
+            </p>
+            <p>
+              訪問者は識別済みの同一人物をまとめた数です。MQLは実際の初回到達を数え、商談と受注は選択した通貨だけを集計します。受注も商談作成時点までの流入元に集計し、作成後の訪問元には移しません。
+            </p>
+            <p>
+              同意のない訪問や削除・アーカイブ済みの履歴は復元できません。成果より前の流入情報がない場合は「不明」です。初回流入への集計は因果関係を示すものではありません。
+            </p>
+          </div>
+        }
+      >
         <DataTable
           columns={columns}
           rows={report.sources}

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { LogOut } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 
 import { authClient } from "@/auth-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -22,11 +22,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -40,10 +38,10 @@ import { cn } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
 import type { WorkspaceOption } from "@/lib/workspace-session";
 
-/** 212px in the design doc — narrow enough that the 13px nav labels set the width. */
-const SIDEBAR_WIDTH = "13.25rem";
+/** Keep navigation stable so the work surface owns the available width. */
+const SIDEBAR_WIDTH = "14rem";
 
-const NAV_ITEM_CLASS = "h-auto rounded-[7px] px-2.5 py-2 text-[13px] font-medium";
+const NAV_ITEM_CLASS = "h-10 rounded-md px-3 py-2 text-sm font-medium";
 
 export function AppShell({
   user,
@@ -58,6 +56,7 @@ export function AppShell({
   const router = useRouter();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const search = useRouterState({ select: (state) => state.location.search });
   const section = activeSection(pathname);
 
   async function signOut(): Promise<void> {
@@ -82,11 +81,12 @@ export function AppShell({
       >
         メインコンテンツへ移動
       </a>
+      <SidebarRouteSync pathname={pathname} />
       <Sidebar collapsible="icon">
         <SidebarHeader className="border-b border-sidebar-border p-0">
           <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
         </SidebarHeader>
-        <SidebarContent className="gap-0 px-2 py-2.5">
+        <SidebarContent className="gap-0 px-3 py-4">
           <SidebarMenu className="gap-0.5">
             {navigationSections.map((item) => (
               <SidebarMenuItem key={item.to}>
@@ -99,22 +99,6 @@ export function AppShell({
                   <item.icon />
                   <span>{item.label}</span>
                 </SidebarMenuButton>
-                {section?.to === item.to && item.tabs.length > 0 ? (
-                  <SidebarMenuSub>
-                    {item.tabs.map((tab) => (
-                      <SidebarMenuSubItem key={tab.to}>
-                        <SidebarMenuSubButton
-                          render={<Link to={tab.to} />}
-                          size="sm"
-                          isActive={isNavTabActive(pathname, item, tab)}
-                          className="rounded-[7px] text-[13px] font-medium"
-                        >
-                          <span>{tab.label}</span>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                ) : null}
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
@@ -140,9 +124,47 @@ export function AppShell({
       <SidebarInset
         id="main-content"
         tabIndex={-1}
-        className="min-h-0 overflow-hidden outline-none"
+        className="min-h-0 min-w-0 overflow-hidden outline-none"
       >
-        <Outlet />
+        <div
+          className={cn(
+            "min-h-10 shrink-0 items-center border-b",
+            section?.tabs.length ? "flex" : "flex md:hidden",
+          )}
+        >
+          <SidebarTrigger className="ml-3 shrink-0 md:hidden" aria-label="ナビゲーションを開く" />
+          {section && section.tabs.length > 0 ? (
+            <nav
+              aria-label={`${section.label}の画面`}
+              className="flex min-h-10 min-w-0 flex-1 gap-5 overflow-x-auto px-4 md:px-6"
+            >
+              {section.tabs.map((tab) => {
+                const active = isNavTabActive(pathname, section, tab, search);
+                return (
+                  <Link
+                    key={`${tab.to}-${tab.search?.view ?? ""}`}
+                    to={tab.to}
+                    search={tab.search ?? {}}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-10 shrink-0 items-center border-b-2 px-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      active
+                        ? "border-primary font-medium text-primary"
+                        : "border-transparent text-text-secondary hover:text-foreground",
+                    )}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : (
+            <span className="px-3 text-sm font-medium">{section?.label ?? "OpenEngage"}</span>
+          )}
+        </div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <Outlet />
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );
@@ -199,4 +221,12 @@ function AccountMenu({
       </SidebarMenuItem>
     </SidebarMenu>
   );
+}
+
+function SidebarRouteSync({ pathname }: { pathname: string }) {
+  const { setOpenMobile } = useSidebar();
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [pathname, setOpenMobile]);
+  return null;
 }

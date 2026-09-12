@@ -56,6 +56,7 @@ describe("useContactDrawerController", () => {
     expect(doubles.invalidateOptions).toHaveBeenCalledWith(queryClient);
     expect(onChanged).toHaveBeenCalledOnce();
     expect(result.current.error).toBe("");
+    expect(result.current.activeTab).toBe("activity");
   });
 
   it("exposes a mutation failure without refreshing cached reads", async () => {
@@ -84,12 +85,12 @@ describe("useContactDrawerController", () => {
       ({ contactId }) => useContactDrawerController(contactId, onChanged),
       { initialProps: { contactId: "contact-1" }, wrapper },
     );
-    act(() => result.current.setActiveTab("activity"));
+    act(() => result.current.setActiveTab("details"));
     await act(() => result.current.archive());
 
     rerender({ contactId: "contact-2" });
 
-    expect(result.current.activeTab).toBe("details");
+    expect(result.current.activeTab).toBe("activity");
     expect(result.current.error).toBe("");
     expect(result.current.profile?.contact.id).toBe("contact-2");
   });

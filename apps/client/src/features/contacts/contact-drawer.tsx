@@ -46,14 +46,14 @@ function ContactDrawerContent({ contactId, options, onClose, onChanged }: Contac
         if (!open) onClose();
       }}
     >
-      <SheetContent className="!w-full overflow-y-auto p-0 sm:!max-w-2xl">
+      <SheetContent className="!w-full overflow-hidden p-0 sm:!max-w-2xl">
         {controller.loading && !controller.profile ? (
           <DrawerSkeleton />
         ) : controller.profile ? (
           <Tabs
             value={controller.activeTab}
             onValueChange={(value) => controller.setActiveTab(value as "details" | "activity")}
-            className="gap-0"
+            className="min-h-0 flex-1 gap-0"
           >
             <DrawerHeader
               profile={controller.profile}
@@ -61,7 +61,10 @@ function ContactDrawerContent({ contactId, options, onClose, onChanged }: Contac
               onArchive={controller.archive}
               onRestore={controller.restore}
             />
-            <TabsContent value="details" className="flex flex-col gap-5 p-6">
+            <TabsContent
+              value="details"
+              className="flex min-h-0 flex-col gap-4 overflow-y-auto p-4"
+            >
               {controller.error ? <ErrorNotice>{controller.error}</ErrorNotice> : null}
               <ContactDrawerOverview profile={controller.profile} />
               <ContactSales contactId={contactId} />
@@ -86,7 +89,7 @@ function ContactDrawerContent({ contactId, options, onClose, onChanged }: Contac
                 <ContactScoreForm busy={controller.busy} onSave={controller.adjustScore} />
               ) : null}
             </TabsContent>
-            <TabsContent value="activity" className="p-6">
+            <TabsContent value="activity" className="min-h-0 overflow-y-auto p-4">
               {controller.error ? <ErrorNotice>{controller.error}</ErrorNotice> : null}
               <ContactTimelineTab profile={controller.profile} />
             </TabsContent>
@@ -116,21 +119,29 @@ function DrawerHeader({
 }): ReactNode {
   const contact = profile.contact;
   return (
-    <SheetHeader className="sticky top-0 z-10 border-b bg-background/95 px-6 py-5 backdrop-blur">
+    <SheetHeader className="shrink-0 border-b bg-background p-4 pr-12">
       <div className="flex items-start gap-4">
         <ContactAvatar contact={contact} large />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <SheetTitle className="truncate text-xl">{contactName(contact)}</SheetTitle>
+            <SheetTitle className="truncate text-lg">{contactName(contact)}</SheetTitle>
             <ContactStatusBadge status={contact.status} />
           </div>
+          <p className="truncate text-sm text-muted-foreground">
+            {(profile.companies.find((company) => company.isPrimary) ?? profile.companies[0])
+              ?.name ?? "会社未登録"}
+          </p>
           <SheetDescription>{contact.email ?? contact.phone ?? "連絡先情報なし"}</SheetDescription>
         </div>
+        <div className="shrink-0 text-right">
+          <span className="block text-xs text-muted-foreground">スコア</span>
+          <strong className="text-lg tabular-nums">{contact.score.toLocaleString()}</strong>
+        </div>
       </div>
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <TabsList>
-          <TabsTrigger value="details">プロフィール</TabsTrigger>
           <TabsTrigger value="activity">アクティビティ</TabsTrigger>
+          <TabsTrigger value="details">プロフィール</TabsTrigger>
         </TabsList>
         {contact.status === "archived" ? (
           <Button

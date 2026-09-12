@@ -35,7 +35,7 @@ export function ContactsTable({
       emptyTitle="条件に一致する連絡先がありません"
       emptyDescription="検索条件を変更するか、新しい連絡先を追加してください。"
       onRowClick={(contact) => onOpen(contact.id)}
-      className="min-w-[900px]"
+      className="min-w-[900px] [&_tbody_tr]:h-14"
       containerClassName="min-h-0 flex-1 overflow-y-auto"
       pagination={pagination}
     />

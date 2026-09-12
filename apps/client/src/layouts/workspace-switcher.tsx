@@ -88,16 +88,16 @@ export function WorkspaceSwitcher({
                 <SidebarMenuButton
                   tooltip={workspace.name}
                   className={cn(
-                    "h-auto gap-2.5 rounded-none px-3 py-3.5",
+                    "h-14 gap-3 rounded-none px-4 py-3",
                     "data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground",
                   )}
                 />
               }
             >
-              <div className="flex size-6.5 shrink-0 items-center justify-center rounded-[7px] bg-primary text-primary-foreground">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                 <Blocks className="size-[15px]" />
               </div>
-              <span className="min-w-0 flex-1 truncate text-left text-[13px] font-bold text-foreground">
+              <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-foreground">
                 {workspace.name}
               </span>
               <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />

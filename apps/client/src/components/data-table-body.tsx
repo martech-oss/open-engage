@@ -49,15 +49,28 @@ export function DataTableBody<T>({
         <TableRow
           key={row.id}
           className={cn(
-            compact && "h-11 border-row-border",
+            compact && "h-10 border-row-border",
             onRowClick &&
               "cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset",
           )}
-          onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+          onClick={
+            onRowClick
+              ? (event) => {
+                  const target = event.target as HTMLElement;
+                  if (
+                    !target.closest(
+                      "button, a, input, select, textarea, [role=button], [role=checkbox], [role=switch]",
+                    )
+                  )
+                    onRowClick(row.original);
+                }
+              : undefined
+          }
           onKeyDown={
             onRowClick
               ? (event) => {
-                  if (event.key === "Enter") onRowClick(row.original);
+                  if (event.target === event.currentTarget && event.key === "Enter")
+                    onRowClick(row.original);
                 }
               : undefined
           }

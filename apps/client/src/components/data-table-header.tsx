@@ -41,8 +41,7 @@ export function DataTableHeader<T>({
                 key={header.id}
                 aria-sort={sortAriaValue(header.column.getCanSort(), sorted)}
                 className={cn(
-                  compact &&
-                    "h-auto py-1.5 font-mono text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase",
+                  compact && "h-10 py-2 text-xs font-medium text-muted-foreground",
                   column?.headClassName,
                 )}
               >
@@ -65,8 +64,7 @@ export function DataTableHeader<T>({
             <TableHead
               className={cn(
                 "w-[1%] px-2 text-right",
-                compact &&
-                  "h-auto py-1.5 font-mono text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase",
+                compact && "h-10 py-2 text-xs font-medium text-muted-foreground",
               )}
             >
               <ColumnVisibilityMenu table={table} columns={columns} compact={compact} />

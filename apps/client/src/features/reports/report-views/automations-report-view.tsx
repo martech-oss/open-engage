@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 import { MetricCard, MetricGrid } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import type { AutomationsReport } from "@/features/reports/report-api";
-import { formatPercent, rate } from "@/lib/format";
 
+import { formatReportRate, formatReportRatio } from "../report-format";
 import { ReportStatusBadge, ReportTableCard, TrendCard } from "../report-widgets";
 
 export function AutomationsReportView({ report }: { report: AutomationsReport }): ReactNode {
@@ -29,28 +29,28 @@ export function AutomationsReportView({ report }: { report: AutomationsReport })
     },
     {
       key: "entries",
-      header: "参加",
+      header: "参加（回）",
       cell: (automation) => automation.entries.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "completions",
-      header: "完了",
+      header: "完了（回）",
       cell: (automation) => automation.completions.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "activeContacts",
-      header: "進行中",
+      header: "進行中（人）",
       cell: (automation) => automation.activeContacts.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
     },
     {
       key: "sends",
-      header: "送信",
+      header: "送信（通）",
       cell: (automation) => automation.sends.toLocaleString(),
       headClassName: "text-right",
       cellClassName: "text-right tabular-nums",
@@ -58,31 +58,47 @@ export function AutomationsReportView({ report }: { report: AutomationsReport })
     {
       key: "openRate",
       header: "開封率",
-      cell: (automation) => formatPercent(rate(automation.opens, automation.sends)),
+      cell: (automation) => formatReportRatio(automation.opens, automation.sends),
       headClassName: "text-right",
-      cellClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
     },
     {
       key: "clickRate",
       header: "クリック率",
-      cell: (automation) => formatPercent(rate(automation.clicks, automation.sends)),
+      cell: (automation) => formatReportRatio(automation.clicks, automation.sends),
       headClassName: "px-4 text-right",
-      cellClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right tabular-nums",
     },
   ];
   return (
     <>
       <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <MetricCard label="オートメーション" value={report.summary.automationCount} />
-        <MetricCard label="参加" value={report.summary.entries} />
+        <MetricCard
+          label="オートメーション"
+          value={`${report.summary.automationCount.toLocaleString()}件`}
+        />
+        <MetricCard label="参加" value={`${report.summary.entries.toLocaleString()}回`} />
         <MetricCard
           label="完了率"
-          value={formatPercent(report.summary.completionRate)}
+          help="完了回数 ÷ 参加回数。参加数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.completionRate, report.summary.entries)}
           icon={<TrendingUp />}
         />
-        <MetricCard label="現在進行中" value={report.summary.activeContacts} icon={<Activity />} />
-        <MetricCard label="メール開封率" value={formatPercent(report.summary.openRate)} />
-        <MetricCard label="メールクリック率" value={formatPercent(report.summary.clickRate)} />
+        <MetricCard
+          label="現在進行中"
+          value={`${report.summary.activeContacts.toLocaleString()}人`}
+          icon={<Activity />}
+        />
+        <MetricCard
+          label="メール開封率"
+          help="開封数 ÷ 送信数。送信数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.openRate, report.summary.sends)}
+        />
+        <MetricCard
+          label="メールクリック率"
+          help="クリック数 ÷ 送信数。送信数が0の場合は — を表示します。"
+          value={formatReportRate(report.summary.clickRate, report.summary.sends)}
+        />
       </MetricGrid>
       <TrendCard
         title="参加と完了の推移"
