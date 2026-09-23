@@ -6,13 +6,16 @@ import { confirm, isCancel, note, outro, password, spinner, text } from "@clack/
 import { execa } from "execa";
 import pc from "picocolors";
 
+import { commandRunner } from "../command-runner";
 import {
   cloudflareResourceNames,
+  emailSendingEventTypes,
   initialWorkerDeployCommands,
+  requiredSecretNames,
   rewriteWorkerConfigs,
+  serverWrangler,
 } from "../provisioning";
 import { abort } from "../shared";
-import { commandRunner } from "../shared-runner";
 
 export async function runCreateCommand(directoryArgument?: string): Promise<void> {
   const directoryAnswer = await text({
@@ -105,60 +108,19 @@ async function provision(
     placeholder: "0x4AAAA...",
   });
   if (isCancel(turnstileSiteKey)) return abort();
-  await execa("pnpm", ["--filter", "@openengage/server", "exec", "wrangler", "whoami"], {
-    cwd: projectDirectory,
-  });
-  await execa(
-    "pnpm",
-    [
-      "--filter",
-      "@openengage/server",
-      "exec",
-      "wrangler",
-      "email",
-      "sending",
-      "enable",
-      email.sendingDomain,
-    ],
-    { cwd: projectDirectory },
-  );
-  const d1 = await execa(
-    "pnpm",
-    [
-      "--filter",
-      "@openengage/server",
-      "exec",
-      "wrangler",
-      "d1",
-      "create",
-      resources.database,
-      "--json",
-    ],
-    { cwd: projectDirectory },
-  );
+  const wrangler = (...args: string[]) =>
+    execa("pnpm", serverWrangler(...args), { cwd: projectDirectory });
+  await wrangler("whoami");
+  await wrangler("email", "sending", "enable", email.sendingDomain);
+  const d1 = await wrangler("d1", "create", resources.database, "--json");
   const d1Payload = JSON.parse(d1.stdout) as { uuid?: string } | Array<{ uuid?: string }>;
   const databaseId = Array.isArray(d1Payload) ? d1Payload[0]?.uuid : d1Payload.uuid;
   if (!databaseId) throw new Error("Wrangler did not return a D1 database ID");
-  await runAllowExisting(
-    "pnpm",
-    [
-      "--filter",
-      "@openengage/server",
-      "exec",
-      "wrangler",
-      "r2",
-      "bucket",
-      "create",
-      resources.bucket,
-    ],
-    projectDirectory,
-  );
+  const createUnlessExists = (...args: string[]) =>
+    commandRunner.allowExisting("pnpm", serverWrangler(...args), projectDirectory);
+  await createUnlessExists("r2", "bucket", "create", resources.bucket);
   for (const queueName of Object.values(resources.queues)) {
-    await runAllowExisting(
-      "pnpm",
-      ["--filter", "@openengage/server", "exec", "wrangler", "queues", "create", queueName],
-      projectDirectory,
-    );
+    await createUnlessExists("queues", "create", queueName);
   }
   const serverConfigPath = resolve(projectDirectory, "apps/server/wrangler.jsonc");
   const clientConfigPath = resolve(projectDirectory, "apps/client/wrangler.jsonc");
@@ -180,33 +142,19 @@ async function provision(
     writeFile(clientConfigPath, workerConfigs.client),
   ]);
 
-  const betterAuthSecret = randomSecret();
-  const encryptionKey = randomSecret();
-  const trackingSecret = randomSecret();
-  await putSecret(projectDirectory, "BETTER_AUTH_SECRET", betterAuthSecret);
-  await putSecret(projectDirectory, "CREDENTIAL_ENCRYPTION_KEY", encryptionKey);
-  await putSecret(projectDirectory, "TRACKING_SIGNING_SECRET", trackingSecret);
+  for (const name of requiredSecretNames) {
+    await putSecret(projectDirectory, name, randomSecret());
+  }
   const turnstile = await password({ message: "Turnstile secret (optional)", mask: "•" });
   if (!isCancel(turnstile) && turnstile) {
     await putSecret(projectDirectory, "TURNSTILE_SECRET", String(turnstile));
   }
   const progress = spinner();
   progress.start("Applying migrations and deploying");
-  await execa(
-    "pnpm",
-    [
-      "--filter",
-      "@openengage/server",
-      "exec",
-      "wrangler",
-      "d1",
-      "migrations",
-      "apply",
-      resources.database,
-      "--remote",
-    ],
-    { cwd: projectDirectory, input: "y\n" },
-  );
+  await execa("pnpm", serverWrangler("d1", "migrations", "apply", resources.database, "--remote"), {
+    cwd: projectDirectory,
+    input: "y\n",
+  });
   // Create the private Agent Worker without its reverse binding first. This
   // breaks the Agent <-> Server service-binding cycle on a fresh account.
   for (const args of initialWorkerDeployCommands) {
@@ -214,24 +162,13 @@ async function provision(
   }
   progress.stop("Infrastructure and Workers are ready");
   note(
-    `Cloudflare DashboardでQueue ${resources.queues.emailEvents}へEmail Sending (${email.sendingDomain}) の delivered, deferred, bounced, failed, rejected, complained を購読してください。完了後に create-openengage doctor を実行してください。`,
+    `Cloudflare DashboardでQueue ${resources.queues.emailEvents}へEmail Sending (${email.sendingDomain}) の ${emailSendingEventTypes.join(", ")} を購読してください。完了後に create-openengage doctor を実行してください。`,
     "Email event subscription required",
   );
 }
 
 async function putSecret(directory: string, name: string, value: string): Promise<void> {
-  await execa(
-    "pnpm",
-    ["--filter", "@openengage/server", "exec", "wrangler", "secret", "put", name],
-    {
-      cwd: directory,
-      input: value,
-    },
-  );
-}
-
-async function runAllowExisting(file: string, args: string[], cwd: string): Promise<void> {
-  await commandRunner.allowExisting(file, args, cwd);
+  await execa("pnpm", serverWrangler("secret", "put", name), { cwd: directory, input: value });
 }
 
 async function exists(path: string): Promise<boolean> {

@@ -378,7 +378,7 @@ pnpm wrangler secret put TURNSTILE_SECRET
 pnpm --filter @openengage/server exec wrangler email sending enable mail.example.com
 ```
 
-`openengage-email-events` QueueをCloudflare Dashboardで開き、SubscriptionsからEmail Sendingを選択します。送信ドメインを指定し、`message.delivered`、`message.deferred`、`message.bounced`、`message.failed`、`message.rejected`、`message.complained`を購読してください。現在のリポジトリが固定するWranglerではEmail Sending sourceを作成できないため、購読作成のみDashboard操作です。`create-openengage doctor`はdomain、binding、Queue、6イベントの設定を検査します。
+`openengage-email-events` QueueをCloudflare Dashboardで開き、SubscriptionsからEmail Sendingを選択します。送信ドメインを指定し、`message.delivered`、`message.deferred`、`message.bounced`、`message.failed`、`message.rejected`、`message.complained`を購読してください。現在のリポジトリが固定するWranglerではEmail Sending sourceを作成できないため、購読作成のみDashboard操作です。`create-openengage doctor`はdomain、binding、Queue、R2 bucket、必須Secret、6イベントの設定を検査します。
 
 ### Migrationとデプロイ
 

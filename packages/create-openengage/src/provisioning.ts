@@ -10,6 +10,29 @@ export interface WorkerConfigInput {
   client: string;
 }
 
+// Secrets the server refuses to start without. `create` generates them and
+// `doctor` checks they are set.
+export const requiredSecretNames = [
+  "BETTER_AUTH_SECRET",
+  "CREDENTIAL_ENCRYPTION_KEY",
+  "TRACKING_SIGNING_SECRET",
+] as const;
+
+export const emailSendingEventTypes = [
+  "delivered",
+  "deferred",
+  "bounced",
+  "failed",
+  "rejected",
+  "complained",
+] as const;
+
+// Wrangler is a dependency of the server package, so every Cloudflare command
+// runs through its workspace.
+export function serverWrangler(...args: string[]): string[] {
+  return ["--filter", "@openengage/server", "exec", "wrangler", ...args];
+}
+
 export function cloudflareResourceNames(projectName: string) {
   return {
     database: `${projectName}-db`,
@@ -28,8 +51,18 @@ export function readConfiguredResources(serverConfig: string) {
   const database = serverConfig.match(/"database_name"\s*:\s*"([^"]+)"/)?.[1] ?? "";
   const fromEmail = serverConfig.match(/"TRANSACTIONAL_FROM_EMAIL"\s*:\s*"([^"]+)"/)?.[1] ?? "";
   const emailEventsQueue = serverConfig.match(/"queue"\s*:\s*"([^"]+-email-events)"/)?.[1] ?? "";
+  const queues = [
+    ...new Set(
+      Array.from(
+        serverConfig.matchAll(/"(?:queue|dead_letter_queue)"\s*:\s*"([^"]+)"/g),
+        (match) => match[1] ?? "",
+      ),
+    ),
+  ];
   return {
     database,
+    bucket: serverConfig.match(/"bucket_name"\s*:\s*"([^"]+)"/)?.[1] ?? "",
+    queues,
     fromEmail,
     sendingDomain: fromEmail.split("@")[1] ?? "",
     emailEventsQueue,
