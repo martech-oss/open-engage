@@ -1,7 +1,6 @@
 import { and, eq, exists, inArray, isNotNull, sql } from "drizzle-orm";
 
 import {
-  automationDefinitionSchema,
   type AutomationDefinition,
   type AutomationExecutionSnapshot,
 } from "@openengage/core/automations";
@@ -14,9 +13,9 @@ import {
   type ApprovedProjectLink,
 } from "../projects/project-resource-guard";
 import { changedExactlyOne, didChange, nowIso } from "../shared/database-utils";
-import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import { automations, automationTriggers, automationVersions } from "./schema";
 
 export class AutomationPublicationConflictError extends Error {
@@ -24,8 +23,6 @@ export class AutomationPublicationConflictError extends Error {
     super("下書きが変更されました。最新の内容を確認して再公開してください");
   }
 }
-
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
 export class AutomationCommandRepository extends WorkspaceRepository {
   /** Creates the automation shell plus its first draft version atomically. */
@@ -58,7 +55,7 @@ export class AutomationCommandRepository extends WorkspaceRepository {
       version: 1,
       status: "draft",
       timezone: input.timezone,
-      graph: graphCodec.encode(input.graph),
+      graph: automationGraphCodec.encode(input.graph),
       createdAt: now,
     } as const;
     if (input.projectLink) {
@@ -120,7 +117,7 @@ export class AutomationCommandRepository extends WorkspaceRepository {
       .update(automationVersions)
       .set({
         timezone: input.timezone,
-        graph: graphCodec.encode(input.graph),
+        graph: automationGraphCodec.encode(input.graph),
       })
       .where(
         and(
@@ -189,7 +186,10 @@ export class AutomationCommandRepository extends WorkspaceRepository {
             eq(automationVersions.id, input.draftVersionId),
             eq(automationVersions.status, "draft"),
             eq(automationVersions.version, input.currentVersion),
-            eq(automationVersions.graph, input.expectedGraph ?? graphCodec.encode(input.graph)),
+            eq(
+              automationVersions.graph,
+              input.expectedGraph ?? automationGraphCodec.encode(input.graph),
+            ),
           ),
         ),
     );
@@ -208,14 +208,14 @@ export class AutomationCommandRepository extends WorkspaceRepository {
       orm
         .insert(automationVersions)
         .select(
-          sql`SELECT ${nextDraftId},${workspaceId},${input.automationId},${input.currentVersion + 1},'draft',${input.timezone},${graphCodec.encode(input.graph)},NULL,${now},NULL,'{}',NULL WHERE ${authority}`,
+          sql`SELECT ${nextDraftId},${workspaceId},${input.automationId},${input.currentVersion + 1},'draft',${input.timezone},${automationGraphCodec.encode(input.graph)},NULL,${now},NULL,'{}',NULL WHERE ${authority}`,
         ),
       orm
         .update(automationVersions)
         .set({
           status: "published",
           publishedAt: now,
-          resolvedGraph: input.snapshot ? graphCodec.encode(input.snapshot.graph) : null,
+          resolvedGraph: input.snapshot ? automationGraphCodec.encode(input.snapshot.graph) : null,
           dependencies: JSON.stringify(input.snapshot?.dependencies ?? {}),
           variableSnapshot: input.snapshot?.variableSnapshot
             ? JSON.stringify(input.snapshot.variableSnapshot)

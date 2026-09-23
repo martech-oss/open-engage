@@ -186,6 +186,7 @@ export class VariableUsageRepository extends WorkspaceRepository {
       });
     const calls = new VariableCallUsageRepository(this.database, this.context);
     for (const row of automationRows) {
+      // Not automationGraphCodec: the variable routes report this ZodError as VARIABLE_INVALID.
       const graph = automationDefinitionSchema.parse(JSON.parse(row.graph));
       const automation: VariableUsage = {
         resourceType: "automation" as const,

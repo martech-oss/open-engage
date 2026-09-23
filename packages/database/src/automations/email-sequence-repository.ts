@@ -1,7 +1,6 @@
 import { and, eq, exists, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
-  automationDefinitionSchema,
   type ApplyEmailSequenceResult,
   type EmailSequenceProposal,
 } from "@openengage/core/automations";
@@ -23,9 +22,9 @@ import { isConstraintError, nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import { automations, automationVersions } from "./schema";
 
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 const contentCodec = defineJsonCodec(emailDocumentV2Schema, "email_templates.draft_content");
 
 export class EmailSequenceDraftConflictError extends Error {
@@ -92,7 +91,7 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       version: 1,
       status: "draft",
       timezone: proposal.definition.timezone,
-      graph: graphCodec.encode(proposal.definition),
+      graph: automationGraphCodec.encode(proposal.definition),
       createdAt: now,
     } as const;
     try {
@@ -396,8 +395,8 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       );
     });
     const graphMatches =
-      JSON.stringify(graphCodec.decode(existingAutomation.graph)) ===
-      graphCodec.encode(proposal.definition);
+      JSON.stringify(automationGraphCodec.decode(existingAutomation.graph)) ===
+      automationGraphCodec.encode(proposal.definition);
     if (
       !templatesMatch ||
       !graphMatches ||

@@ -1,10 +1,6 @@
 import { and, asc, desc, eq, exists, inArray, sql, type SQL } from "drizzle-orm";
 
-import {
-  automationDefinitionSchema,
-  automationRunSchema,
-  type AutomationAudience,
-} from "@openengage/core/automations";
+import { automationRunSchema, type AutomationAudience } from "@openengage/core/automations";
 
 import { contacts } from "../contacts/schema";
 import { compileWorkspaceSegmentFilter } from "../segments/program-filter-repository";
@@ -13,6 +9,7 @@ import { compiledFilterSql } from "../segments/support";
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import { AutomationExecutionRepository } from "./execution-repository";
 import {
   automations,
@@ -59,7 +56,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
       )
       .get();
     if (!row) throw new AutomationRunError("公開中のオートメーションがありません");
-    const graph = automationDefinitionSchema.parse(JSON.parse(row.graph));
+    const graph = automationGraphCodec.decode(row.graph);
     const source = graph.nodes.find((node) => node.type === "source");
     if (source?.config.source !== "batch")
       throw new AutomationRunError("バッチ開始のフローを選択してください");
@@ -195,9 +192,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
       )
       .where(and(this.inWorkspace(automationRuns), eq(automationRuns.id, runId)))
       .get();
-    return row
-      ? { ...row.run, graph: automationDefinitionSchema.parse(JSON.parse(row.graph)) }
-      : null;
+    return row ? { ...row.run, graph: automationGraphCodec.decode(row.graph) } : null;
   }
   public async skipTarget(runId: string, contactId: string, reason: string) {
     await this.database.orm

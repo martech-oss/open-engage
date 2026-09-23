@@ -1,22 +1,17 @@
 import { and, count, desc, eq, max, sql } from "drizzle-orm";
 
-import {
-  automationDefinitionSchema,
-  type AutomationDefinition,
-} from "@openengage/core/automations";
+import { type AutomationDefinition } from "@openengage/core/automations";
 
 import { deliveries } from "../messaging/schema";
-import { defineJsonCodec } from "../shared/json-codec";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
+import { automationGraphCodec } from "./codecs";
 import {
   automationEnrollments,
   automations,
   automationTriggers,
   automationVersions,
 } from "./schema";
-
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
 export interface AutomationAnalyticsRows {
   enrollments: Array<{ status: string; count: number }>;
@@ -170,7 +165,7 @@ export class AutomationQueryRepository extends WorkspaceRepository {
     return row
       ? {
           ...row,
-          graph: graphCodec.decode(row.graph),
+          graph: automationGraphCodec.decode(row.graph),
         }
       : null;
   }
@@ -207,7 +202,7 @@ export class AutomationQueryRepository extends WorkspaceRepository {
     return row
       ? {
           ...row,
-          graph: graphCodec.decode(row.graph),
+          graph: automationGraphCodec.decode(row.graph),
           rawGraph: row.graph,
         }
       : null;
