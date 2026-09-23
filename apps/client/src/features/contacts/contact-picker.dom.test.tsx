@@ -38,8 +38,9 @@ describe("ContactPickerField", () => {
     renderWithQueryClient(<ContactPickerField excludeIds={new Set(["c-1"])} />);
 
     const select = await screen.findByRole("combobox", { name: "連絡先" });
-    await waitFor(() => expect(select.hasAttribute("disabled")).toBe(false));
-    expect(optionLabels(select)).toEqual(["選択してください", "second@example.com"]);
+    await waitFor(() =>
+      expect(optionLabels(select)).toEqual(["選択してください", "second@example.com"]),
+    );
     expect(screen.getByText("上位2件を表示しています。検索で絞り込めます。")).toBeTruthy();
 
     await user.type(screen.getByRole("searchbox", { name: "連絡先を検索" }), "late");
@@ -48,6 +49,28 @@ describe("ContactPickerField", () => {
       expect(optionLabels(select)).toEqual(["選択してください", "late@example.com"]),
     );
     expect(search).toHaveBeenLastCalledWith("late");
+  });
+
+  it("blocks submitting the dialog while contacts are still loading", async () => {
+    search.mockReturnValue(new Promise(() => {}));
+    const submit = vi.fn<() => void>();
+    const user = userEvent.setup();
+    renderWithQueryClient(
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <ContactPickerField excludeIds={new Set()} />
+        <button type="submit">追加</button>
+      </form>,
+    );
+
+    expect(await screen.findByText("連絡先を読み込んでいます。")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "追加" }));
+
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it("explains an empty result instead of offering nothing silently", async () => {

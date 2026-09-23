@@ -46,13 +46,9 @@ export function ContactPickerField({
           if (event.key === "Enter") event.preventDefault();
         }}
       />
-      <FormNativeSelect
-        label={label}
-        name={name}
-        required
-        disabled={result.isPending}
-        {...(hint ? { description: hint } : {})}
-      >
+      {/* Stays enabled while loading: a disabled control skips required
+          validation, so the dialog could submit an empty contact id. */}
+      <FormNativeSelect label={label} name={name} required {...(hint ? { description: hint } : {})}>
         <FormSelectOption value="">選択してください</FormSelectOption>
         {candidates.map((contact) => (
           <FormSelectOption key={contact.id} value={contact.id}>
