@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage } from "@/hooks/use-form-submission";
+import { useWorkspaceTime } from "@/lib/workspace-time";
 import type {
   ProjectBriefDetail,
   ProjectBriefDraftInput,
@@ -40,7 +41,8 @@ export function EditProjectBriefDialog({
   onSave: (input: ProjectBriefDraftInput) => Promise<void>;
 }): ReactNode {
   const generate = useGenerateProjectBrief();
-  const { draft, setDraft } = useProjectBriefDraft(mutationFromDetail(detail));
+  const { timeZone } = useWorkspaceTime();
+  const { draft, setDraft } = useProjectBriefDraft(mutationFromDetail(detail, timeZone));
   const [prompt, setPrompt] = useState("");
   const [fieldErrors, setFieldErrors] = useState<ProjectBriefFieldErrors>({});
   const [error, setError] = useState("");
@@ -48,7 +50,7 @@ export function EditProjectBriefDialog({
 
   async function improve(): Promise<void> {
     if (!prompt.trim()) return;
-    const validation = validateProjectBriefDraft(draft);
+    const validation = validateProjectBriefDraft(draft, timeZone);
     if (!validation.success) {
       setFieldErrors(validation.errors);
       setError("AI改善前に入力内容を確認してください");
@@ -62,11 +64,14 @@ export function EditProjectBriefDialog({
         prompt,
         current: validation.data,
       });
-      const proposed = formDraftFromInput({
-        ...result.proposal,
-        ownerUserId: before.ownerUserId,
-        approverUserId: before.approverUserId,
-      });
+      const proposed = formDraftFromInput(
+        {
+          ...result.proposal,
+          ownerUserId: before.ownerUserId,
+          approverUserId: before.approverUserId,
+        },
+        timeZone,
+      );
       setDraft((current) => mergeAiProposalPreservingEdits(current, before, proposed));
       if (result.capabilityGaps.length) {
         toast.warning(`${result.capabilityGaps.length}件の未提供機能があります`);
@@ -79,7 +84,7 @@ export function EditProjectBriefDialog({
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const validation = validateProjectBriefDraft(draft);
+    const validation = validateProjectBriefDraft(draft, timeZone);
     if (!validation.success) {
       setFieldErrors(validation.errors);
       setError("入力内容を確認してください");

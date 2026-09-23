@@ -14,7 +14,7 @@ describe("ProjectBriefForm", () => {
   it("allows the local review datetime to be cleared without parsing during input", async () => {
     const user = userEvent.setup();
     function Harness() {
-      const [draft, setDraft] = useState<ProjectBriefFormDraft>(emptyBrief());
+      const [draft, setDraft] = useState<ProjectBriefFormDraft>(emptyBrief("UTC"));
       return <ProjectBriefForm value={draft} members={[]} onChange={setDraft} />;
     }
     render(<Harness />);

@@ -51,17 +51,23 @@ export function BriefSection({
   );
 }
 
-export function mutationFromDetail(detail: ProjectBriefDetail): ProjectBriefFormDraft {
-  return formDraftFromInput({
-    name: detail.project.name,
-    description: detail.project.description,
-    color: detail.project.color,
-    ownerUserId: detail.project.ownerUserId,
-    approverUserId: detail.project.approverUserId,
-    primaryMotion: detail.project.primaryMotion,
-    reviewAt: detail.project.reviewAt,
-    definition: detail.definition,
-  });
+export function mutationFromDetail(
+  detail: ProjectBriefDetail,
+  timeZone: string,
+): ProjectBriefFormDraft {
+  return formDraftFromInput(
+    {
+      name: detail.project.name,
+      description: detail.project.description,
+      color: detail.project.color,
+      ownerUserId: detail.project.ownerUserId,
+      approverUserId: detail.project.approverUserId,
+      primaryMotion: detail.project.primaryMotion,
+      reviewAt: detail.project.reviewAt,
+      definition: detail.definition,
+    },
+    timeZone,
+  );
 }
 
 export function baselineLabel(

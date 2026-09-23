@@ -1,12 +1,18 @@
 import { useReducer, type Dispatch, type SetStateAction } from "react";
 
+import { toDateTimeLocal } from "@/lib/format";
 import {
   projectBriefDraftInputSchema,
   type ProjectBriefDraftInput,
 } from "@openengage/core/projects";
+import { workspaceDateTimeToUtc } from "@openengage/core/shared/time";
 
 export type ProjectBriefFormDraft = Omit<ProjectBriefDraftInput, "reviewAt"> & {
-  /** Local, deliberately unparsed form value. Converted only after validation succeeds. */
+  /**
+   * Workspace wall time as typed into `datetime-local`, deliberately unparsed.
+   * Converted to UTC only after validation succeeds, in the same timezone the
+   * brief is displayed in.
+   */
   reviewAt: string;
 };
 
@@ -37,7 +43,7 @@ export function useProjectBriefDraft(initial: ProjectBriefFormDraft): {
   };
 }
 
-export function emptyBrief(): ProjectBriefFormDraft {
+export function emptyBrief(timeZone: string): ProjectBriefFormDraft {
   return {
     name: "",
     description: "",
@@ -45,7 +51,7 @@ export function emptyBrief(): ProjectBriefFormDraft {
     ownerUserId: "",
     approverUserId: "",
     primaryMotion: "onboarding",
-    reviewAt: toLocalDateTime(new Date(Date.now() + 14 * 86_400_000).toISOString()),
+    reviewAt: toDateTimeLocal(new Date(Date.now() + 14 * 86_400_000).toISOString(), timeZone),
     definition: {
       outcome: "",
       audience: "",
@@ -79,8 +85,11 @@ export function emptyBrief(): ProjectBriefFormDraft {
   };
 }
 
-export function formDraftFromInput(value: ProjectBriefDraftInput): ProjectBriefFormDraft {
-  return { ...value, reviewAt: toLocalDateTime(value.reviewAt) };
+export function formDraftFromInput(
+  value: ProjectBriefDraftInput,
+  timeZone: string,
+): ProjectBriefFormDraft {
+  return { ...value, reviewAt: toDateTimeLocal(value.reviewAt, timeZone) };
 }
 
 export type ProjectBriefDraftValidation =
@@ -89,15 +98,13 @@ export type ProjectBriefDraftValidation =
 
 export function validateProjectBriefDraft(
   draft: ProjectBriefFormDraft,
+  timeZone: string,
 ): ProjectBriefDraftValidation {
-  const reviewAt = new Date(draft.reviewAt);
-  if (!draft.reviewAt || Number.isNaN(reviewAt.getTime())) {
+  const reviewAt = reviewAtToUtc(draft.reviewAt, timeZone);
+  if (!reviewAt) {
     return { success: false, errors: { reviewAt: "有効なレビュー日時を入力してください" } };
   }
-  const parsed = projectBriefDraftInputSchema.safeParse({
-    ...draft,
-    reviewAt: reviewAt.toISOString(),
-  });
+  const parsed = projectBriefDraftInputSchema.safeParse({ ...draft, reviewAt });
   const errors: ProjectBriefFieldErrors = {};
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
@@ -117,11 +124,13 @@ export function errorAt(errors: ProjectBriefFieldErrors, path: string): string |
   return errors[path] ?? Object.entries(errors).find(([key]) => key.startsWith(`${path}.`))?.[1];
 }
 
-export function toLocalDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+function reviewAtToUtc(value: string, timeZone: string): string | null {
+  if (!value) return null;
+  try {
+    return workspaceDateTimeToUtc(value, timeZone);
+  } catch {
+    return null;
+  }
 }
 
 /** Applies AI output only where the user has not edited that value since generation started. */
