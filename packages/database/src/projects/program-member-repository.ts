@@ -17,7 +17,13 @@ import { runningActionLeaseExists } from "../automations/action-authority";
 import { automationEnrollments, automationJobs } from "../automations/schema";
 import { contactEventStatements } from "../contacts/event-repository";
 import { contacts } from "../contacts/schema";
-import { likeContains, nowIso, runBatch } from "../shared/database-utils";
+import {
+  isNotNullConstraintError,
+  isUniqueConstraintError,
+  likeContains,
+  nowIso,
+  runBatch,
+} from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { ProjectProgramRepository, ProgramError } from "./program-repository";
@@ -40,12 +46,18 @@ export type ProgramMemberCommand = Omit<ProgramMemberMutation, "source" | "mode"
   actorUserId?: string;
   authority?: ProgramMutationAuthority;
 };
+
+const PROGRAM_COMMAND_KEY_COLUMNS = [
+  "project_member_commands.workspace_id",
+  "project_member_commands.project_id",
+  "project_member_commands.idempotency_key",
+] as const;
+
+/** A lost member-command race: the CAS-guarded result was NULL, or the idempotency key was taken. */
 export function isProgramWriteConflict(error: unknown) {
   return (
-    error instanceof Error &&
-    /NOT NULL constraint failed: project_member_commands.result|UNIQUE constraint failed: project_member_commands/i.test(
-      error.message,
-    )
+    isNotNullConstraintError(error, "project_member_commands.result") ||
+    isUniqueConstraintError(error, PROGRAM_COMMAND_KEY_COLUMNS)
   );
 }
 

@@ -14,11 +14,10 @@ import { contacts } from "../contacts/schema";
 import { VisitorRepository } from "../contacts/visitor-repository";
 import { visitorBindings } from "../contacts/visitor-schema";
 import { isProgramWriteConflict } from "../projects/program-member-repository";
-import { isConstraintError } from "../shared/database-utils";
+import { isConstraintError, isUniqueConstraintError } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { isContactEmailConstraintError } from "./public-form-persistence";
 import {
   persistPublicFormSubmissionBatch,
   type PersistPublicFormSubmissionInput,
@@ -32,6 +31,7 @@ import {
   siteTrackingSettings,
 } from "./schema";
 
+const CONTACT_EMAIL_UNIQUE_COLUMNS = ["contacts.workspace_id", "contacts.email"] as const;
 const formDefinitionCodec = defineJsonCodec(signupFormDefinitionSchema, "forms.definition");
 const formAllowedDomainsCodec = defineJsonCodec(stringArraySchema, "forms.allowed_domains");
 const landingPageContentCodec = defineJsonCodec(
@@ -173,7 +173,7 @@ export class PublicFormRepository extends DatabaseRepository {
         }
         if (
           existingContactId === null &&
-          isContactEmailConstraintError(error) &&
+          isUniqueConstraintError(error, CONTACT_EMAIL_UNIQUE_COLUMNS) &&
           (await this.findContactIdByEmail(input.workspaceId, input.email))
         )
           continue;
