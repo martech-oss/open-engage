@@ -13,7 +13,9 @@ import {
 
 import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { recomputeContactGrade } from "../src/scoring/engine";
+import { countRows } from "./db-queries";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -44,13 +46,6 @@ async function readContact(id: string): Promise<{ score: number; grade_points: n
     .bind(id)
     .first<{ score: number; grade_points: number }>();
   return row ?? { score: 0, grade_points: 0 };
-}
-
-async function countRows(sql: string, ...binds: string[]): Promise<number> {
-  const row = await env.DB.prepare(sql)
-    .bind(...binds)
-    .first<{ count: number }>();
-  return row?.count ?? 0;
 }
 
 function emit(
@@ -184,10 +179,7 @@ describe("anonymous contact events", () => {
     await env.DB.prepare("UPDATE contacts SET status = 'anonymous' WHERE id = ?")
       .bind(fixture.contactId)
       .run();
-    const queue = {
-      send: async () => undefined,
-      sendBatch: async () => undefined,
-    } as unknown as Queue;
+    const queue = queueDouble();
 
     const recorded = await recordContactEvent(createDatabase(env.DB), {
       workspaceId: fixture.workspaceId,
@@ -269,14 +261,14 @@ describe("archived contact events", () => {
       userId: "scoring-owner",
       role: "owner",
     }).archiveContact(contact.id);
-    const failOnReconciliation = {
+    const failOnReconciliation = queueDouble({
       send: async () => {
         throw new Error("Archived contacts must not enqueue segment reconciliation");
       },
       sendBatch: async () => {
         throw new Error("Archived contacts must not enqueue segment reconciliation");
       },
-    } as unknown as Queue;
+    });
 
     const recorded = await recordContactEvent(createDatabase(env.DB), {
       workspaceId,

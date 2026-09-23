@@ -19,9 +19,10 @@ import {
 } from "../src/automations/run-service";
 import { processAutomationJob } from "../src/automations/worker";
 import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
-import { queueStub, runtimeWithJobsQueue } from "./automation-recovery-test-support";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { createSessionFixtureClient, seedMember, seedWorkspaceClient } from "./factory";
 import { addProjectBriefMember, projectBriefInput } from "./project-brief-test-support";
+import { queueDouble } from "./queue-double";
 
 function clonedResource(preview: ProjectClonePreview, kind: string, sourceId: string) {
   const resource = preview.resources.find(
@@ -295,7 +296,7 @@ it("runs a cloned campaign from acquisition to success", { timeout: 30_000 }, as
     idempotencyKey: "journey-reviewed-contact",
   });
   const beforeSuccess = nowIso();
-  const queue = queueStub();
+  const queue = queueDouble();
   await dispatchScheduledAutomationRuns(database, new Date(slot), 100, queue);
   const runs = await client.automations.listRuns({ id: targetParent.targetId });
   expect(runs).toHaveLength(1);

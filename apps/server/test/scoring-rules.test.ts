@@ -10,6 +10,7 @@ import {
 } from "@openengage/database/testing";
 
 import { recordContactEvent } from "../src/runtime/contact-event-service";
+import { countRows } from "./db-queries";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
 
 interface Fixture {
@@ -37,13 +38,6 @@ async function readContact(id: string): Promise<{ score: number; grade_points: n
     .bind(id)
     .first<{ score: number; grade_points: number }>();
   return row ?? { score: 0, grade_points: 0 };
-}
-
-async function countRows(sql: string, ...binds: string[]): Promise<number> {
-  const row = await env.DB.prepare(sql)
-    .bind(...binds)
-    .first<{ count: number }>();
-  return row?.count ?? 0;
 }
 
 /**

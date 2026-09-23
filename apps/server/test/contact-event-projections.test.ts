@@ -20,6 +20,7 @@ import {
   recordContactEvent,
 } from "../src/runtime/contact-event-service";
 import { seedWorkspace } from "./factory";
+import { queueDouble } from "./queue-double";
 
 const PROJECTIONS = [
   "scoring",
@@ -77,8 +78,10 @@ describe("contact event projection recovery", () => {
       const fixture = await seedProjectionFixture();
       const eventId = uuidv7();
       const sent: unknown[] = [];
-      const queue = queueStub(async (messages) => {
-        sent.push(...messages.map((message) => message.body));
+      const queue = queueDouble({
+        sendBatch: async (messages) => {
+          sent.push(...messages.map((message) => message.body));
+        },
       });
       const triggerName = `inject_projection_${failingProjection}`;
       await env.DB.prepare(
@@ -265,10 +268,4 @@ async function seedProjectionFixture(): Promise<{
     }),
   ]);
   return { workspaceId, contactId, formId, now };
-}
-
-function queueStub(
-  sendBatch: (messages: Array<MessageSendRequest<unknown>>) => Promise<void> = async () => {},
-): Queue {
-  return { send: async () => {}, sendBatch } as unknown as Queue;
 }

@@ -18,11 +18,12 @@ import { scheduled } from "../src/runtime/dispatch";
 import {
   expectJobAndEnrollment,
   graph,
-  queueStub,
   readJob,
   runtimeWithJobsQueue,
   seedAutomationJob,
 } from "./automation-recovery-test-support";
+import { withBindings } from "./bindings";
+import { queueDouble, recordingQueue } from "./queue-double";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -44,8 +45,10 @@ describe("automation job recovery", () => {
       await scheduled(
         createScheduledController({ cron: "* * * * *" }),
         runtimeWithJobsQueue(
-          queueStub(async (messages) => {
-            published.push(...Array.from(messages, (message) => message.body));
+          queueDouble({
+            sendBatch: async (messages) => {
+              published.push(...Array.from(messages, (message) => message.body));
+            },
           }),
         ),
         createExecutionContext(),
@@ -72,8 +75,10 @@ describe("automation job recovery", () => {
     await scheduled(
       createScheduledController({ cron: "* * * * *" }),
       runtimeWithJobsQueue(
-        queueStub(async (messages) => {
-          published.push(...messages);
+        queueDouble({
+          sendBatch: async (messages) => {
+            published.push(...messages);
+          },
         }),
       ),
       createExecutionContext(),
@@ -92,8 +97,10 @@ describe("automation job recovery", () => {
       scheduled(
         createScheduledController({ cron: "* * * * *" }),
         runtimeWithJobsQueue(
-          queueStub(async () => {
-            throw publicationError;
+          queueDouble({
+            sendBatch: async () => {
+              throw publicationError;
+            },
           }),
         ),
         createExecutionContext(),
@@ -120,7 +127,7 @@ describe("automation job recovery", () => {
       processAutomationJob(
         seeded.jobId,
         "permanent-error-lease",
-        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
       ),
     ).rejects.toThrow("Automation node missing-node is missing");
 
@@ -152,7 +159,7 @@ describe("automation job recovery", () => {
       processAutomationJob(
         seeded.jobId,
         "fifth-start-lease",
-        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
       ),
     ).resolves.toBeUndefined();
 
@@ -172,7 +179,7 @@ describe("automation job recovery", () => {
       "openengage-dead-letter",
       { kind: "automation_job", jobId: seeded.jobId, leaseId: "dead-letter-lease" },
       5,
-      runtimeWithJobsQueue(queueStub()),
+      runtimeWithJobsQueue(queueDouble()),
     );
 
     await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "failed", "failed");
@@ -190,7 +197,7 @@ describe("automation job recovery", () => {
       "openengage-dead-letter",
       { kind: "automation_job", jobId: seeded.jobId, leaseId: "stale-lease" },
       5,
-      runtimeWithJobsQueue(queueStub()),
+      runtimeWithJobsQueue(queueDouble()),
     );
 
     await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "leased", "active");
@@ -220,7 +227,7 @@ describe("automation job recovery", () => {
       processAutomationJob(
         seeded.jobId,
         "score-effect-lease",
-        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+        createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
       ),
     ).rejects.toThrow("injected completion failure");
     await env.DB.prepare("DROP TRIGGER inject_completion_failure").run();
@@ -228,7 +235,7 @@ describe("automation job recovery", () => {
     await processAutomationJob(
       seeded.jobId,
       "score-effect-lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
     );
 
     const effect = await env.DB.prepare(
@@ -279,8 +286,10 @@ describe("automation job recovery", () => {
       "stale-action-lease",
       createAutomationExecutionDependencies(
         runtimeWithJobsQueue(
-          queueStub(async (messages) => {
-            reconciliationMessages.push(...[...messages].map((message) => message.body));
+          queueDouble({
+            sendBatch: async (messages) => {
+              reconciliationMessages.push(...[...messages].map((message) => message.body));
+            },
           }),
         ),
       ),
@@ -386,23 +395,6 @@ describe("automation job recovery", () => {
   });
 });
 
-function recordingQueue(messages: unknown[]): Queue {
-  return {
-    send: async (body: unknown) => {
-      messages.push(body);
-    },
-    sendBatch: async (batch: Iterable<MessageSendRequest<unknown>>) => {
-      messages.push(...[...batch].map((message) => message.body));
-    },
-  } as unknown as Queue;
-}
-
 function runtimeWithQueues(jobsQueue: Queue, deliveryQueue: Queue) {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return jobsQueue;
-      if (property === "DELIVERY_QUEUE") return deliveryQueue;
-      return Reflect.get(target, property, receiver);
-    },
-  });
+  return withBindings({ JOBS_QUEUE: jobsQueue, DELIVERY_QUEUE: deliveryQueue });
 }

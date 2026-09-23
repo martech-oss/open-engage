@@ -14,6 +14,7 @@ import {
 } from "@openengage/database/testing";
 
 import type { RuntimeEnv } from "../src/env";
+import { withBindings } from "./bindings";
 import { seedWorkspace } from "./factory";
 
 export async function seedAutomationJob(input: {
@@ -140,22 +141,9 @@ export function decisionNode(input: {
   };
 }
 
-export function queueStub(
-  sendBatch: (messages: Iterable<MessageSendRequest<unknown>>) => Promise<void> = async () => {},
-): Queue {
-  return {
-    send: async () => {},
-    sendBatch,
-  } as unknown as Queue;
-}
-
-export function runtimeWithJobsQueue(queue: Queue): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
+/** The test env publishing jobs to `queue`, optionally against a wrapped D1 binding. */
+export function runtimeWithJobsQueue(queue: Queue, database: D1Database = env.DB): RuntimeEnv {
+  return withBindings({ JOBS_QUEUE: queue, DB: database });
 }
 
 export async function readJob(jobId: string): Promise<{

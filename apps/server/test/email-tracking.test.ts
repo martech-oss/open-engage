@@ -13,6 +13,7 @@ import {
 } from "@openengage/database/testing";
 
 import { applyEmailTracking } from "../src/messaging/email-tracking";
+import { countRows } from "./db-queries";
 import { seedWorkspace } from "./factory";
 
 const APP_URL = "https://app.example.com";
@@ -148,13 +149,6 @@ async function eventually(read: () => Promise<number>, expected: number): Promis
 async function settled(read: () => Promise<number>): Promise<number> {
   await scheduler.wait(50);
   return read();
-}
-
-async function countRows(sql: string, ...binds: string[]): Promise<number> {
-  const row = await env.DB.prepare(sql)
-    .bind(...binds)
-    .first<{ count: number }>();
-  return row?.count ?? 0;
 }
 
 const deliveryEventCount = (deliveryId: string, type: string) =>

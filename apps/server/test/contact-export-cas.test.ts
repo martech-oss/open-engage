@@ -7,6 +7,7 @@ import { PermanentChannelError } from "../src/channels";
 import { getDataJob, startContactExport } from "../src/contacts/import-export-service";
 import { processContactExport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";
+import { withBindings } from "./bindings";
 import { seedWorkspaceContext } from "./factory";
 
 const runtimeEnv = env as RuntimeEnv;
@@ -212,10 +213,5 @@ async function expireExportLease(jobId: string): Promise<void> {
 }
 
 function runtimeWithAssetsBucket(bucket: R2Bucket): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "ASSETS_BUCKET") return bucket;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
+  return withBindings({ ASSETS_BUCKET: bucket });
 }

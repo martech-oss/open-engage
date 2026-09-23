@@ -12,6 +12,7 @@ import {
 
 import { processPendingPublicFormEvent } from "../src/runtime/contact-event-service";
 import { seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 
 describe("scoring archive races", () => {
   it("stops business projections when the contact archives after the scoring precheck", async () => {
@@ -67,12 +68,11 @@ describe("scoring archive races", () => {
       createdAt: now,
     });
     const reconciliationMessages: unknown[] = [];
-    const queue = {
-      send: async () => undefined,
-      sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-        reconciliationMessages.push(...[...messages].map((message) => message.body));
+    const queue = queueDouble({
+      sendBatch: async (messages) => {
+        reconciliationMessages.push(...messages.map((message) => message.body));
       },
-    } as unknown as Queue;
+    });
     const contacts = new ContactRepository(env.DB, { workspaceId, userId, role: "owner" });
     const racedBinding = beforeFirstBatch(env.DB, async () => {
       await contacts.archiveContact(contact.id);

@@ -7,6 +7,7 @@ import { ContactRepository, ScoringRepository, createDatabase } from "@openengag
 import { recordContactEvent } from "../src/runtime/contact-event-service";
 import { applyScoringForEvent } from "../src/scoring/engine";
 import { seedWorkspace } from "./factory";
+import { queueDouble } from "./queue-double";
 
 async function seed() {
   const { workspaceId } = await seedWorkspace(env.DB);
@@ -142,14 +143,14 @@ describe("decay reevaluation", () => {
     });
     const messages: unknown[] = [];
     const continuations: unknown[] = [];
-    const queue = {
-      send: async (message: unknown) => {
+    const queue = queueDouble({
+      send: async (message) => {
         continuations.push(message);
       },
-      sendBatch: async (batch: Iterable<MessageSendRequest<unknown>>) => {
+      sendBatch: async (batch) => {
         messages.push(...batch);
       },
-    } as unknown as Queue;
+    });
     const { runScoringDecay } = await import("../src/scoring/decay-service");
     const future = new Date(Date.parse(occurredAt) + 2 * 86400000);
     await runScoringDecay(createDatabase(env.DB), queue, future, 1);

@@ -15,7 +15,9 @@ import type { RuntimeEnv } from "../src/env";
 import { processDelivery } from "../src/messaging/delivery-worker";
 import { encryptCredentials } from "../src/platform/crypto";
 import { scheduled } from "../src/runtime/dispatch";
+import { withBindings } from "./bindings";
 import { seedWorkspace } from "./factory";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -287,18 +289,12 @@ async function seedDelivery(input: {
 }
 
 function runtimeWithQueues(published: unknown[] = []): RuntimeEnv {
-  const queue = {
-    send: async () => {},
-    sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-      published.push(...[...messages].map((message) => message.body));
+  const queue = queueDouble({
+    sendBatch: async (messages) => {
+      published.push(...messages.map((message) => message.body));
     },
-  } as unknown as Queue;
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE" || property === "DELIVERY_QUEUE") return queue;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
+  });
+  return withBindings({ JOBS_QUEUE: queue, DELIVERY_QUEUE: queue });
 }
 
 async function seedSendableWebhook(input: {

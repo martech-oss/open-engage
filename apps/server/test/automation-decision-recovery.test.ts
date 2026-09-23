@@ -12,11 +12,11 @@ import { scheduled } from "../src/runtime/dispatch";
 import {
   decisionNode,
   graph,
-  queueStub,
   readJob,
   runtimeWithJobsQueue,
   seedAutomationJob,
 } from "./automation-recovery-test-support";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => vi.useRealTimers());
 
@@ -36,7 +36,7 @@ describe("decision node recovery", () => {
     await processAutomationJob(
       seeded.jobId,
       "pre-node-event-lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
     );
     await recordContactEvent(createDatabase(env.DB), {
       workspaceId: seeded.workspaceId,
@@ -45,7 +45,7 @@ describe("decision node recovery", () => {
       resourceType: "delivery",
       resourceId: "delivery-1",
       occurredAt: "2026-08-20T10:01:00.000Z",
-      queue: queueStub(),
+      queue: queueDouble(),
     });
 
     expect(await readJob(seeded.jobId)).toMatchObject({
@@ -69,7 +69,7 @@ describe("decision node recovery", () => {
     await processAutomationJob(
       seeded.jobId,
       "waiting-lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
     );
 
     vi.setSystemTime(new Date("2026-08-20T11:02:00.000Z"));
@@ -80,7 +80,7 @@ describe("decision node recovery", () => {
       resourceType: "delivery",
       resourceId: "any-delivery",
       occurredAt: "2026-08-20T11:01:30.000Z",
-      queue: queueStub(),
+      queue: queueDouble(),
     });
 
     expect(await readJob(seeded.jobId)).toMatchObject({
@@ -120,13 +120,13 @@ describe("decision node recovery", () => {
     await processAutomationJob(
       seeded.jobId,
       "deadline-lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
     );
 
     vi.setSystemTime(new Date("2026-08-20T12:10:00.000Z"));
     await scheduled(
       createScheduledController({ cron: "* * * * *" }),
-      runtimeWithJobsQueue(queueStub()),
+      runtimeWithJobsQueue(queueDouble()),
       createExecutionContext(),
     );
     const claimed = await env.DB.prepare(
@@ -138,7 +138,7 @@ describe("decision node recovery", () => {
     await processAutomationJob(
       claimed.id,
       claimed.leaseId,
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
     );
 
     const next = await env.DB.prepare(

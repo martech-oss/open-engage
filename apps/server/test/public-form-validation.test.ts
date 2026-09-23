@@ -2,16 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { seedWorkspaceClient } from "./factory";
-
-function publicCall(path: string, body: Record<string, unknown>): Promise<Response> {
-  return exports.default.fetch(
-    new Request(`http://localhost:8787${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
-}
+import { publicPost } from "./public-requests";
 
 describe("public form definition validation", () => {
   it("catches a custom email field suppressing the implicit required contact email", async () => {
@@ -35,7 +26,7 @@ describe("public form definition validation", () => {
     expect(html).toContain('name="email"');
     expect(html).toContain('name="custom:email"');
 
-    const missingStandardEmail = await publicCall(`/f/${slug}/custom-email-field`, {
+    const missingStandardEmail = await publicPost(`/f/${slug}/custom-email-field`, {
       "custom:email": "custom@example.com",
       idempotencyKey: crypto.randomUUID(),
     });
@@ -45,7 +36,7 @@ describe("public form definition validation", () => {
     ).first<{ count: number }>();
     expect(undefinedContacts?.count).toBe(0);
 
-    const valid = await publicCall(`/f/${slug}/custom-email-field`, {
+    const valid = await publicPost(`/f/${slug}/custom-email-field`, {
       email: "contact@example.com",
       "custom:email": "custom@example.com",
       idempotencyKey: crypto.randomUUID(),
@@ -69,12 +60,12 @@ describe("public form definition validation", () => {
       successMessage: "Thanks",
     });
 
-    const missingEmail = await publicCall(`/f/${slug}/definition-gate`, {
+    const missingEmail = await publicPost(`/f/${slug}/definition-gate`, {
       idempotencyKey: crypto.randomUUID(),
     });
     expect(missingEmail.status).toBe(422);
 
-    const undeclared = await publicCall(`/f/${slug}/definition-gate`, {
+    const undeclared = await publicPost(`/f/${slug}/definition-gate`, {
       email: "declared@example.com",
       firstName: "Not rendered",
       idempotencyKey: crypto.randomUUID(),
@@ -123,7 +114,7 @@ describe("public form definition validation", () => {
       { "custom:note": 42 },
     ];
     for (const invalid of invalidBodies) {
-      const response = await publicCall(`/f/${slug}/typed-form`, {
+      const response = await publicPost(`/f/${slug}/typed-form`, {
         email: "typed@example.com",
         ...invalid,
         idempotencyKey: crypto.randomUUID(),
@@ -131,7 +122,7 @@ describe("public form definition validation", () => {
       expect(response.status).toBe(422);
     }
 
-    const valid = await publicCall(`/f/${slug}/typed-form`, {
+    const valid = await publicPost(`/f/${slug}/typed-form`, {
       email: "typed@example.com",
       "custom:website": "https://example.com/path",
       "custom:seats": "12.5",
@@ -167,7 +158,7 @@ describe("public form definition validation", () => {
       turnstileEnabled: false,
       successMessage: "Thanks",
     });
-    const first = await publicCall(`/f/${slug}/progressive-form`, {
+    const first = await publicPost(`/f/${slug}/progressive-form`, {
       email: "progressive@example.com",
       "custom:role": "Director",
       consent: true,
@@ -177,7 +168,7 @@ describe("public form definition validation", () => {
     const accepted = await first.json<{ data: { visitorToken: string } }>();
     expect(accepted.data.visitorToken).toEqual(expect.any(String));
 
-    const staleField = await publicCall(`/f/${slug}/progressive-form`, {
+    const staleField = await publicPost(`/f/${slug}/progressive-form`, {
       email: "progressive@example.com",
       "custom:role": "VP",
       oe_v: accepted.data.visitorToken,
@@ -186,7 +177,7 @@ describe("public form definition validation", () => {
     });
     expect(staleField.status).toBe(422);
 
-    const nextField = await publicCall(`/f/${slug}/progressive-form`, {
+    const nextField = await publicPost(`/f/${slug}/progressive-form`, {
       email: "progressive@example.com",
       "custom:industry": "Manufacturing",
       "custom:role": "VP",

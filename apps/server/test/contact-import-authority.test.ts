@@ -7,7 +7,9 @@ import { contacts, createDatabase, DataJobRepository, uuidv7 } from "@openengage
 import { processContactImport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";
 import { scheduled } from "../src/runtime/dispatch";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { seedWorkspace } from "./factory";
+import { recordingQueue } from "./queue-double";
 
 describe("contact import database authority", () => {
   it("does not insert after the captured application time becomes an expired database lease", async () => {
@@ -18,7 +20,7 @@ describe("contact import database authority", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub(published), paused.database),
+      runtimeWithJobsQueue(recordingQueue(published), paused.database),
     );
     await paused.reached;
     const leaseId = await shortenLeaseAndWaitForDatabaseExpiry(fixture.jobId);
@@ -48,7 +50,7 @@ describe("contact import database authority", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub(published), paused.database),
+      runtimeWithJobsQueue(recordingQueue(published), paused.database),
     );
     await paused.reached;
     await expect(countContacts(fixture.workspaceId, "db-time-complete@example.com")).resolves.toBe(
@@ -77,7 +79,7 @@ describe("contact import database authority", () => {
     await setPartAttempts(fixture.jobId, 4);
     const published: unknown[] = [];
     const runtime = runtimeWithJobsQueue(
-      queueStub(published),
+      recordingQueue(published),
       commitThenLoseNextDatabaseBatchResponse(
         env.DB,
         new Error("injected committed insert response loss"),
@@ -115,7 +117,7 @@ describe("contact import database authority", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub([]), paused.database),
+      runtimeWithJobsQueue(recordingQueue([]), paused.database),
     );
     await paused.committed;
     await shortenLeaseAndWaitForDatabaseExpiry(fixture.jobId);
@@ -143,7 +145,7 @@ describe("contact import database authority", () => {
     await setPartAttempts(fixture.jobId, 4);
     const published: unknown[] = [];
     const workerRuntime = runtimeWithJobsQueue(
-      queueStub(published),
+      recordingQueue(published),
       commitThenLoseInsertAndFailCompletionBatch(env.DB),
     );
 
@@ -156,7 +158,7 @@ describe("contact import database authority", () => {
     });
     await shortenLeaseAndWaitForDatabaseExpiry(fixture.jobId);
 
-    await runScheduled(runtimeWithJobsQueue(queueStub(published)));
+    await runScheduled(runtimeWithJobsQueue(recordingQueue(published)));
 
     await expect(
       countContacts(fixture.workspaceId, "fifth-scanner-recovery@example.com"),
@@ -189,7 +191,7 @@ describe("contact import database authority", () => {
     await setPartAttempts(fixture.jobId, 4);
     const published: unknown[] = [];
     const runtime = runtimeWithJobsQueue(
-      queueStub(published),
+      recordingQueue(published),
       commitThenLoseNextDatabaseBatchResponse(
         env.DB,
         new Error("injected committed conflict response loss"),
@@ -230,27 +232,6 @@ async function seedImport(rows: Array<Record<string, string>>) {
     cursor: { totalParts: 1 },
   });
   return { workspaceId, jobId };
-}
-
-function runtimeWithJobsQueue(queue: Queue, database: D1Database = env.DB): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      if (property === "DB") return database;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
-}
-
-function queueStub(published: unknown[]): Queue {
-  return {
-    send: async (body: unknown) => {
-      published.push(body);
-    },
-    sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-      published.push(...[...messages].map((message) => message.body));
-    },
-  } as unknown as Queue;
 }
 
 function pauseDatabaseBatch(

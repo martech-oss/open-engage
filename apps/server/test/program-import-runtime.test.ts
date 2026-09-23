@@ -8,7 +8,7 @@ import { ProjectMemberRepository } from "@openengage/database/projects";
 
 import { processProgramMemberImport } from "../src/projects/program-import-service";
 import { queue, scheduled } from "../src/runtime/dispatch";
-import { queueStub, seedAutomationJob } from "./automation-recovery-test-support";
+import { seedAutomationJob } from "./automation-recovery-test-support";
 import { programFixture } from "./program-test-support";
 import { queueDouble } from "./queue-double";
 
@@ -70,8 +70,10 @@ describe("program import runtime integration", () => {
     const send = vi.fn<(body: unknown) => Promise<void>>().mockResolvedValue(undefined);
     const runtime = {
       ...env,
-      JOBS_QUEUE: queueStub(async () => {
-        throw outage;
+      JOBS_QUEUE: queueDouble({
+        sendBatch: async () => {
+          throw outage;
+        },
       }),
       PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({ send }),
     } as typeof env;

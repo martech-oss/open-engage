@@ -9,24 +9,12 @@ import type { contract } from "@openengage/orpc";
 
 import { app } from "../src/app";
 import type { RuntimeEnv } from "../src/env";
+import { withBindings } from "./bindings";
 import { seedWorkspace } from "./factory";
 
 type Client = ContractRouterClient<typeof contract>;
 
 afterEach(() => vi.restoreAllMocks());
-
-function bindings(overrides: {
-  [Key in keyof RuntimeEnv]?: RuntimeEnv[Key] | undefined;
-}): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (Object.prototype.hasOwnProperty.call(overrides, property)) {
-        return Reflect.get(overrides, property, receiver);
-      }
-      return Reflect.get(target, property, receiver);
-    },
-  }) as unknown as RuntimeEnv;
-}
 
 function appCall(
   path: string,
@@ -58,7 +46,7 @@ async function seedTurnstileForm(): Promise<{
   const fixture = await seedWorkspace(env.DB);
   const configuredClient = clientFor(
     fixture.token,
-    bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
+    withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
   );
   await configuredClient.website.createForm({
     name: "Protected form",
@@ -84,7 +72,7 @@ async function seedTurnstileForm(): Promise<{
 describe("public form Turnstile", () => {
   it("catches reusing a provider UUID when a fresh Turnstile token changes the verification request", async () => {
     const form = await seedTurnstileForm();
-    const runtime = bindings({
+    const runtime = withBindings({
       TURNSTILE_SITE_KEY: "site-test",
       TURNSTILE_SECRET: "secret-test",
     });
@@ -119,7 +107,7 @@ describe("public form Turnstile", () => {
   it("catches reusing a provider UUID for the same public key and token in another form workspace", async () => {
     const firstForm = await seedTurnstileForm();
     const secondForm = await seedTurnstileForm();
-    const runtime = bindings({
+    const runtime = withBindings({
       TURNSTILE_SITE_KEY: "site-test",
       TURNSTILE_SECRET: "secret-test",
     });
@@ -152,7 +140,7 @@ describe("public form Turnstile", () => {
 
   it("catches forwarding a non-UUID public replay key directly to Siteverify", async () => {
     const form = await seedTurnstileForm();
-    const runtime = bindings({
+    const runtime = withBindings({
       TURNSTILE_SITE_KEY: "site-test",
       TURNSTILE_SECRET: "secret-test",
     });
@@ -216,7 +204,10 @@ describe("public form Turnstile", () => {
 
   it("catches hosted GET/POST accepting an enabled form with incomplete configuration", async () => {
     const form = await seedTurnstileForm();
-    const siteKeyOnly = bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined });
+    const siteKeyOnly = withBindings({
+      TURNSTILE_SITE_KEY: "site-test",
+      TURNSTILE_SECRET: undefined,
+    });
 
     const hosted = await appCall(form.path, siteKeyOnly);
     expect(hosted.status).toBe(503);
@@ -237,7 +228,7 @@ describe("public form Turnstile", () => {
     const form = await seedTurnstileForm();
     const response = await appCall(
       form.path,
-      bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
+      withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
     );
     const html = await response.text();
 
@@ -256,7 +247,7 @@ describe("public form Turnstile", () => {
 
     const response = await appCall(
       form.path,
-      bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
+      withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -276,7 +267,7 @@ describe("public form Turnstile", () => {
 
     const response = await appCall(
       form.path,
-      bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
+      withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -294,7 +285,7 @@ describe("public form Turnstile", () => {
     const fixture = await seedWorkspace(env.DB);
     const client = clientFor(
       fixture.token,
-      bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined }),
+      withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined }),
     );
 
     await expect(
@@ -327,7 +318,7 @@ describe("public form Turnstile", () => {
       const fixture = await seedWorkspace(env.DB);
       const initialClient = clientFor(
         fixture.token,
-        bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined }),
+        withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined }),
       );
       const form = await initialClient.website.createForm({
         name: "Transition form",
@@ -353,7 +344,7 @@ describe("public form Turnstile", () => {
         { TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: undefined },
         { TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET: "secret-test" },
       ]) {
-        const incompleteClient = clientFor(fixture.token, bindings(incompleteConfiguration));
+        const incompleteClient = clientFor(fixture.token, withBindings(incompleteConfiguration));
         await expect(incompleteClient.website.updateForm(publishEnabled)).rejects.toMatchObject({
           code: "TURNSTILE_NOT_CONFIGURED",
           status: 422,
@@ -370,7 +361,7 @@ describe("public form Turnstile", () => {
 
       const configuredClient = clientFor(
         fixture.token,
-        bindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
+        withBindings({ TURNSTILE_SITE_KEY: "site-test", TURNSTILE_SECRET: "secret-test" }),
       );
       await expect(configuredClient.website.updateForm(publishEnabled)).resolves.toEqual({
         id: form.id,

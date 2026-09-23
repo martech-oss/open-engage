@@ -23,10 +23,10 @@ import { createAutomationExecutionDependencies } from "../src/runtime/automation
 import {
   expectJobAndEnrollment,
   graph,
-  queueStub,
   runtimeWithJobsQueue,
   seedAutomationJob,
 } from "./automation-recovery-test-support";
+import { queueDouble } from "./queue-double";
 
 const scoreCases = [
   { scope: "global", operation: "add", initialCategoryScore: undefined, score: 27, delta: 7 },
@@ -147,7 +147,7 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
           definition,
           job!,
           leaseId,
-          createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
+          createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())).nodes,
         );
 
       await execute();

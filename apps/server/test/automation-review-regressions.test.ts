@@ -31,7 +31,6 @@ import { createAutomationExecutionDependencies } from "../src/runtime/automation
 import {
   graph,
   seedAutomationJob,
-  queueStub,
   runtimeWithJobsQueue,
   expectJobAndEnrollment,
 } from "./automation-recovery-test-support";
@@ -227,7 +226,7 @@ it("resumes a successfully parked fifth-start delay and recovers already strande
   await processAutomationJob(
     seeded.jobId,
     "lease",
-    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
   );
   expect(
     await db.orm.select().from(automationJobs).where(eq(automationJobs.id, seeded.jobId)).get(),
@@ -259,7 +258,7 @@ it("resumes a successfully parked fifth-start delay and recovers already strande
   await processAutomationJob(
     seeded.jobId,
     claim!.leaseId,
-    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+    createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
   );
   await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "succeeded", "completed");
 });
