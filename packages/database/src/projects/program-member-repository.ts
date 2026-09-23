@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, isNull, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, isNull, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
 import {
@@ -22,7 +22,7 @@ import {
   contactEventOutbox,
   contactEventProjections,
 } from "../contacts/schema";
-import { escapeLike, nowIso } from "../shared/database-utils";
+import { likeContains, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { ProjectProgramRepository, ProgramError } from "./program-repository";
@@ -407,9 +407,9 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       input.statusId ? eq(projectMembers.statusId, input.statusId) : undefined,
       input.query
         ? or(
-            like(contacts.email, `%${escapeLike(input.query)}%`),
-            like(contacts.firstName, `%${escapeLike(input.query)}%`),
-            like(contacts.lastName, `%${escapeLike(input.query)}%`),
+            likeContains(contacts.email, input.query),
+            likeContains(contacts.firstName, input.query),
+            likeContains(contacts.lastName, input.query),
             eq(contacts.id, input.query),
           )
         : undefined,
