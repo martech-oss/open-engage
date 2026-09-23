@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { useUrlSearchDraft } from "@/hooks/use-url-search-draft";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 import {
@@ -13,21 +13,19 @@ import {
 } from "./company-api";
 import { companyListColumns } from "./company-columns";
 
-export function useCompaniesListController(initialQuery: string) {
+export function useCompaniesListController(urlQuery: string) {
   const { formatDate } = useWorkspaceFormatters();
   const navigate = useNavigate();
-  const { data: companies } = useSuspenseQuery(companiesQueryOptions(initialQuery));
+  const { data: companies } = useSuspenseQuery(companiesQueryOptions(urlQuery));
   const { data: enrichmentCapability } = useSuspenseQuery(
     companyEnrichmentCapabilityQueryOptions(),
   );
-  const [query, setQuery] = useState(initialQuery);
   const [createOpen, setCreateOpen] = useState(false);
   const createCompany = useCreateCompany();
 
-  useDebouncedSearch({
-    value: query,
+  const [query, setQuery] = useUrlSearchDraft({
+    value: urlQuery,
     onCommit: (value) => {
-      if (value === initialQuery) return;
       void navigate({ to: "/companies", search: { q: value }, replace: true });
     },
   });

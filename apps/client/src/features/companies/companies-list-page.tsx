@@ -10,8 +10,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { useCompaniesListController } from "./companies-list-controller";
 import { CompanyForm } from "./company-forms";
 
-export function CompaniesListPage({ initialQuery }: { initialQuery: string }): ReactNode {
-  const controller = useCompaniesListController(initialQuery);
+export function CompaniesListPage({ query }: { query: string }): ReactNode {
+  const controller = useCompaniesListController(query);
   return (
     <PageLayout
       title="会社"
