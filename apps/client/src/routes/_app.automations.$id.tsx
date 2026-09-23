@@ -1,7 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   automationDraftQueryOptions,
   formOptionsQueryOptions,
@@ -22,7 +21,6 @@ export const Route = createFileRoute("/_app/automations/$id")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: AutomationRoute,
 });
 

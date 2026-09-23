@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   companyEnrichmentCapabilityQueryOptions,
   companyQueryOptions,
@@ -15,7 +14,6 @@ export const Route = createFileRoute("/_app/companies/$id")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: CompanyDetailRoute,
 });
 

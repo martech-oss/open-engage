@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   type AssetSearch,
   assetSearchDefaults,
@@ -25,7 +24,6 @@ export const Route = createFileRoute("/_app/website/assets")({
     if (!bootstrap.workspace) throw new Error("Workspace bootstrap is required");
     return { capabilities: bootstrap.workspace.capabilities };
   },
-  ...routeStatusComponents,
   component: AssetsRoute,
 });
 

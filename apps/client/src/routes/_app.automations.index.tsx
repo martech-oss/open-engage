@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { automationsQueryOptions } from "@/features/automations/automation-api";
 import { AutomationsPage } from "@/features/automations/automation-list-page";
 import { validateAutomationListSearch } from "@/features/automations/automation-list-search";
@@ -15,6 +14,5 @@ export const Route = createFileRoute("/_app/automations/")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: AutomationsPage,
 });

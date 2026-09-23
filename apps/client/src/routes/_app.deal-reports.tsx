@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { DealReportsPage } from "@/features/deals/deal-pages/deal-reports-page";
 import {
   createReportSearchDefaults,
@@ -32,7 +31,6 @@ export const Route = createFileRoute("/_app/deal-reports")({
     await context.queryClient.ensureQueryData(dealReportQueryOptions(context.dealReportSearch));
     return undefined;
   },
-  ...routeStatusComponents,
   component: DealReportsRoute,
 });
 

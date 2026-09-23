@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   emailTemplateOptionsQueryOptions,
   emailVariablesListQueryOptions,
@@ -15,6 +14,5 @@ export const Route = createFileRoute("/_app/emails/templates")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: EmailTemplatesPage,
 });

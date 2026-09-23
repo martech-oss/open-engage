@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { projectsQueryOptions } from "@/features/projects/program-api";
 import {
   projectBriefOptionsQueryOptions,
@@ -29,6 +28,5 @@ export const Route = createFileRoute("/_app/projects/")({
       context.queryClient.ensureQueryData(projectBriefOptionsQueryOptions()),
     ]);
   },
-  ...routeStatusComponents,
   component: () => <ProjectsPage search={Route.useSearch()} />,
 });

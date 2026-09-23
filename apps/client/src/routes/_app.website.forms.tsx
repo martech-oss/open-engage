@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { SignupFormsPage } from "@/features/website/signup-forms-page";
 import { signupFormsQueryOptions } from "@/features/website/website-api";
 import { ensureAppBootstrap } from "@/lib/app-bootstrap";
@@ -14,7 +13,6 @@ export const Route = createFileRoute("/_app/website/forms")({
     if (!bootstrap.workspace) throw new Error("Workspace bootstrap is required");
     return { workspaceSlug: bootstrap.workspace.slug };
   },
-  ...routeStatusComponents,
   component: SignupFormsRoute,
 });
 

@@ -1,6 +1,5 @@
 import { createFileRoute, redirect, type SearchSchemaInput } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   createReportSearchDefaults,
   parseReportSearch,
@@ -38,7 +37,6 @@ export const Route = createFileRoute("/_app/reports")({
     await context.queryClient.ensureQueryData(reportWorkspaceQueryOptions(search));
     return undefined;
   },
-  ...routeStatusComponents,
   component: ReportsRoute,
 });
 

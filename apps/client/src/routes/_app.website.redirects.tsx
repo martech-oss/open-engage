@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { CustomRedirectsPage } from "@/features/website/custom-redirects-page";
 import {
   customRedirectsQueryOptions,
@@ -15,6 +14,5 @@ export const Route = createFileRoute("/_app/website/redirects")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: CustomRedirectsPage,
 });

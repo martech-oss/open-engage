@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   gradingCriteriaQueryOptions,
   scoringCategoriesQueryOptions,
@@ -15,6 +14,5 @@ export const Route = createFileRoute("/_app/scoring/grading")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: ScoringGradingPage,
 });

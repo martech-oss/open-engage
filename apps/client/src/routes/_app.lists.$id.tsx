@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { contactSearchDefaults, contactsQueryOptions } from "@/features/contacts/contact-api";
 import { ListDetailPage } from "@/features/segments/list-detail-page";
 import { segmentQueryOptions } from "@/features/segments/segment-api";
@@ -20,7 +19,6 @@ export const Route = createFileRoute("/_app/lists/$id")({
     );
     return undefined;
   },
-  ...routeStatusComponents,
   component: ListDetailRoute,
 });
 
