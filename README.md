@@ -223,7 +223,12 @@ React Queryのキャッシュを温め、コンポーネント側は`Route.useLo
 
 ```bash
 pnpm install
+pnpm cf:types   # Workerの型（worker-configuration.d.ts）を生成
 ```
+
+`worker-configuration.d.ts`はWrangler設定から生成するためGitでは管理しません。
+`pnpm check`・`pnpm typecheck`・`pnpm lint`は自動で生成しますが、エディタの型補完には
+一度`pnpm cf:types`を実行してください。Wrangler設定を変えたときも再実行します。
 
 ### 2. 開発用Secret
 
