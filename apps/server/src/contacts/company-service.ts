@@ -32,6 +32,16 @@ export function listCompanies(
   return new CompanyRepository(database, workspace).listCompanies(input);
 }
 
+/** Contacts whose company-based segment memberships a change to this company affects. */
+export async function listCompanyContactIds(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  companyId: string,
+): Promise<string[]> {
+  const contacts = await new CompanyRepository(database, workspace).listCompanyContacts(companyId);
+  return contacts.map((contact) => contact.id);
+}
+
 export async function getCompanyDetail(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,

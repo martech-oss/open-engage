@@ -14,3 +14,15 @@ export async function enqueueSegmentContactReconciliation(
     })),
   );
 }
+
+/** Requeues segment membership for the contacts a request's write touched. */
+export function requeueContactSegments(
+  context: { env: { JOBS_QUEUE: JobsQueue }; workspace: { workspaceId: string } },
+  contactIds: readonly string[],
+): Promise<void> {
+  return enqueueSegmentContactReconciliation(
+    context.env.JOBS_QUEUE,
+    context.workspace.workspaceId,
+    contactIds,
+  );
+}

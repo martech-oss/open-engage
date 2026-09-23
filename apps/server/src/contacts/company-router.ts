@@ -3,13 +3,14 @@ import { ack } from "@openengage/orpc";
 
 import { rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
-import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import { requeueContactSegments } from "../segments/reconciliation-queue";
 import { enrichCompany, isCompanyEnrichmentEnabled } from "./company-enrichment-service";
 import {
   CompanyConflictError,
   assignCompanyContact,
   createCompany,
   getCompanyDetail,
+  listCompanyContactIds,
   listCompanies,
   removeCompanyContact,
   updateCompany,
@@ -89,11 +90,9 @@ export const updateCompanyProcedure = authed.companies.update.handler(
     try {
       const company = await updateCompany(context.database, context.workspace, id, changes);
       if (!company) throw errors.COMPANY_NOT_FOUND();
-      const detail = await getCompanyDetail(context.database, context.workspace, id);
-      await enqueueSegmentContactReconciliation(
-        context.env.JOBS_QUEUE,
-        context.workspace.workspaceId,
-        detail?.contacts.map((contact) => contact.id) ?? [],
+      await requeueContactSegments(
+        context,
+        await listCompanyContactIds(context.database, context.workspace, id),
       );
       return company;
     } catch (error) {
@@ -108,11 +107,7 @@ export const assignCompanyContactProcedure = authed.companies.assignContact.hand
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const assigned = await assignCompanyContact(context.database, context.workspace, input);
     if (!assigned) throw errors.COMPANY_CONTACT_NOT_FOUND();
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.contactId],
-    );
+    await requeueContactSegments(context, [input.contactId]);
     return ack;
   },
 );
@@ -122,11 +117,7 @@ export const removeCompanyContactProcedure = authed.companies.removeContact.hand
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const removed = await removeCompanyContact(context.database, context.workspace, input);
     if (!removed) throw errors.COMPANY_CONTACT_NOT_FOUND();
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.contactId],
-    );
+    await requeueContactSegments(context, [input.contactId]);
     return ack;
   },
 );
