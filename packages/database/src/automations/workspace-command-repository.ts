@@ -6,14 +6,13 @@ import {
   type AutomationExecutionSnapshot,
 } from "@openengage/core/automations";
 
-import { conditionalAudit } from "../projects/project-brief-persistence";
 import {
   approvedProjectLinkPrecondition,
+  approvedProjectLinkStatements,
   authenticatedProjectActorId,
   ProjectBriefLinkConflictError,
   type ApprovedProjectLink,
 } from "../projects/project-resource-guard";
-import { projectBriefs, projectItems } from "../projects/schema";
 import { changedExactlyOne, didChange, nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
@@ -83,47 +82,14 @@ export class AutomationCommandRepository extends WorkspaceRepository {
             ${input.timezone}, ${versionValues.graph}, NULL, ${now}, NULL, '{}', NULL
           WHERE ${exists(precondition)}`,
         ),
-        orm.insert(projectItems).select(
-          sql`SELECT
-            ${this.context.workspaceId}, ${link.projectId}, 'automation', ${id},
-            ${link.briefRevision}, ${link.addedByUserId}, ${now}
-          WHERE ${exists(precondition)}`,
-        ),
-        conditionalAudit(
+        ...approvedProjectLinkStatements(
           orm,
           this.context,
-          link.addedByUserId,
+          link,
+          precondition,
           { action: "automation.create", resourceType: "automation", resourceId: id },
-          precondition,
           now,
         ),
-        conditionalAudit(
-          orm,
-          this.context,
-          link.addedByUserId,
-          {
-            action: "project.item.add",
-            resourceType: "project",
-            resourceId: link.projectId,
-            metadata: {
-              resourceType: "automation",
-              resourceId: id,
-              briefRevision: link.briefRevision,
-            },
-          },
-          precondition,
-          now,
-        ),
-        orm
-          .update(projectBriefs)
-          .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
-          .where(
-            and(
-              eq(projectBriefs.workspaceId, this.context.workspaceId),
-              eq(projectBriefs.projectId, link.projectId),
-              exists(precondition),
-            ),
-          ),
       ]);
       if (created.meta.changes !== 1) throw new ProjectBriefLinkConflictError();
     } else {

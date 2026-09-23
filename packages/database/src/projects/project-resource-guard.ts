@@ -1,13 +1,21 @@
-import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNull, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+
+import type { WorkspaceContext } from "@openengage/core/shared";
 
 import { member } from "../auth/schema";
 import type { Database } from "../client";
-import { projectBriefs, projects } from "./schema";
+import { conditionalAudit } from "./project-brief-persistence";
+import { projectBriefs, projectItems, projects } from "./schema";
 
 export interface ApprovedProjectLink {
   projectId: string;
   briefRevision: number;
   addedByUserId: string;
+}
+
+export interface ProjectLinkedResource {
+  resourceType: string;
+  resourceId: string;
 }
 
 export class ProjectBriefLinkConflictError extends Error {
@@ -80,4 +88,111 @@ export function approvedProjectLinkPrecondition(
         ),
       ),
     );
+}
+
+/** Project items for resources linked under an approved brief, inserted only while `precondition` holds. */
+export function insertApprovedProjectItems(
+  orm: Database,
+  workspaceId: string,
+  link: ApprovedProjectLink,
+  resources: readonly ProjectLinkedResource[],
+  precondition: SQLWrapper,
+  now: string,
+) {
+  return orm.insert(projectItems).select(
+    sql`SELECT
+      ${workspaceId},
+      ${link.projectId},
+      json_extract(resource_row.value, '$.resourceType'),
+      json_extract(resource_row.value, '$.resourceId'),
+      ${link.briefRevision}, ${link.addedByUserId}, ${now}
+    FROM json_each(${JSON.stringify(resources)}) AS resource_row
+    WHERE ${exists(precondition)}`,
+  );
+}
+
+/** Bumps the brief's rowVersion after a link change, only while every guard holds. */
+export function bumpProjectBriefRowVersion(
+  orm: Database,
+  workspaceId: string,
+  projectId: string,
+  guards: readonly SQL[],
+  now: string,
+) {
+  return orm
+    .update(projectBriefs)
+    .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
+    .where(
+      and(
+        eq(projectBriefs.workspaceId, workspaceId),
+        eq(projectBriefs.projectId, projectId),
+        ...guards,
+      ),
+    );
+}
+
+/**
+ * Everything a create under an approved brief writes after the resource itself:
+ * the project items, the create and `project.item.add` audits, and the brief
+ * rowVersion bump, each guarded by `precondition` in the caller's batch.
+ */
+export function approvedProjectLinkStatements(
+  orm: Database,
+  context: Pick<WorkspaceContext, "workspaceId"> & Partial<Pick<WorkspaceContext, "apiKeyId">>,
+  link: ApprovedProjectLink,
+  precondition: SQLWrapper,
+  created: {
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    /** Linked resources; defaults to the created resource alone. */
+    items?: readonly ProjectLinkedResource[];
+    /** `project.item.add` audit metadata; defaults to the created resource and brief revision. */
+    linkMetadata?: Record<string, unknown>;
+  },
+  now: string,
+) {
+  const { action, resourceType, resourceId } = created;
+  return [
+    insertApprovedProjectItems(
+      orm,
+      context.workspaceId,
+      link,
+      created.items ?? [{ resourceType, resourceId }],
+      precondition,
+      now,
+    ),
+    conditionalAudit(
+      orm,
+      context,
+      link.addedByUserId,
+      { action, resourceType, resourceId },
+      precondition,
+      now,
+    ),
+    conditionalAudit(
+      orm,
+      context,
+      link.addedByUserId,
+      {
+        action: "project.item.add",
+        resourceType: "project",
+        resourceId: link.projectId,
+        metadata: created.linkMetadata ?? {
+          resourceType,
+          resourceId,
+          briefRevision: link.briefRevision,
+        },
+      },
+      precondition,
+      now,
+    ),
+    bumpProjectBriefRowVersion(
+      orm,
+      context.workspaceId,
+      link.projectId,
+      [exists(precondition)],
+      now,
+    ),
+  ];
 }
