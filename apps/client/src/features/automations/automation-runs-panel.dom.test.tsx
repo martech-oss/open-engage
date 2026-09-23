@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { expect, it } from "vitest";
 
 import { AutomationRunProgress } from "./automation-runs-panel";
-afterEach(cleanup);
 it("distinguishes enrollment completion from flow completion and exposes failure detail", () => {
   render(
     <AutomationRunProgress

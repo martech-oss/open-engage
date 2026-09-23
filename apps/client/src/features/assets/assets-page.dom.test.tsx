@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -157,7 +157,6 @@ vi.mock("./asset-api", async (importOriginal) => {
 });
 
 afterEach(() => {
-  cleanup();
   vi.clearAllMocks();
 });
 

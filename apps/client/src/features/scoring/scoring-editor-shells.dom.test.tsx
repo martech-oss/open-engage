@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DataTableColumn } from "@/components/data-table";
 
@@ -52,10 +52,6 @@ vi.mock("./scoring-api", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-});
-
-afterEach(() => {
-  cleanup();
 });
 
 describe("scoring editor composition sessions", () => {

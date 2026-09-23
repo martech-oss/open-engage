@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 
 import {
   segmentConditionSchema,
@@ -10,7 +10,6 @@ import {
 
 import { SegmentConditionEditor } from "./segment-condition-editor";
 
-afterEach(cleanup);
 it("saves and reloads the chosen program status version without replacing it with another meaning", () => {
   const catalog: SegmentGenerationCatalog = {
     tags: [],

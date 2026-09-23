@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 
 import {
   PROJECT_PROGRAM_TEMPLATES,
@@ -8,7 +8,6 @@ import {
 } from "@openengage/core/projects";
 
 import * as Editor from "./program-definition-editor";
-afterEach(cleanup);
 it("keeps definition edits distinct from confirmed publication and offers status graph fields", () => {
   expect(Editor.ProgramDefinitionEditor).toBeTypeOf("function");
   const save = vi.fn<(definition: ProjectProgramDefinition) => void>();

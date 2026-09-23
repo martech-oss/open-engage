@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ContactSales } from "./contact-sales";
@@ -50,7 +50,6 @@ vi.mock("./sales-api", () => ({
   useSetTaskStatus: () => ({ mutate: () => undefined }),
 }));
 afterEach(() => {
-  cleanup();
   vi.clearAllMocks();
 });
 it("reserves group assignment for handoff and requires a personal task assignee selection", async () => {

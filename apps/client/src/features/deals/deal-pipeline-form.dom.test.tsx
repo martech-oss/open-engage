@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { DealPipelineForm } from "./deal-pipeline-form";
 
@@ -10,8 +10,6 @@ vi.mock("./deal-api", () => ({
   useCreateDealPipeline: () => ({ mutateAsync: vi.fn<(input: unknown) => Promise<unknown>>() }),
   useUpdateDealPipeline: () => ({ mutateAsync: vi.fn<(input: unknown) => Promise<unknown>>() }),
 }));
-
-afterEach(cleanup);
 
 describe("DealPipelineForm", () => {
   it("keeps the current default checked and explains how to change it", () => {

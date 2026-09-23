@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 import type { AutomationGenerationResult } from "@openengage/core/automations";
 
@@ -23,8 +23,6 @@ vi.mock("@/components/ui/sheet", () => ({
   SheetTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 beforeEach(() => generate.mutateAsync.mockReset());
-afterEach(cleanup);
-
 function props(): AutomationAiSheetProps {
   return {
     open: true,

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { PROJECT_PROGRAM_TEMPLATES, type ProjectProgram } from "@openengage/core/projects";
@@ -34,7 +34,6 @@ vi.mock("@/features/contacts/contact-api", () => ({
 }));
 import { ProgramMemberRegistration } from "./program-member-registration";
 afterEach(() => {
-  cleanup();
   submit.mockClear();
 });
 it("shows accepted job progress and row errors and keeps the request key on retries", async () => {

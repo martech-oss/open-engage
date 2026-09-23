@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { WorkspaceTimeProvider } from "@/lib/workspace-time";
@@ -114,7 +114,6 @@ beforeEach(() => {
   state.extraVariables = [];
 });
 afterEach(() => {
-  cleanup();
   state.saved = [];
   state.resources = [];
   state.summary = null;

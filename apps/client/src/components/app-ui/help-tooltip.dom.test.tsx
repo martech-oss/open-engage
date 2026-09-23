@@ -1,11 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
 import { HelpTooltip } from "./help-tooltip";
-
-afterEach(cleanup);
 
 it("keeps explanations hidden until keyboard focus and closes with Escape without moving focus", async () => {
   const user = userEvent.setup();

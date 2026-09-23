@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useUrlSearchDraft } from "./use-url-search-draft";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
-  cleanup();
   vi.useRealTimers();
 });
 

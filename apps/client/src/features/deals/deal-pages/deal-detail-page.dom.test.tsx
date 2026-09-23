@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DealDetailData, DealOptions } from "../deal-api";
 import type * as DealApiModule from "../deal-api";
@@ -134,8 +134,6 @@ beforeEach(() => {
   for (const mutation of Object.values(mutations))
     mutation.mutateAsync.mockReset().mockResolvedValue();
 });
-
-afterEach(cleanup);
 
 describe("DealDetailPage actions", () => {
   it("keeps stage context and submits status and task transitions", async () => {

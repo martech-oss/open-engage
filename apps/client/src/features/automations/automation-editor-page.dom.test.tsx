@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationDefinition, AutomationDraft } from "@openengage/core/automations";
 
@@ -56,8 +56,6 @@ vi.mock("./automation-flow-canvas", () => ({
 }));
 
 beforeEach(() => vi.clearAllMocks());
-afterEach(cleanup);
-
 function definition(source: "batch" | "contact_created"): AutomationDefinition {
   return {
     name: "Run capability",

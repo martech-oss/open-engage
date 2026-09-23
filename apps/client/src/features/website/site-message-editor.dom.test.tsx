@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { siteMessageSchema } from "@openengage/core/web";
 
 import { SiteMessageEditorDialog } from "./site-message-editor-dialog";
-
-afterEach(cleanup);
 
 describe("site message editor audience and frequency", () => {
   it("submits all/page selections in the actual create payload", async () => {

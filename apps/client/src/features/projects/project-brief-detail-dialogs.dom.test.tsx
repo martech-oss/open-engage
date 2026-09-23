@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectResourceType } from "@openengage/core/projects";
 
 import { LinkProjectResourceDialog } from "./project-brief-detail-dialogs";
-
-afterEach(cleanup);
 
 describe("LinkProjectResourceDialog", () => {
   it("offers every supported project resource type including redirects", () => {

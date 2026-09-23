@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationRow } from "@openengage/core/automations";
 
@@ -96,8 +96,6 @@ beforeEach(() => {
   doubles.search = {};
   vi.clearAllMocks();
 });
-afterEach(cleanup);
-
 describe("automation monitoring list", () => {
   it("restores combined search and status, and carries them into the editor link", () => {
     doubles.search = { q: "welcome", status: "paused" };

@@ -1,11 +1,9 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
 import { WorkspaceTimeProvider, useWorkspaceFormatters } from "./workspace-time";
-
-afterEach(cleanup);
 
 function TimestampProbe() {
   const { formatDateTime, formatRelativeTime, fromDateTimeLocal } = useWorkspaceFormatters();

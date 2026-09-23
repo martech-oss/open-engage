@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const { search } = vi.hoisted(() => ({
   search: vi.fn<(query: string) => Promise<unknown>>(),
@@ -19,8 +19,6 @@ vi.mock("./contact-api", () => ({
 }));
 
 import { ContactPickerField } from "./contact-picker";
-
-afterEach(cleanup);
 
 function contact(id: string, email: string) {
   return { id, email, firstName: null, lastName: null };

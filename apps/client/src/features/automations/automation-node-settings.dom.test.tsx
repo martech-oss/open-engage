@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AutomationEdge, AutomationNode } from "@openengage/core/automations";
 
@@ -40,8 +40,6 @@ const options: AutomationOptions = {
     { id: "segment-b", name: "Segment B" },
   ],
 };
-
-afterEach(cleanup);
 
 describe("NodeSettings patches", () => {
   it.each<{

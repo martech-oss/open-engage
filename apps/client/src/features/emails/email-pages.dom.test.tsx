@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { EmailTemplatesPage } from "./email-pages";
 
@@ -33,7 +33,6 @@ vi.mock("./email-forms", () => ({
     ) : null,
   VariableForm: () => null,
 }));
-afterEach(cleanup);
 it("offers manual and AI creation from one keyboard-accessible entry and resets each form session", async () => {
   const user = userEvent.setup();
   render(<EmailTemplatesPage />);
