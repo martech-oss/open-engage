@@ -17,6 +17,11 @@ const doubles = vi.hoisted(() => ({
   addSegment: vi.fn<(contactId: string, resourceId: string) => Promise<unknown>>(),
   removeSegment: vi.fn<(contactId: string, resourceId: string) => Promise<unknown>>(),
   invalidateOptions: vi.fn<(queryClient: QueryClient) => Promise<void>>(),
+  invalidateSegment: vi.fn<(queryClient: QueryClient, segmentId?: string) => Promise<void>>(),
+}));
+
+vi.mock("@/features/segments/segment-api", () => ({
+  invalidateSegmentQueries: doubles.invalidateSegment,
 }));
 
 vi.mock("./contact-api", () => ({
@@ -38,6 +43,7 @@ vi.mock("./contact-api", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   doubles.invalidateOptions.mockResolvedValue();
+  doubles.invalidateSegment.mockResolvedValue();
 });
 
 describe("useContactDrawerController", () => {
@@ -57,6 +63,20 @@ describe("useContactDrawerController", () => {
     expect(onChanged).toHaveBeenCalledOnce();
     expect(result.current.error).toBe("");
     expect(result.current.activeTab).toBe("activity");
+  });
+
+  it.each([
+    ["addSegment", doubles.addSegment],
+    ["removeSegment", doubles.removeSegment],
+  ] as const)("refreshes the list's own reads after %s", async (action, call) => {
+    call.mockResolvedValue({});
+    const onChanged = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const { result, queryClient } = renderController("contact-1", onChanged);
+
+    await act(() => result.current[action]("list-1"));
+
+    expect(call).toHaveBeenCalledWith("contact-1", "list-1");
+    expect(doubles.invalidateSegment).toHaveBeenCalledWith(queryClient, "list-1");
   });
 
   it("exposes a mutation failure without refreshing cached reads", async () => {
