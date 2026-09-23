@@ -24,7 +24,7 @@ import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared
 
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
-import { didChange, ensureLoaded, nowIso } from "../shared/database-utils";
+import { didChange, ensureLoaded, nowIso, runBatch } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
 import type { CursorPage } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
@@ -228,7 +228,7 @@ export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
       }),
     );
 
-    await orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    await runBatch(orm, statements);
     return {
       contact: ensureLoaded(await this.getContact(id), "Created contact"),
       eventId,

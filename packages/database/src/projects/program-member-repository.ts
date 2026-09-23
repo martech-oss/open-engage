@@ -17,7 +17,7 @@ import { runningActionLeaseExists } from "../automations/action-authority";
 import { automationEnrollments, automationJobs } from "../automations/schema";
 import { contactEventStatements } from "../contacts/event-repository";
 import { contacts } from "../contacts/schema";
-import { likeContains, nowIso } from "../shared/database-utils";
+import { likeContains, nowIso, runBatch } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { ProjectProgramRepository, ProgramError } from "./program-repository";
@@ -360,9 +360,7 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       const prepared = await this.prepareMutation(input);
       if (!prepared.statements.length) return prepared.result;
       try {
-        await this.database.orm.batch(
-          prepared.statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
-        );
+        await runBatch(this.database.orm, prepared.statements);
         return prepared.result;
       } catch (error) {
         if (!isProgramWriteConflict(error)) throw error;
