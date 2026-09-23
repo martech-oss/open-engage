@@ -29,18 +29,9 @@ import { decodeJson } from "../shared/json-codec";
 import type { CursorPage } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
-import { contactEventProjectionRows } from "./event-repository";
+import { contactEventStatements } from "./event-repository";
 import { buildContactFilterPredicate } from "./filter-predicate";
-import {
-  companies,
-  companyContacts,
-  contactEventOutbox,
-  contactEventProjections,
-  contactEvents,
-  contacts,
-  contactTags,
-  tags,
-} from "./schema";
+import { companies, companyContacts, contacts, contactTags, tags } from "./schema";
 
 type ContactRow = typeof contacts.$inferSelect;
 
@@ -223,27 +214,18 @@ export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
         }),
       );
     }
-    const event = {
-      id: eventId,
-      workspaceId,
-      contactId: id,
-      visitorId: null,
-      type: "contact_created",
-      resourceType: "contact",
-      resourceId: id,
-      properties: JSON.stringify({}),
-      occurredAt: now,
-      createdAt: now,
-    };
     statements.push(
-      orm.insert(contactEvents).values(event),
-      orm.insert(contactEventOutbox).values({
-        eventId,
+      ...contactEventStatements(orm, {
+        id: eventId,
         workspaceId,
-        status: "pending",
+        contactId: id,
+        type: "contact_created",
+        resourceType: "contact",
+        resourceId: id,
+        properties: {},
+        occurredAt: now,
         createdAt: now,
       }),
-      orm.insert(contactEventProjections).values(contactEventProjectionRows(event)),
     );
 
     await orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);

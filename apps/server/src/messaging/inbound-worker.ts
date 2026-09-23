@@ -93,7 +93,7 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     providerEventId,
     deliveryEventMetadata: JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
     contactEventId,
-    contactEventProperties: JSON.stringify({ inboundId }),
+    contactEventProperties: { inboundId },
     receivedAt,
   });
   await processPendingPublicFormEvent(database, contactEventId, env.JOBS_QUEUE);

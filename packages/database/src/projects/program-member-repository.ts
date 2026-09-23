@@ -15,13 +15,8 @@ import {
 
 import { runningActionLeaseExists } from "../automations/action-authority";
 import { automationEnrollments, automationJobs } from "../automations/schema";
-import { contactEventProjectionRows } from "../contacts/event-repository";
-import {
-  contacts,
-  contactEvents,
-  contactEventOutbox,
-  contactEventProjections,
-} from "../contacts/schema";
+import { contactEventStatements } from "../contacts/event-repository";
+import { contacts } from "../contacts/schema";
 import { likeContains, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
@@ -332,14 +327,14 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       for (let i = 0; i < eventTypes.length; i++) {
         const id = eventIds[i]!;
         statements.push(
-          orm.insert(contactEvents).values({
+          ...contactEventStatements(orm, {
             id,
             workspaceId: this.context.workspaceId,
             contactId: input.contactId,
             type: eventTypes[i]!,
             resourceType: "project",
             resourceId: input.projectId,
-            properties: JSON.stringify({
+            properties: {
               projectId: input.projectId,
               memberId: member.id,
               definitionVersion,
@@ -348,23 +343,10 @@ export class ProjectMemberRepository extends WorkspaceRepository {
               firstSuccessAt: member.firstSuccessAt,
               transitionId,
               mode: input.mode ?? "progress",
-            }),
+            },
             occurredAt,
             createdAt: occurredAt,
           }),
-          orm.insert(contactEventOutbox).values({
-            eventId: id,
-            workspaceId: this.context.workspaceId,
-            status: "pending",
-            createdAt: occurredAt,
-          }),
-          orm.insert(contactEventProjections).values(
-            contactEventProjectionRows({
-              id,
-              workspaceId: this.context.workspaceId,
-              createdAt: occurredAt,
-            }),
-          ),
         );
       }
     }

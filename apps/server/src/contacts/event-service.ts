@@ -1,6 +1,7 @@
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   ContactEventRepository,
+  HISTORY_REPLAY_PROJECTIONS,
   type ContactEventProjection,
   type ContactEventRecord,
 } from "@openengage/database/contacts";
@@ -106,10 +107,7 @@ export class ContactEventProcessor {
 
       let enrollmentCount = 0;
       for (const projection of await repository.pendingProjections(event.id)) {
-        if (
-          event.replayMode === "history" &&
-          !["scoring", "grade", "campaign"].includes(projection)
-        ) {
+        if (event.replayMode === "history" && !HISTORY_REPLAY_PROJECTIONS.includes(projection)) {
           await repository.finishProjection(
             event.id,
             leaseId,
