@@ -14,8 +14,13 @@ import {
 } from "@openengage/core/segments";
 import { normalizeSlug } from "@openengage/core/shared";
 
-import { authedErrors, briefContextErrors, workspaceErrors } from "../shared/errors";
-import { ackSchema } from "../shared/schemas";
+import {
+  aiGenerationErrors,
+  authedErrors,
+  briefContextErrors,
+  workspaceErrors,
+} from "../shared/errors";
+import { ackSchema, idInput } from "../shared/schemas";
 
 export const segmentsContract = {
   list: oc
@@ -39,7 +44,7 @@ export const segmentsContract = {
       ...workspaceErrors,
       SEGMENT_NOT_FOUND: { status: 404, message: "セグメントが見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(segmentRowSchema),
   create: oc
     .route({ method: "POST", path: "/segments", successStatus: 201 })
@@ -97,9 +102,7 @@ export const segmentsContract = {
     .route({ method: "POST", path: "/segments/generate" })
     .errors({
       ...authedErrors,
-      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なセグメントを生成できませんでした" },
-      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
-      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...aiGenerationErrors("AIが有効なセグメントを生成できませんでした"),
       ...briefContextErrors,
     })
     .input(generateSegmentInputSchema)
@@ -110,7 +113,7 @@ export const segmentsContract = {
       ...authedErrors,
       SEGMENT_NOT_FOUND: { status: 404, message: "セグメントが見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(ackSchema),
   preview: oc
     .route({ method: "POST", path: "/segments/preview" })

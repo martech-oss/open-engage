@@ -18,7 +18,7 @@ import {
   subscriptionTopicOptionSchema,
 } from "@openengage/core/messaging";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import { aiGenerationErrors, authedErrors, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput, notFoundError } from "../shared/schemas";
 
 const base = authedErrors;
@@ -45,9 +45,7 @@ export const emailsContract = {
     .route({ method: "POST", path: "/emails/templates/generate" })
     .errors({
       ...base,
-      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なメールを生成できませんでした" },
-      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
-      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...aiGenerationErrors("AIが有効なメールを生成できませんでした"),
     })
     .input(generateEmailInputSchema)
     .output(emailGenerationResultSchema),

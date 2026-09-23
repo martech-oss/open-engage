@@ -10,12 +10,8 @@ import {
   contactUpdateSchema,
 } from "@openengage/core/contacts";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import { authedErrors, contactNotFoundError, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
-
-const contactNotFound = {
-  CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
-} as const;
 
 const contactCreateCommandSchema = contactCreateSchema.and(
   z.object({
@@ -33,19 +29,19 @@ export const contactsContract = {
     .output(contactListResultSchema),
   get: oc
     .route({ method: "GET", path: "/contacts/{id}" })
-    .errors({ ...workspaceErrors, ...contactNotFound })
+    .errors({ ...workspaceErrors, ...contactNotFoundError })
     .input(idInput)
     .output(contactSchema),
   timeline: oc
     .route({ method: "GET", path: "/contacts/{id}/timeline" })
-    .errors({ ...workspaceErrors, ...contactNotFound })
+    .errors({ ...workspaceErrors, ...contactNotFoundError })
     .input(idInput)
     .output(z.array(contactTimelineEventSchema)),
   recordEvent: oc
     .route({ method: "POST", path: "/contacts/{id}/events", successStatus: 202 })
     .errors({
       ...authedErrors,
-      ...contactNotFound,
+      ...contactNotFoundError,
     })
     .input(
       z.object({
@@ -77,7 +73,7 @@ export const contactsContract = {
     .route({ method: "PATCH", path: "/contacts/{id}" })
     .errors({
       ...authedErrors,
-      CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
+      ...contactNotFoundError,
       CONTACT_ARCHIVED: {
         status: 409,
         message: "アーカイブ済みの連絡先は編集できません",
@@ -87,10 +83,7 @@ export const contactsContract = {
     .output(contactSchema),
   archive: oc
     .route({ method: "POST", path: "/contacts/{id}/archive" })
-    .errors({
-      ...authedErrors,
-      CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
-    })
+    .errors({ ...authedErrors, ...contactNotFoundError })
     .input(idInput)
     .output(ackSchema),
 };

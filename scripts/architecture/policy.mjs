@@ -53,6 +53,8 @@ export const sharedErrorMessages = [
   "現在の状態ではこの操作を実行できません",
   "施策ブリーフが更新されています。最新の内容を再読み込みしてください",
   "担当者または承認者が無効です",
+  "AI生成を現在利用できません",
+  "AI生成がタイムアウトしました",
 ];
 
 export const routeSsrFalseAllowlist = new Set([]);

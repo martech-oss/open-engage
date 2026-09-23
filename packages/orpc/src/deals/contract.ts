@@ -20,11 +20,12 @@ import {
   dealTaskListItemSchema,
   dealTaskSchema,
   dealTaskUpdateSchema,
+  dealMoveSchema,
   dealUpdateSchema,
 } from "@openengage/core/deals";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
-import { ackSchema } from "../shared/schemas";
+import { ackSchema, idInput } from "../shared/schemas";
 
 const dealNotFound = { DEAL_NOT_FOUND: { status: 404, message: "商談が見つかりません" } } as const;
 const taskNotFound = {
@@ -62,7 +63,7 @@ export const dealsContract = {
   deleteAssignmentGroup: oc
     .route({ method: "DELETE", path: "/sales/groups/{id}" })
     .errors(base)
-    .input(z.object({ id: z.string() }))
+    .input(idInput)
     .output(ackSchema),
   notifications: oc
     .route({ method: "GET", path: "/sales/notifications" })
@@ -72,7 +73,7 @@ export const dealsContract = {
   readNotification: oc
     .route({ method: "POST", path: "/sales/notifications/{id}/read" })
     .errors(base)
-    .input(z.object({ id: z.string() }))
+    .input(idInput)
     .output(ackSchema),
   contactTasks: oc
     .route({ method: "GET", path: "/contacts/{contactId}/tasks" })
@@ -164,12 +165,12 @@ export const dealsContract = {
         message: "このパイプラインに商談が残っているためアーカイブできません",
       },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(ackSchema),
   get: oc
     .route({ method: "GET", path: "/deals/{id}" })
     .errors({ ...workspaceErrors, ...dealNotFound })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(dealDetailDataSchema),
   create: oc
     .route({ method: "POST", path: "/deals", successStatus: 201 })
@@ -184,12 +185,12 @@ export const dealsContract = {
   move: oc
     .route({ method: "POST", path: "/deals/{id}/move" })
     .errors({ ...base, ...dealNotFound, ...badStage })
-    .input(z.object({ id: z.string().min(1), stageId: z.string().min(1) }))
+    .input(dealMoveSchema.extend({ id: z.string().min(1) }))
     .output(dealSummarySchema),
   archive: oc
     .route({ method: "POST", path: "/deals/{id}/archive" })
     .errors({ ...base, ...dealNotFound })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(ackSchema),
   createTask: oc
     .route({ method: "POST", path: "/deals/{dealId}/tasks", successStatus: 201 })

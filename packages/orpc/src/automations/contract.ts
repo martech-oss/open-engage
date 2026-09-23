@@ -14,7 +14,12 @@ import {
 } from "@openengage/core/automations";
 import { projectBriefReferenceSchema } from "@openengage/core/projects";
 
-import { authedErrors, briefContextErrors, workspaceErrors } from "../shared/errors";
+import {
+  aiGenerationErrors,
+  authedErrors,
+  briefContextErrors,
+  workspaceErrors,
+} from "../shared/errors";
 import { ackSchema, idInput } from "../shared/schemas";
 import { automationExecutionContract } from "./execution-contract";
 
@@ -33,9 +38,7 @@ export const automationsContract = {
     .route({ method: "POST", path: "/automations/generate" })
     .errors({
       ...authedErrors,
-      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なフローを生成できませんでした" },
-      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
-      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...aiGenerationErrors("AIが有効なフローを生成できませんでした"),
       ...briefContextErrors,
     })
     .input(generateAutomationInputSchema)
@@ -44,9 +47,7 @@ export const automationsContract = {
     .route({ method: "POST", path: "/automations/sequences/generate" })
     .errors({
       ...authedErrors,
-      AI_GENERATION_FAILED: { status: 502, message: "AIが有効なシーケンスを生成できませんでした" },
-      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
-      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...aiGenerationErrors("AIが有効なシーケンスを生成できませんでした"),
       ...briefContextErrors,
     })
     .input(generateEmailSequenceInputSchema)
