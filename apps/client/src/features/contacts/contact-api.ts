@@ -138,6 +138,23 @@ export function contactsQueryOptions(search: ContactSearch, cursor?: string) {
   });
 }
 
+/** Page size for "add an existing contact" pickers; the search narrows beyond it. */
+export const CONTACT_PICKER_LIMIT = 50;
+
+/** Active contacts matching `query`, searched on the server so no contact is out of reach. */
+export function contactPickerQueryOptions(query: string) {
+  return orpcQuery.contacts.list.queryOptions({
+    input: {
+      ...(query ? { query } : {}),
+      limit: CONTACT_PICKER_LIMIT,
+      status: "active",
+      sort: "name",
+      direction: "asc",
+    },
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function contactOptionsQueryOptions() {
   return orpcQuery.contacts.options.queryOptions();
 }

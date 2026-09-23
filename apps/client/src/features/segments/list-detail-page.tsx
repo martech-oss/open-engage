@@ -4,8 +4,8 @@ import { ArrowLeft, Pencil, Plus, UserMinus, Users } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, FormNativeSelect, FormSelectOption, PageLayout } from "@/components/app-ui";
-import { AppDialog, FormDialog } from "@/components/app-ui/dialogs";
+import { PageLayout } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,25 +18,21 @@ import {
   invalidateContactsList,
   removeContactFromSegment,
 } from "@/features/contacts/contact-api";
-import { contactName, contactOptionLabel } from "@/features/contacts/contact-bits";
+import { contactName } from "@/features/contacts/contact-bits";
+import { ContactPickerField } from "@/features/contacts/contact-picker";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";
 
-import {
-  invalidateSegmentQueries,
-  listMemberOptionsQueryOptions,
-  segmentQueryOptions,
-} from "./segment-api";
+import { invalidateSegmentQueries, segmentQueryOptions } from "./segment-api";
 import { SegmentFormDialog } from "./segment-form-dialog";
 
 export function ListDetailPage({ listId }: { listId: string }): ReactNode {
   const { formatDate } = useWorkspaceFormatters();
   const queryClient = useQueryClient();
   const { data: list } = useSuspenseQuery(segmentQueryOptions(listId));
-  const { data: contactOptions } = useSuspenseQuery(listMemberOptionsQueryOptions());
   const [editOpen, setEditOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const memberSearch = {
@@ -58,7 +54,6 @@ export function ListDetailPage({ listId }: { listId: string }): ReactNode {
   const firstRow = members.length === 0 ? 0 : pageIndex * CONTACTS_PAGE_SIZE + 1;
   const lastRow = pageIndex * CONTACTS_PAGE_SIZE + members.length;
   const memberIds = new Set(members.map((member) => member.id));
-  const availableContacts = contactOptions.items.filter((contact) => !memberIds.has(contact.id));
 
   async function refreshMembers(): Promise<void> {
     await Promise.all([
@@ -216,7 +211,7 @@ export function ListDetailPage({ listId }: { listId: string }): ReactNode {
       <AddListMemberForm
         open={addOpen}
         onOpenChange={setAddOpen}
-        contacts={availableContacts}
+        excludeContactIds={memberIds}
         onSubmit={async (contactId) => {
           await addContactToSegment(contactId, listId);
           await refreshMembers();
@@ -231,12 +226,12 @@ export function ListDetailPage({ listId }: { listId: string }): ReactNode {
 function AddListMemberForm({
   open,
   onOpenChange,
-  contacts,
+  excludeContactIds,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contacts: ContactSummary[];
+  excludeContactIds: ReadonlySet<string>;
   onSubmit: (contactId: string) => Promise<void>;
 }): ReactNode {
   const { busy, error, run } = useFormSubmission("メンバーを追加できませんでした");
@@ -250,23 +245,6 @@ function AddListMemberForm({
     });
   }
 
-  if (contacts.length === 0) {
-    return (
-      <AppDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title="メンバーを追加"
-        description="リストに入れる連絡先を選びます。"
-      >
-        <EmptyState
-          compact
-          title="追加できる連絡先がありません"
-          description="表示中の候補はすべてこのリストに入っています。"
-        />
-      </AppDialog>
-    );
-  }
-
   return (
     <FormDialog
       open={open}
@@ -278,14 +256,7 @@ function AddListMemberForm({
       error={error}
       submitLabel="追加"
     >
-      <FormNativeSelect label="連絡先" name="contactId" required>
-        <FormSelectOption value="">選択してください</FormSelectOption>
-        {contacts.map((contact) => (
-          <FormSelectOption key={contact.id} value={contact.id}>
-            {contactOptionLabel(contact)}
-          </FormSelectOption>
-        ))}
-      </FormNativeSelect>
+      <ContactPickerField excludeIds={excludeContactIds} />
     </FormDialog>
   );
 }

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   companiesQueryOptions,
   companyEnrichmentCapabilityQueryOptions,
-  companyContactOptionsQueryOptions,
   companyQueryOptions,
 } from "@/features/companies/company-api";
 import { emailBrandProfileQueryOptions } from "@/features/emails/email-api";
@@ -67,7 +66,7 @@ describe("initial route loaders", () => {
     );
   });
 
-  it("prefetches detail, contact choices, and enrichment capability once", async () => {
+  it("prefetches detail and enrichment capability once", async () => {
     const cache = new PrefetchCache();
     const loader = CompanyDetailRoute.options.loader as (input: unknown) => Promise<unknown>;
     const result = await loader({
@@ -80,7 +79,6 @@ describe("initial route loaders", () => {
     expect(cache.counts).toEqual(
       new Map([
         [keyOf(companyQueryOptions("company-1")), 1],
-        [keyOf(companyContactOptionsQueryOptions()), 1],
         [keyOf(companyEnrichmentCapabilityQueryOptions()), 1],
       ]),
     );

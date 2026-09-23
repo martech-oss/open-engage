@@ -11,10 +11,3 @@ export function segmentQueryOptions(segmentId: string) {
 export function segmentOptionsQueryOptions() {
   return orpcQuery.segments.options.queryOptions();
 }
-
-/** Active contacts offered when adding one to a static list. */
-export function listMemberOptionsQueryOptions() {
-  return orpcQuery.contacts.list.queryOptions({
-    input: { limit: 100, status: "active", sort: "name", direction: "asc" },
-  });
-}

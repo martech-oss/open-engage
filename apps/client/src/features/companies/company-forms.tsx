@@ -2,8 +2,8 @@ import { Sparkles } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
 
-import { EmptyState, FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
-import { AppDialog, FormDialog } from "@/components/app-ui/dialogs";
+import { FormInput } from "@/components/app-ui";
+import { FormDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -13,8 +13,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@/components/ui/field";
-import type { ContactOption } from "@/features/companies/company-api";
-import { contactOptionLabel } from "@/features/contacts/contact-bits";
+import { ContactPickerField } from "@/features/contacts/contact-picker";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { getFormString } from "@/lib/form-data";
 
@@ -154,14 +153,14 @@ export function AddCompanyContactForm({
   onOpenChange,
   title,
   description,
-  contacts,
+  excludeContactIds,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  contacts: ContactOption[];
+  excludeContactIds: ReadonlySet<string>;
   onSubmit: (values: { contactId: string; title?: string; isPrimary: boolean }) => Promise<void>;
 }): ReactNode {
   const { busy, error, run } = useFormSubmission("連絡先を追加できませんでした");
@@ -180,18 +179,6 @@ export function AddCompanyContactForm({
     });
   }
 
-  if (contacts.length === 0) {
-    return (
-      <AppDialog open={open} onOpenChange={onOpenChange} title={title} description={description}>
-        <EmptyState
-          compact
-          title="追加できる連絡先がありません"
-          description="すべての連絡先がこの会社に所属しています。"
-        />
-      </AppDialog>
-    );
-  }
-
   return (
     <FormDialog
       open={open}
@@ -203,14 +190,7 @@ export function AddCompanyContactForm({
       error={error}
       submitLabel="追加"
     >
-      <FormNativeSelect label="連絡先" name="contactId" required>
-        <FormSelectOption value="">選択してください</FormSelectOption>
-        {contacts.map((contact) => (
-          <FormSelectOption key={contact.id} value={contact.id}>
-            {contactOptionLabel(contact)}
-          </FormSelectOption>
-        ))}
-      </FormNativeSelect>
+      <ContactPickerField excludeIds={excludeContactIds} />
       <FormInput label="役職" name="title" placeholder="例：マーケティング責任者" />
       <Field orientation="horizontal">
         <Checkbox

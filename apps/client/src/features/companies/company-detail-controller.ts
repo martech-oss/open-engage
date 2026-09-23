@@ -3,7 +3,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import {
-  companyContactOptionsQueryOptions,
   companyEnrichmentCapabilityQueryOptions,
   companyQueryOptions,
   useAssignCompanyContact,
@@ -18,7 +17,6 @@ export function useCompanyDetailController(companyId: string) {
   const { data: enrichmentCapability } = useSuspenseQuery(
     companyEnrichmentCapabilityQueryOptions(),
   );
-  const { data: contactOptions } = useSuspenseQuery(companyContactOptionsQueryOptions());
   const [editOpen, setEditOpen] = useState(false);
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [enrichmentOpen, setEnrichmentOpen] = useState(false);
@@ -56,7 +54,7 @@ export function useCompanyDetailController(companyId: string) {
   return {
     company,
     enrichmentEnabled: enrichmentCapability.enabled,
-    availableContacts: contactOptions.items.filter((contact) => !assignedIds.has(contact.id)),
+    assignedContactIds: assignedIds,
     columns: companyContactColumns((contact) => void remove(contact)),
     editOpen,
     setEditOpen,

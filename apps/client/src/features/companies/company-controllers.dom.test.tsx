@@ -37,10 +37,6 @@ vi.mock("./company-api", () => ({
     queryKey: ["companies", "capability"],
     queryFn: () => ({ enabled: true }),
   }),
-  companyContactOptionsQueryOptions: () => ({
-    queryKey: ["companies", "contacts"],
-    queryFn: () => ({ items: [] }),
-  }),
   useCreateCompany: () => doubles.create,
   useUpdateCompany: () => doubles.update,
   useAssignCompanyContact: () => doubles.assign,
@@ -119,7 +115,6 @@ function queryWrapper() {
   const queryClient = new QueryClient();
   queryClient.setQueryData(["companies", "list"], []);
   queryClient.setQueryData(["companies", "capability"], { enabled: true });
-  queryClient.setQueryData(["companies", "contacts"], { items: [] });
   queryClient.setQueryData(["companies", "detail", "company-1"], {
     id: "company-1",
     name: "Company",

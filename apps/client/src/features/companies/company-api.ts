@@ -5,14 +5,6 @@ import type { CompanyContactDto, CompanySummary } from "@openengage/core/contact
 
 export type { CompanyContactDto, CompanySummary };
 
-/** A contact offered when attaching one to a company. */
-export interface ContactOption {
-  id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-}
-
 export interface CompanySearch {
   q: string;
 }
@@ -37,13 +29,6 @@ export function companyQueryOptions(companyId: string) {
 
 export function companyEnrichmentCapabilityQueryOptions() {
   return orpcQuery.companies.enrichmentCapability.queryOptions();
-}
-
-/** Active contacts offered when assigning one to a company. */
-export function companyContactOptionsQueryOptions() {
-  return orpcQuery.contacts.list.queryOptions({
-    input: { limit: 100, status: "active", sort: "name", direction: "asc" },
-  });
 }
 
 export function assignCompanyContact(input: {
