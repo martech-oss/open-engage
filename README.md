@@ -102,8 +102,13 @@ platform / projects / reports / scoring / segments / web / workspaces
 
 Routerは認可、入力の受け渡し、業務上の失敗からoRPCエラーへの変換を担当します。
 参照検証、複数ステップの保存・公開、監査、外部I/Oを伴う操作は、ドメインのserviceにまとめます。
-単純な読み取りや単一の永続化操作は、専用Repositoryを直接利用できます。ただし、
-すでにcommand serviceへ移行したrouterの依存制約は、アーキテクチャ検査の規約に従います。
+serviceは業務上の失敗を`{ kind: "..." }`のunionで返し、routerが`switch`でcontractのエラーへ変換します。
+施策ブリーフの解決失敗は`throwBriefFailure`、AI生成の失敗は`rethrowAiGenerationError`で共通に変換します。
+
+Routerは`@openengage/database`をimportせず、永続化をserviceへ委ねます。Repositoryを直接
+構築している既存routerは`scripts/architecture/policy.mjs`の`routerDatabaseImportAllowlist`に
+列挙しています。この一覧は減らす方向にのみ変更し、serviceへ移行したrouterは一覧から外します。
+Serverのsourceに生SQLの`.prepare(`は書かず、`@openengage/database`のRepositoryに置きます。
 
 Webの`router.ts`はリソース別routerの登録を集約します。フォームとページの更新手順は
 それぞれのcommand serviceに置き、LPの参照検証、公開、生成ジョブと復旧も別モジュールで管理します。
@@ -180,20 +185,22 @@ AI提案のcontrollerは`useAiProposalWorkflow`によるリクエスト識別を
 
 `hooks/`は特定ドメインに依存しない汎用ロジックです:
 
-| ファイル                   | 内容                                                                                          |
-| -------------------------- | --------------------------------------------------------------------------------------------- |
-| `use-form-submission.ts`   | `useFormSubmission`(busy/error state付きsubmit)、`getErrorMessage(error, fallback)`           |
-| `use-resource-editor.ts`   | `useResourceEditor`(作成/編集ダイアログのopen状態)、`saveResource`(作成/更新の振り分け+toast) |
-| `use-debounced-search.ts`  | `useDebouncedSearch`(検索語のデバウンス、内部でref保持しコールバックのメモ化を要求しない)     |
-| `use-cursor-pagination.ts` | `useCursorPagination`(カーソルページネーションの前へ/次へ状態)                                |
-| `use-mobile.ts`            | `useIsMobile`                                                                                 |
+| ファイル                       | 内容                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `use-form-submission.ts`       | `useFormSubmission`(busy/error state付きsubmit)                                               |
+| `use-resource-editor.ts`       | `useResourceEditor`(作成/編集ダイアログのopen状態)、`saveResource`(作成/更新の振り分け+toast) |
+| `use-debounced-search.ts`      | `useDebouncedSearch`(検索語のデバウンス、内部でref保持しコールバックのメモ化を要求しない)     |
+| `use-url-search-draft.ts`      | `useUrlSearchDraft`(URLに保存する検索語の入力中draft、自分が確定した値以外のURL変更だけ反映)  |
+| `use-invalidating-mutation.ts` | `useInvalidatingMutation`(成功後に関連queryの無効化を待ってから`mutateAsync`を解決)           |
+| `use-cursor-pagination.ts`     | `useCursorPagination`(カーソルページネーションの前へ/次へ状態)                                |
+| `use-mobile.ts`                | `useIsMobile`                                                                                 |
 
 各`features/<domain>/<domain>-api.ts`は、その機能ドメインがoRPCとやり取りする唯一の窓口です:
 
 - 一覧・詳細取得は`<domain>QueryOptions(...)`という名前でTanStack Queryの`queryOptions`を返す
   (コンポーネント側は`useSuspenseQuery`/`useQuery`に渡すだけで、`orpcQuery`を直接importしない)。
-- 作成・更新・削除は`use<Verb><Domain>()`という名前のhookにし、内部で`useMutation`を呼び、
-  意味のあるキャッシュ無効化を`onSuccess`に持たせる。単純なCRUD(作成・更新・アーカイブ)は
+- 作成・更新・削除は`use<Verb><Domain>()`という名前のhookにし、内部で`useInvalidatingMutation`を呼び、
+  変更したqueryの無効化を第2引数で宣言する。単純なCRUD(作成・更新・アーカイブ)は
   built-in invalidationを持たせる。複数resourceを変更するuser actionは、上記の通りClientで
   複数mutationを連結せず、意図を表す単一server commandとして実装する。
 - 進捗のpolling条件と間隔もfeature APIのquery optionsで管理する。
@@ -882,6 +889,9 @@ pnpm build
 ```
 
 WorkerテストはCloudflare Workers Vitest integration上で実行し、実際のD1 migrationを空DBへ適用します。
+Serverテストの共通部品は`apps/server/test/`に置きます(`queueDouble`・`recordingQueue`によるQueueの代替、
+`withBindings`による環境変数の差し替え、`countRows`、公開エンドポイント向けの`publicPost`)。
+Databaseのmigrationテストは`migrationRange`と`applyMigrations`で対象のmigrationを選んで適用します。
 
 現在のテスト対象には以下が含まれます。
 
