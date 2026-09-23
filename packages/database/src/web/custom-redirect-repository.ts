@@ -3,8 +3,6 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { CustomRedirect, CustomRedirectWrite } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import { contacts } from "../contacts/schema";
-import { visitorBindings } from "../contacts/visitor-schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
@@ -125,34 +123,5 @@ export class PublicCustomRedirectRepository extends DatabaseRepository {
       .set({ clickCount: sql`${customRedirects.clickCount} + 1` })
       .where(eq(customRedirects.id, id))
       .run();
-  }
-
-  /**
-   * Site tracking hands out a visitor id and links it to a contact on identify,
-   * so a redirect clicked from a tracked page can name the person who clicked.
-   */
-  public async findContactIdByVisitor(
-    workspaceId: string,
-    visitorId: string,
-  ): Promise<string | null> {
-    const row = await this.database.orm
-      .select({ id: contacts.id })
-      .from(contacts)
-      .innerJoin(
-        visitorBindings,
-        and(
-          eq(visitorBindings.workspaceId, contacts.workspaceId),
-          eq(visitorBindings.contactId, contacts.id),
-        ),
-      )
-      .where(
-        and(
-          eq(contacts.workspaceId, workspaceId),
-          eq(visitorBindings.visitorId, visitorId),
-          eq(contacts.status, "active"),
-        ),
-      )
-      .get();
-    return row?.id ?? null;
   }
 }

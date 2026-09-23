@@ -7,7 +7,7 @@ import { websitePublicUrls } from "./public-urls";
 import { archiveWebsiteResource } from "./resource-controller-actions";
 import {
   landingPagesQueryOptions,
-  type LandingPageRow,
+  type LandingPage,
   useArchiveLandingPage,
   useCreateLandingPage,
   useUpdateLandingPage,
@@ -15,12 +15,12 @@ import {
 
 export function useLandingPagesController(workspaceSlug: string, publicOrigin?: string) {
   const { data: items } = useSuspenseQuery(landingPagesQueryOptions());
-  const editor = useResourceEditor<LandingPageRow>();
+  const editor = useResourceEditor<LandingPage>();
   const archiveMutation = useArchiveLandingPage();
   const createMutation = useCreateLandingPage();
   const updateMutation = useUpdateLandingPage();
   const urls = websitePublicUrls(workspaceSlug, publicOrigin);
-  const archive = (item: LandingPageRow) =>
+  const archive = (item: LandingPage) =>
     archiveWebsiteResource({
       archive: () => archiveMutation.mutateAsync({ id: item.id }),
       onSuccess: () => toast.success("ランディングページをアーカイブしました"),
@@ -32,6 +32,6 @@ export function useLandingPagesController(workspaceSlug: string, publicOrigin?: 
     archive,
     createMutation,
     updateMutation,
-    publicUrl: (item: LandingPageRow) => urls.landingPage(item.slug),
+    publicUrl: (item: LandingPage) => urls.landingPage(item.slug),
   };
 }

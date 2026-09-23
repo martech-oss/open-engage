@@ -249,23 +249,6 @@ export class PublicFormRepository extends DatabaseRepository {
     }
     return answered;
   }
-
-  public async submissionExists(
-    input: Pick<PersistPublicFormSubmissionInput, "workspaceId" | "formId" | "idempotencyKey">,
-  ): Promise<boolean> {
-    const row = await this.database.orm
-      .select({ id: formSubmissions.id })
-      .from(formSubmissions)
-      .where(
-        and(
-          eq(formSubmissions.workspaceId, input.workspaceId),
-          eq(formSubmissions.formId, input.formId),
-          eq(formSubmissions.idempotencyKey, input.idempotencyKey),
-        ),
-      )
-      .get();
-    return Boolean(row);
-  }
 }
 
 /** Validated public reads shared by landing-page and tracking routes. */

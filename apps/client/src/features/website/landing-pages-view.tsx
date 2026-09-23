@@ -7,7 +7,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 
 import { summarizeLandingPages } from "./resource-model";
-import type { LandingPageRow } from "./website-api";
+import type { LandingPage } from "./website-api";
 import { PublishStatusBadge } from "./website-shared";
 
 export function landingPageColumns({
@@ -17,10 +17,10 @@ export function landingPageColumns({
   publicUrl,
 }: {
   formatDateTime: (value: string) => string;
-  onEdit: (item: LandingPageRow) => void;
-  onArchive: (item: LandingPageRow) => Promise<void>;
-  publicUrl: (item: LandingPageRow) => string;
-}): DataTableColumn<LandingPageRow>[] {
+  onEdit: (item: LandingPage) => void;
+  onArchive: (item: LandingPage) => Promise<void>;
+  publicUrl: (item: LandingPage) => string;
+}): DataTableColumn<LandingPage>[] {
   return [
     {
       key: "name",
@@ -81,7 +81,7 @@ export function landingPageColumns({
   ];
 }
 
-export function LandingPagesSummary({ items }: { items: LandingPageRow[] }): ReactNode {
+export function LandingPagesSummary({ items }: { items: LandingPage[] }): ReactNode {
   const summary = summarizeLandingPages(items);
   const cards = [
     { label: "ページ", value: summary.total, description: "現在のページ数", icon: FileStack },

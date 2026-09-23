@@ -13,9 +13,9 @@ import {
 import {
   emailArchivedTemplatesQueryOptions,
   emailTemplateOptionsQueryOptions,
-  type EmailTemplateRow,
+  type EmailTemplate,
   emailVariablesListQueryOptions,
-  type MessageVariableRow,
+  type MessageVariable,
 } from "@/features/emails/email-api";
 
 import { ArchivedResources } from "./email-archived-resources";
@@ -68,19 +68,19 @@ function EmailCenterPage({
   loading,
 }: {
   view: EmailSection;
-  templates?: EmailTemplateRow[];
-  variables?: MessageVariableRow[];
-  archivedTemplates?: EmailTemplateRow[];
+  templates?: EmailTemplate[];
+  variables?: MessageVariable[];
+  archivedTemplates?: EmailTemplate[];
   loading: boolean;
 }): ReactNode {
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showVariableForm, setShowVariableForm] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<EmailTemplateRow | null>(null);
-  const [editingVariable, setEditingVariable] = useState<MessageVariableRow | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
+  const [editingVariable, setEditingVariable] = useState<MessageVariable | null>(null);
   const [templateFormSession, setTemplateFormSession] = useState(0);
   const [startWithAi, setStartWithAi] = useState(false);
 
-  function openTemplateForm(template: EmailTemplateRow | null, ai: boolean): void {
+  function openTemplateForm(template: EmailTemplate | null, ai: boolean): void {
     setEditingTemplate(template);
     setStartWithAi(ai);
     setTemplateFormSession((current) => current + 1);

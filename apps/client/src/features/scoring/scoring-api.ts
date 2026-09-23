@@ -10,10 +10,6 @@ import type {
 
 export type { GradingCriterion, ScoringCategory, ScoringRule, ScoringPageInput };
 
-export type ScoringRuleRow = ScoringRule;
-export type ScoringCategoryRow = ScoringCategory;
-export type GradingCriterionRow = GradingCriterion;
-
 export function scoringRulesQueryOptions(input: ScoringPageInput = {}) {
   return orpcQuery.scoring.listRules.queryOptions({ input });
 }

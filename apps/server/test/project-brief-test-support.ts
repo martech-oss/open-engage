@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-import type { ProjectBriefMutation } from "@openengage/core/projects";
+import type { ProjectBriefDraftInput } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { createDatabase, member, user, uuidv7 } from "@openengage/database/testing";
 
@@ -35,7 +35,7 @@ export async function addProjectBriefMember(
 export function projectBriefInput(
   ownerUserId: string,
   approverUserId: string,
-): ProjectBriefMutation {
+): ProjectBriefDraftInput {
   return {
     name: "Trial activation",
     description: "Move new trials to activation",

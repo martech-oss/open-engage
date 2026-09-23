@@ -12,9 +12,6 @@ import { assetKindSchema, assetVisibilitySchema, type AssetKind } from "../share
 export const ASSET_BUFFERED_MAX_BYTES = 25 * 1024 * 1024;
 export const ASSET_STREAM_MAX_BYTES = 100 * 1024 * 1024;
 
-/** Back-compat alias for the original constant name. */
-export const ASSET_MAX_BYTES = ASSET_BUFFERED_MAX_BYTES;
-
 /**
  * Assets are served from the same origin as the admin app, so anything the
  * browser would execute as script becomes a session-theft vector. Responses

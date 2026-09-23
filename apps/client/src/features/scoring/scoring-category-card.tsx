@@ -7,11 +7,11 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-import type { ScoringCategoryRow } from "./scoring-api";
+import type { ScoringCategory } from "./scoring-api";
 
 export type CategoryCardViewProps = {
-  categories: ScoringCategoryRow[];
-  columns: DataTableColumn<ScoringCategoryRow>[];
+  categories: ScoringCategory[];
+  columns: DataTableColumn<ScoringCategory>[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;

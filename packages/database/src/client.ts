@@ -12,8 +12,8 @@ export type DatabaseSource = D1Database | OpenEngageDatabase;
  * All access goes through `orm`: the Drizzle query builder, or `sql` tagged
  * templates with `${table.column}` interpolation for the handful of queries
  * the builder can't express (see the repository classes under
- * packages/database/src/*​/*.ts). `all`/`first`/`run` accept a proper drizzle
- * `SQL` object, never a string - apps/server/src makes no raw `.prepare(`
+ * packages/database/src/*​/*.ts). `first` accepts a proper drizzle `SQL`
+ * object, never a string - apps/server/src makes no raw `.prepare(`
  * calls of its own (enforced by apps/server/scripts/check-no-raw-sql.mjs).
  */
 export class OpenEngageDatabase {
@@ -23,21 +23,8 @@ export class OpenEngageDatabase {
     this.orm = drizzle(binding, { schema, casing: "snake_case" });
   }
 
-  public async all<T>(query: SQL): Promise<D1Result<T>> {
-    const results = await this.orm.all<T>(query);
-    return {
-      results,
-      success: true,
-      meta: {},
-    } as D1Result<T>;
-  }
-
   public async first<T>(query: SQL): Promise<T | null> {
     return (await this.orm.get<T>(query)) ?? null;
-  }
-
-  public run(query: SQL): Promise<D1Result> {
-    return this.orm.run(query);
   }
 }
 

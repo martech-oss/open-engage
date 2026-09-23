@@ -2,8 +2,6 @@ import { orpcQuery } from "@/lib/orpc";
 import type { EmailBrandProfile, EmailTemplate, MessageVariable } from "@openengage/core/messaging";
 
 export type { EmailTemplate, MessageVariable, EmailBrandProfile };
-export type EmailTemplateRow = EmailTemplate;
-export type MessageVariableRow = MessageVariable;
 
 export function emailArchivedTemplatesQueryOptions() {
   return orpcQuery.emails.listTemplates.queryOptions({ input: { archived: true } });

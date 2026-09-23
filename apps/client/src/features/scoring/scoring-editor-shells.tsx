@@ -4,7 +4,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { getFormString } from "@/lib/form-data";
 import type { GradingCriterionWrite, ScoringRuleWrite } from "@openengage/core/scoring";
 
-import type { GradingCriterionRow, ScoringCategoryRow, ScoringRuleRow } from "./scoring-api";
+import type { GradingCriterion, ScoringCategory, ScoringRule } from "./scoring-api";
 import { CategoryCardView } from "./scoring-category-card";
 import {
   useGradingCriterionEditorController,
@@ -26,7 +26,7 @@ export function ScoringRuleEditorShell({
   open,
   onOpenChange,
   onSaved,
-}: EditorShellProps<ScoringRuleRow>): ReactNode {
+}: EditorShellProps<ScoringRule>): ReactNode {
   const controller = useScoringRuleEditorController(item, onSaved);
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -53,7 +53,7 @@ export function GradingCriterionEditorShell({
   open,
   onOpenChange,
   onSaved,
-}: EditorShellProps<GradingCriterionRow>): ReactNode {
+}: EditorShellProps<GradingCriterion>): ReactNode {
   const controller = useGradingCriterionEditorController(item, onSaved);
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -79,8 +79,8 @@ export function ScoringCategoryCardShell({
   open,
   onOpenChange,
 }: {
-  categories: ScoringCategoryRow[];
-  columns: DataTableColumn<ScoringCategoryRow>[];
+  categories: ScoringCategory[];
+  columns: DataTableColumn<ScoringCategory>[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): ReactNode {
@@ -109,8 +109,8 @@ function readRuleValues(form: FormData): ScoringRuleWrite {
   const tagId = getFormString(form, "tagId");
   return {
     name: getFormString(form, "name"),
-    eventType: getFormString(form, "eventType") as ScoringRuleRow["eventType"],
-    matchType: getFormString(form, "matchType") as ScoringRuleRow["matchType"],
+    eventType: getFormString(form, "eventType") as ScoringRule["eventType"],
+    matchType: getFormString(form, "matchType") as ScoringRule["matchType"],
     matchValue: matchValue || null,
     points: Number(getFormString(form, "points")) || 0,
     decayDays: getFormString(form, "decayDays").trim()
@@ -129,9 +129,9 @@ function readCriterionValues(form: FormData): GradingCriterionWrite {
   const fieldKey = getFormString(form, "fieldKey").trim();
   return {
     name: getFormString(form, "name"),
-    field: getFormString(form, "field") as GradingCriterionRow["field"],
+    field: getFormString(form, "field") as GradingCriterion["field"],
     fieldKey: fieldKey || null,
-    operator: getFormString(form, "operator") as GradingCriterionRow["operator"],
+    operator: getFormString(form, "operator") as GradingCriterion["operator"],
     value: getFormString(form, "value"),
     steps: Number(getFormString(form, "steps")) || 0,
     enabled: getFormString(form, "enabled") !== "disabled",

@@ -8,7 +8,7 @@ import { archiveWebsiteResource } from "./resource-controller-actions";
 import {
   customRedirectsQueryOptions,
   siteTrackingQueryOptions,
-  type CustomRedirectRow,
+  type CustomRedirect,
   useArchiveCustomRedirect,
   useCreateCustomRedirect,
   useUpdateCustomRedirect,
@@ -17,12 +17,12 @@ import {
 export function useCustomRedirectsController(publicOrigin?: string) {
   const { data: items } = useSuspenseQuery(customRedirectsQueryOptions());
   const { data: tracking } = useSuspenseQuery(siteTrackingQueryOptions());
-  const editor = useResourceEditor<CustomRedirectRow>();
+  const editor = useResourceEditor<CustomRedirect>();
   const archiveMutation = useArchiveCustomRedirect();
   const createMutation = useCreateCustomRedirect();
   const updateMutation = useUpdateCustomRedirect();
   const urls = websitePublicUrls(tracking.workspaceSlug, publicOrigin);
-  const archive = (item: CustomRedirectRow) =>
+  const archive = (item: CustomRedirect) =>
     archiveWebsiteResource({
       archive: () => archiveMutation.mutateAsync({ id: item.id }),
       onSuccess: () => toast.success("リンクをアーカイブしました"),
@@ -34,6 +34,6 @@ export function useCustomRedirectsController(publicOrigin?: string) {
     archive,
     createMutation,
     updateMutation,
-    publicUrl: (item: CustomRedirectRow) => urls.customRedirect(item.slug),
+    publicUrl: (item: CustomRedirect) => urls.customRedirect(item.slug),
   };
 }

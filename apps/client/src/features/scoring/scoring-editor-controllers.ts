@@ -8,9 +8,9 @@ import { saveResource } from "@/hooks/use-resource-editor";
 import type { GradingCriterionWrite, ScoringRuleWrite } from "@openengage/core/scoring";
 
 import {
-  type GradingCriterionRow,
+  type GradingCriterion,
   scoringCategoriesQueryOptions,
-  type ScoringRuleRow,
+  type ScoringRule,
   useCreateGradingCriterion,
   useCreateScoringCategory,
   useCreateScoringRule,
@@ -18,7 +18,7 @@ import {
   useUpdateScoringRule,
 } from "./scoring-api";
 
-export function useScoringRuleEditorController(item: ScoringRuleRow | null, onSaved: () => void) {
+export function useScoringRuleEditorController(item: ScoringRule | null, onSaved: () => void) {
   const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
   const { data: contactOptions } = useSuspenseQuery(contactOptionsQueryOptions());
   const [matchType, setMatchType] = useState<ScoringRuleWrite["matchType"]>(
@@ -45,7 +45,7 @@ export function useScoringRuleEditorController(item: ScoringRuleRow | null, onSa
 }
 
 export function useGradingCriterionEditorController(
-  item: GradingCriterionRow | null,
+  item: GradingCriterion | null,
   onSaved: () => void,
 ) {
   const [field, setField] = useState<GradingCriterionWrite["field"]>(item?.field ?? "custom_field");

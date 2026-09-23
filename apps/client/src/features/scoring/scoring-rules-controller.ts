@@ -9,7 +9,7 @@ import { useResourceEditor } from "@/hooks/use-resource-editor";
 import {
   scoringCategoriesQueryOptions,
   scoringRulesQueryOptions,
-  type ScoringRuleRow,
+  type ScoringRule,
   useArchiveScoringRule,
 } from "./scoring-api";
 
@@ -20,11 +20,11 @@ export function useScoringRulesController() {
   );
   const rules = page.items;
   const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
-  const resourceEditor = useResourceEditor<ScoringRuleRow>();
+  const resourceEditor = useResourceEditor<ScoringRule>();
   const [sessionId, setSessionId] = useState(0);
   const archiveMutation = useArchiveScoringRule();
 
-  async function archive(item: ScoringRuleRow): Promise<void> {
+  async function archive(item: ScoringRule): Promise<void> {
     try {
       await archiveMutation.mutateAsync({ id: item.id });
       toast.success("ルールをアーカイブしました");
@@ -38,7 +38,7 @@ export function useScoringRulesController() {
     resourceEditor.openCreate();
   }
 
-  function openEdit(item: ScoringRuleRow): void {
+  function openEdit(item: ScoringRule): void {
     setSessionId((current) => current + 1);
     resourceEditor.openEdit(item);
   }

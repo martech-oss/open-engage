@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
 import { suppressions } from "../consent/schema";
@@ -80,24 +80,5 @@ export class MessagingProviderEventRepository extends DatabaseRepository {
     const results = await orm.batch(statements);
     const eventResult = results[0] as D1Result | undefined;
     return eventResult?.meta.changes === 1;
-  }
-
-  /** The contact behind a delivery, for timeline events; null when detached. */
-  public async findDeliveryContactId(
-    workspaceId: string,
-    deliveryId: string,
-  ): Promise<string | null> {
-    const row = await this.database.orm
-      .select({ contactId: deliveries.contactId })
-      .from(deliveries)
-      .where(
-        and(
-          eq(deliveries.workspaceId, workspaceId),
-          eq(deliveries.id, deliveryId),
-          isNotNull(deliveries.contactId),
-        ),
-      )
-      .get();
-    return row?.contactId ?? null;
   }
 }

@@ -10,7 +10,7 @@ import { SignupFormVariableFields } from "./form-variable-fields";
 import { SignupFormFields, type OptionalSignupField } from "./signup-form-fields";
 import {
   type SignupFormDefinition,
-  type SignupFormRow,
+  type SignupForm,
   type useCreateSignupForm,
   type useUpdateSignupForm,
 } from "./website-api";
@@ -25,7 +25,7 @@ export function SignupFormEditorDialog({
   createMutation,
   updateMutation,
 }: {
-  item: SignupFormRow | null;
+  item: SignupForm | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;

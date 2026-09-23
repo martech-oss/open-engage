@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
-import { CompanyDetailPage } from "@/features/companies/companies-page";
 import {
   companyEnrichmentCapabilityQueryOptions,
   companyQueryOptions,
 } from "@/features/companies/company-api";
+import { CompanyDetailPage } from "@/features/companies/company-detail-page";
 
 export const Route = createFileRoute("/_app/companies/$id")({
   loader: async ({ params, context }) => {

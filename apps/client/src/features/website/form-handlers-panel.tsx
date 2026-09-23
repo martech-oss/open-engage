@@ -13,14 +13,14 @@ import {
   useCreateFormHandler,
   useDeleteFormHandler,
   useUpdateFormHandler,
-  type SignupFormRow,
+  type SignupForm,
 } from "./website-api";
 
 export function FormHandlersPanel({
   forms,
   workspaceSlug,
 }: {
-  forms: SignupFormRow[];
+  forms: SignupForm[];
   workspaceSlug: string;
 }) {
   const query = useQuery(formHandlersQueryOptions()),

@@ -7,7 +7,7 @@ import { emptyLandingPageDocument } from "@openengage/core/web";
 
 import {
   landingPageDesignQueryOptions,
-  type LandingPageRow,
+  type LandingPage,
   type useCreateLandingPage,
   type useUpdateLandingPage,
   useGenerateLandingPage,
@@ -21,7 +21,7 @@ export function useLandingPageEditor({
   createMutation,
   updateMutation,
 }: {
-  item: LandingPageRow | null;
+  item: LandingPage | null;
   open: boolean;
   createMutation: Pick<ReturnType<typeof useCreateLandingPage>, "mutateAsync">;
   updateMutation: Pick<ReturnType<typeof useUpdateLandingPage>, "mutateAsync">;

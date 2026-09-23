@@ -35,7 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   siteTrackingQueryOptions,
-  type SiteTrackingData,
+  type SiteTracking,
   type TrackingTopPage,
   useUpdateSiteTracking,
 } from "@/features/website/website-api";
@@ -157,7 +157,7 @@ export function SiteTrackingPage(): ReactNode {
   );
 }
 
-function TrackingSummary({ data }: { data: SiteTrackingData }): ReactNode {
+function TrackingSummary({ data }: { data: SiteTracking }): ReactNode {
   const cards = [
     {
       label: "30日間のページビュー",
@@ -203,7 +203,7 @@ function TrackingSummary({ data }: { data: SiteTrackingData }): ReactNode {
   );
 }
 
-function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode {
+function TopPages({ items }: { items: SiteTracking["topPages"] }): ReactNode {
   const columns: DataTableColumn<TrackingTopPage>[] = [
     {
       key: "url",
@@ -237,9 +237,9 @@ function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode
   );
 }
 
-function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): ReactNode {
+function RecentEvents({ items }: { items: SiteTracking["recentEvents"] }): ReactNode {
   const { formatDateTime } = useWorkspaceFormatters();
-  const columns: DataTableColumn<SiteTrackingData["recentEvents"][number]>[] = [
+  const columns: DataTableColumn<SiteTracking["recentEvents"][number]>[] = [
     {
       key: "resourceId",
       header: "訪問ページ",

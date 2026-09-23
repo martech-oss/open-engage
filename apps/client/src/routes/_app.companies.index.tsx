@@ -1,7 +1,7 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
 import { routeStatusComponents } from "@/components/route-status";
-import { CompaniesPage } from "@/features/companies/companies-page";
+import { CompaniesListPage } from "@/features/companies/companies-list-page";
 import {
   companiesQueryOptions,
   companyEnrichmentCapabilityQueryOptions,
@@ -30,5 +30,5 @@ export const Route = createFileRoute("/_app/companies/")({
 
 function CompaniesRoute() {
   const { q } = Route.useSearch();
-  return <CompaniesPage query={q} />;
+  return <CompaniesListPage query={q} />;
 }

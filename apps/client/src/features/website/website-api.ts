@@ -18,14 +18,9 @@ export type {
   SignupForm,
   SignupFormDefinition,
   SiteMessage,
+  SiteTracking,
 };
 
-/** Retained aliases so the page components read the same as before the migration. */
-export type SignupFormRow = SignupForm;
-export type LandingPageRow = LandingPage;
-export type SiteMessageRow = SiteMessage;
-export type CustomRedirectRow = CustomRedirect;
-export type SiteTrackingData = SiteTracking;
 export type TrackingTopPage = SiteTracking["topPages"][number];
 
 export function signupFormsQueryOptions() {

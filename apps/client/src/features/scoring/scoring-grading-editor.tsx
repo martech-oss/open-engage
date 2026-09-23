@@ -5,18 +5,18 @@ import { FormDialog } from "@/components/app-ui/dialogs";
 import { FieldGroup } from "@/components/ui/field";
 import { GRADING_FIELDS, GRADING_OPERATORS } from "@openengage/core/scoring";
 
-import type { GradingCriterionRow } from "./scoring-api";
+import type { GradingCriterion } from "./scoring-api";
 import { GRADING_FIELD_LABELS, GRADING_OPERATOR_LABELS } from "./scoring-labels";
 
 export type GradingCriterionEditorViewProps = {
-  item: GradingCriterionRow | null;
+  item: GradingCriterion | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   busy: boolean;
   error: string;
-  field: GradingCriterionRow["field"];
-  onFieldChange: (field: GradingCriterionRow["field"]) => void;
+  field: GradingCriterion["field"];
+  onFieldChange: (field: GradingCriterion["field"]) => void;
 };
 
 export function GradingCriterionEditorView({
@@ -54,7 +54,7 @@ export function GradingCriterionEditorView({
           name="field"
           defaultValue={item?.field ?? "custom_field"}
           onChange={(event) =>
-            onFieldChange(event.currentTarget.value as GradingCriterionRow["field"])
+            onFieldChange(event.currentTarget.value as GradingCriterion["field"])
           }
         >
           {GRADING_FIELDS.map((value) => (
