@@ -14,7 +14,7 @@ export type DatabaseSource = D1Database | OpenEngageDatabase;
  * the builder can't express (see the repository classes under
  * packages/database/src/*​/*.ts). `first` accepts a proper drizzle `SQL`
  * object, never a string - apps/server/src makes no raw `.prepare(`
- * calls of its own (enforced by apps/server/scripts/check-no-raw-sql.mjs).
+ * calls of its own (enforced by scripts/architecture/rules.mjs).
  */
 export class OpenEngageDatabase {
   public readonly orm: Database;

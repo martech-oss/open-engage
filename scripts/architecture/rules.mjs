@@ -3,15 +3,15 @@ import { extname, relative } from "node:path";
 import {
   handwrittenFileLineLimit,
   clientFunctionLineLimit,
-  clientControllerFunctionPaths,
-  task6HotspotFileLineLimit,
-  task6HotspotFunctionLineLimit,
+  clientControllerPattern,
+  focusedClientUiFileLineLimit,
+  focusedClientUiFunctionLineLimit,
+  focusedClientUiPatterns,
   handwrittenLineLimitExceptions,
   focusedFileLineLimits,
   sharedErrorMessages,
-  drizzleImportAllowlist,
   routeSsrFalseAllowlist,
-  migratedCommandRouters,
+  routerDatabaseImportAllowlist,
 } from "./policy.mjs";
 
 export function checkRules({ root, files, sourceFacts, resolver }) {
@@ -77,7 +77,8 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
       );
     }
     if (
-      migratedCommandRouters.has(workspacePath) &&
+      /^apps\/server\/src\/.+router\.ts$/.test(workspacePath) &&
+      !routerDatabaseImportAllowlist.has(workspacePath) &&
       edges.some(
         (edge) =>
           edge.runtime &&
@@ -87,7 +88,7 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
       )
     ) {
       violations.push(
-        `${workspacePath}: migrated command router must not runtime import @openengage/database; ` +
+        `${workspacePath}: server router must not runtime import @openengage/database; ` +
           `delegate persistence to its application service`,
       );
     }
@@ -265,6 +266,13 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
       );
     }
 
+    if (workspacePath.startsWith("apps/server/src/") && source.includes(".prepare(")) {
+      violations.push(
+        `${workspacePath}: raw .prepare( call - SQL must live in @openengage/database ` +
+          `repositories, built with Drizzle or sql templates over table columns`,
+      );
+    }
+
     if (
       workspacePath.startsWith("packages/database/src/") &&
       workspacePath !== "packages/database/src/shared/database-utils.ts" &&
@@ -289,12 +297,11 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
     if (
       workspacePath.startsWith("apps/server/src/") &&
       !/\.test\.tsx?$/.test(workspacePath) &&
-      !drizzleImportAllowlist.includes(workspacePath) &&
       imports.some((value) => value === "drizzle-orm" || value.startsWith("drizzle-orm/"))
     ) {
       violations.push(
         `${workspacePath}: read/write through a packages/database repository instead of ` +
-          `importing drizzle-orm directly (see drizzleImportAllowlist in this script)`,
+          `importing drizzle-orm directly`,
       );
     }
 
@@ -319,7 +326,7 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
     }
     if (
       workspacePath.startsWith("apps/client/src/") &&
-      (extname(file) === ".tsx" || clientControllerFunctionPaths.has(workspacePath)) &&
+      (extname(file) === ".tsx" || clientControllerPattern.test(workspacePath)) &&
       !handwrittenLineLimitExceptions.has(workspacePath)
     ) {
       for (const span of functionLikeSpans) {
@@ -337,39 +344,22 @@ export function checkRules({ root, files, sourceFacts, resolver }) {
           `responsibility instead of growing the hotspot`,
       );
     }
-    if (!isTest && isTask6Hotspot(workspacePath)) {
-      if (lineCount > task6HotspotFileLineLimit) {
+    if (!isTest && focusedClientUiPatterns.some((pattern) => pattern.test(workspacePath))) {
+      if (lineCount > focusedClientUiFileLineLimit) {
         violations.push(
-          `${workspacePath}: Task 6 hotspot is ${lineCount} lines, over ${task6HotspotFileLineLimit} lines`,
+          `${workspacePath}: focused UI file is ${lineCount} lines, over ${focusedClientUiFileLineLimit} lines`,
         );
       }
       for (const span of functionLikeSpans) {
-        if (span.lineCount <= task6HotspotFunctionLineLimit) continue;
+        if (span.lineCount <= focusedClientUiFunctionLineLimit) continue;
         violations.push(
-          `${workspacePath}:${span.startLine}: Task 6 hotspot function is ${span.lineCount} lines, ` +
-            `over ${task6HotspotFunctionLineLimit} lines`,
+          `${workspacePath}:${span.startLine}: focused UI function is ${span.lineCount} lines, ` +
+            `over ${focusedClientUiFunctionLineLimit} lines`,
         );
       }
     }
   }
   return { graph, violations };
-}
-
-function isTask6Hotspot(workspacePath) {
-  return (
-    /^apps\/client\/src\/components\/data-table(?:-[^/]+)?\.(?:ts|tsx)$/.test(workspacePath) ||
-    /^apps\/client\/src\/features\/(?:companies|scoring|settings)\//.test(workspacePath) ||
-    /^apps\/client\/src\/features\/contacts\/(?:contact-(?:drawer|profile|score|timeline))/.test(
-      workspacePath,
-    ) ||
-    /^apps\/client\/src\/features\/emails\/email-(?:block|document)/.test(workspacePath) ||
-    /^apps\/client\/src\/features\/segments\/segment-(?:builder|condition|filter-node|form)/.test(
-      workspacePath,
-    ) ||
-    /^apps\/client\/src\/features\/website\/(?:custom-redirect|landing-page|resource-|signup-form|site-message)/.test(
-      workspacePath,
-    )
-  );
 }
 
 function actualLineCount(source) {

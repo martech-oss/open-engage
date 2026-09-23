@@ -2,13 +2,30 @@ import { runScenarios } from "./helpers.mjs";
 
 await runScenarios("architecture: command-routers", [
   {
+    name: "rejects runtime database imports in a new server router by default",
+    files: {
+      "apps/server/src/example/router.ts":
+        'import { ExampleRepository } from "@openengage/database/example";\n' +
+        "void ExampleRepository;\n",
+    },
+    want: "server router.*runtime import @openengage/database",
+  },
+  {
+    name: "tolerates routers still on the database import ratchet",
+    files: {
+      "apps/server/src/reports/router.ts":
+        'import { ReportsRepository } from "@openengage/database/reports";\n' +
+        "void ReportsRepository;\n",
+    },
+  },
+  {
     name: "keeps the web composition router free of database imports",
     files: {
       "apps/server/src/web/router.ts":
         'import { LandingPageRepository } from "@openengage/database/web";\n' +
         "void LandingPageRepository;\n",
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "rejects runtime database imports in migrated command routers",
@@ -17,7 +34,7 @@ await runScenarios("architecture: command-routers", [
         'import { SegmentRepository } from "@openengage/database/segments";\n' +
         "void SegmentRepository;\n",
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "rejects runtime database imports in the migrated automation router",
@@ -26,7 +43,7 @@ await runScenarios("architecture: command-routers", [
         'import { AutomationRepository } from "@openengage/database/automations";\n' +
         "void AutomationRepository;\n",
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "allows database type imports in migrated command routers",
@@ -42,7 +59,7 @@ await runScenarios("architecture: command-routers", [
       "apps/server/src/automations/router.ts":
         'import {} from "@openengage/database/automations";\n',
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "rejects a named runtime database re-export in a migrated command router",
@@ -50,14 +67,14 @@ await runScenarios("architecture: command-routers", [
       "apps/server/src/automations/router.ts":
         'export { AutomationRepository } from "@openengage/database/automations";\n',
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "rejects a star runtime database re-export in a migrated command router",
     files: {
       "apps/server/src/segments/router.ts": 'export * from "@openengage/database/segments";\n',
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "allows a database type re-export in a migrated command router",
@@ -80,7 +97,7 @@ await runScenarios("architecture: command-routers", [
         'import { ContactRepository } from "@openengage/database/contacts";\n' +
         "void ContactRepository;\n",
     },
-    want: "migrated command router.*runtime import @openengage/database",
+    want: "server router.*runtime import @openengage/database",
   },
   {
     name: "allows database type imports in the migrated contacts command router",
