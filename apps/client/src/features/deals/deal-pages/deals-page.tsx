@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Pencil, Plus, Search } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, FormNativeSelect, FormSelectOption, PageLayout } from "@/components/app-ui";
@@ -19,7 +19,7 @@ import {
   type DealSearch,
   type DealStage,
 } from "@/features/deals/deal-api";
-import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { useUrlSearchDraft } from "@/hooks/use-url-search-draft";
 import { getErrorMessage } from "@/lib/errors";
 
 import { DealBoard } from "../deal-board";
@@ -31,7 +31,12 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
   const navigate = useNavigate();
   const { data: options } = useSuspenseQuery(dealOptionsQueryOptions());
   const { data: deals } = useSuspenseQuery(dealsQueryOptions(search));
-  const [query, setQuery] = useState(search.q);
+  const [query, setQuery] = useUrlSearchDraft({
+    value: search.q,
+    onCommit: (value) => {
+      void navigate({ to: "/deals", search: { ...search, q: value }, replace: true });
+    },
+  });
   const [showCreate, setShowCreate] = useState(false);
   const [pipelineForm, setPipelineForm] = useState<"create" | "edit" | null>(null);
   const [stageForm, setStageForm] = useState<"add" | DealStage | null>(null);
@@ -44,18 +49,6 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
   const createDeal = useCreateDeal();
   const moveDeal = useMoveDeal();
   const updatePipeline = useUpdateDealPipeline();
-
-  useEffect(() => {
-    setQuery(search.q);
-  }, [search.q]);
-
-  useDebouncedSearch({
-    value: query,
-    onCommit: (value) => {
-      if (value === search.q) return;
-      void navigate({ to: "/deals", search: { ...search, q: value }, replace: true });
-    },
-  });
 
   async function saveStage(values: DealStageDraft): Promise<void> {
     if (!activePipeline || stageForm === null) return;
