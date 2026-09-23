@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { AutomationDefinition } from "@openengage/core/automations";
+import {
+  AutomationPublicationError,
+  type AutomationDefinition,
+} from "@openengage/core/automations";
 
 import {
   AutomationCommandService,
@@ -195,6 +198,28 @@ describe("AutomationCommandService", () => {
     expect(outcome).toMatchObject({ message: undefined });
     expect(target.counts.loadResourceIssues).toBe(0);
     expect(target.counts.publish).toBe(0);
+  });
+
+  it("reports an unpublishable graph but lets infrastructure failures surface", async () => {
+    const rejected = harness({
+      preparePublication: async () => {
+        throw new AutomationPublicationError("Callable automation cycle");
+      },
+    });
+    await expect(rejected.service.publish("automation-1")).resolves.toEqual({
+      kind: "invalid_graph",
+      message: "Callable automation cycle",
+      issues: [],
+    });
+
+    const outage = new Error("D1_ERROR: network connection lost");
+    const failing = harness({
+      preparePublication: async () => {
+        throw outage;
+      },
+    });
+    await expect(failing.service.publish("automation-1")).rejects.toBe(outage);
+    expect(failing.counts.publish).toBe(0);
   });
 
   it("returns resource validation issues without publishing", async () => {

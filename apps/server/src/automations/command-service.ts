@@ -1,4 +1,7 @@
+import { ZodError } from "zod";
+
 import {
+  AutomationPublicationError,
   validateAutomation,
   pinAutomationDependencies,
   type AutomationExecutionSnapshot,
@@ -7,6 +10,7 @@ import {
   type AutomationValidationIssue,
   type EmailSequenceProposal,
 } from "@openengage/core/automations";
+import { VariableResolutionError } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   AutomationQueryRepository,
@@ -16,7 +20,10 @@ import {
 } from "@openengage/database/automations";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import { writeAuditLog } from "@openengage/database/platform";
-import { ProjectBriefLinkConflictError } from "@openengage/database/projects";
+import {
+  ProjectBriefLinkConflictError,
+  VariableRepositoryError,
+} from "@openengage/database/projects";
 
 import {
   resolveCommandBrief,
@@ -213,11 +220,8 @@ export class AutomationCommandService {
     try {
       snapshot = await this.ports.preparePublication?.(id, definition);
     } catch (error) {
-      return {
-        kind: "invalid_graph",
-        message: error instanceof Error ? error.message : String(error),
-        issues: [],
-      };
+      if (!(error instanceof AutomationPublicationError)) throw error;
+      return { kind: "invalid_graph", message: error.message, issues: [] };
     }
     let published: { draftVersionId: string };
     try {
@@ -313,27 +317,43 @@ export function createAutomationCommandService(input: {
   return new AutomationCommandService(input.workspace, {
     queries: new AutomationQueryRepository(input.database, input.workspace),
     commands: new AutomationCommandRepository(input.database, input.workspace),
-    preparePublication: async (id, definition) =>
-      pinAutomationDependencies(
-        id,
-        definition,
-        await resolveProjectVariables(
-          input.database,
-          input.workspace.workspaceId,
-          definition.variableProjectId ?? null,
-        ),
-        (childId) =>
-          new AutomationPublicationRepository(input.database, input.workspace).publishedDependency(
-            childId,
+    preparePublication: async (id, definition) => {
+      try {
+        return await pinAutomationDependencies(
+          id,
+          definition,
+          await resolveProjectVariables(
+            input.database,
+            input.workspace.workspaceId,
+            definition.variableProjectId ?? null,
           ),
-        async (graph) => {
-          const issues = await validateAutomationResources(
-            graph,
-            await loadAutomationResourceContext(input.database, input.workspace),
-          );
-          if (issues.length) throw new Error(issues.map((issue) => issue.message).join("; "));
-        },
-      ),
+          (childId) =>
+            new AutomationPublicationRepository(
+              input.database,
+              input.workspace,
+            ).publishedDependency(childId),
+          async (graph) => {
+            const issues = await validateAutomationResources(
+              graph,
+              await loadAutomationResourceContext(input.database, input.workspace),
+            );
+            if (issues.length) {
+              throw new AutomationPublicationError(issues.map((issue) => issue.message).join("; "));
+            }
+          },
+        );
+      } catch (error) {
+        // Variables that cannot resolve are the author's to fix, like any other graph issue.
+        if (
+          error instanceof VariableResolutionError ||
+          error instanceof VariableRepositoryError ||
+          error instanceof ZodError
+        ) {
+          throw new AutomationPublicationError(error.message, { cause: error });
+        }
+        throw error;
+      }
+    },
     resolveBrief: (reference) => resolveCommandBrief(input.database, input.workspace, reference),
     classifyWriteError: (error) => {
       if (error instanceof ProjectBriefLinkConflictError) return "brief_conflict";

@@ -1,4 +1,5 @@
 import {
+  AutomationRunError,
   AutomationRunRepository,
   AutomationExecutionRepository,
   AutomationCatalogRepository,
@@ -28,17 +29,18 @@ export const automationExecutionProcedures = {
           version.source.config.audience.filter,
         );
         if (!result.valid)
-          throw new Error(
-            result.issues
+          throw errors.INVALID_AUTOMATION_RUN({
+            message: result.issues
               .map((issue) => `ノード ${version.source.id} の条件 ${issue.path}: ${issue.message}`)
               .join("; "),
-          );
+          });
       }
       return { versionId: version.id, ...(await repo.preview(version.source.config.audience)) };
     } catch (error) {
-      throw errors.INVALID_AUTOMATION_RUN({
-        message: error instanceof Error ? error.message : String(error),
-      });
+      if (error instanceof AutomationRunError) {
+        throw errors.INVALID_AUTOMATION_RUN({ message: error.message });
+      }
+      throw error;
     }
   }),
   startRun: authed.automations.startRun.handler(async ({ context, input, errors }) => {
@@ -59,9 +61,10 @@ export const automationExecutionProcedures = {
       );
       return run;
     } catch (error) {
-      throw errors.INVALID_AUTOMATION_RUN({
-        message: error instanceof Error ? error.message : String(error),
-      });
+      if (error instanceof AutomationRunError) {
+        throw errors.INVALID_AUTOMATION_RUN({ message: error.message });
+      }
+      throw error;
     }
   }),
   listRuns: authed.automations.listRuns.handler(({ context, input }) =>

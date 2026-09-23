@@ -22,6 +22,11 @@ import {
   automationEnrollments,
 } from "./schema";
 
+/** A manual run the current published state does not allow; the message is shown to the user. */
+export class AutomationRunError extends Error {
+  public override readonly name = "AutomationRunError";
+}
+
 export class AutomationRunRepository extends WorkspaceRepository {
   private audienceQuery(audience: AutomationAudience): SQL {
     if (audience.kind === "filter")
@@ -53,10 +58,10 @@ export class AutomationRunRepository extends WorkspaceRepository {
         ),
       )
       .get();
-    if (!row) throw new Error("公開中のオートメーションがありません");
+    if (!row) throw new AutomationRunError("公開中のオートメーションがありません");
     const graph = automationDefinitionSchema.parse(JSON.parse(row.graph));
     const source = graph.nodes.find((node) => node.type === "source");
-    if (source?.config.source !== "batch") throw new Error("バッチ開始のフローを選択してください");
+    if (source?.config.source !== "batch") throw new AutomationRunError("バッチ開始のフローを選択してください");
     return { ...row, graph, source: { ...source, config: source.config } };
   }
   public async preview(audience: AutomationAudience) {
@@ -72,7 +77,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
           ),
         )
         .get();
-      if (!segment) throw new Error("利用できるリストがありません");
+      if (!segment) throw new AutomationRunError("利用できるリストがありません");
     }
     const query = this.audienceQuery(audience);
     const [count, sample] = await Promise.all([
@@ -105,7 +110,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
     if (existing) return (await this.runDetail(existing.id))!.run;
     const version = await this.published(automationId);
     if (expectedVersionId && version.id !== expectedVersionId)
-      throw new Error("公開版が変更されました。対象を再確認してください");
+      throw new AutomationRunError("公開版が変更されました。対象を再確認してください");
     await this.preview(version.source.config.audience);
     const id = uuidv7(),
       orm = this.database.orm,
@@ -148,7 +153,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
         ),
       )
       .get();
-    if (!run) throw new Error("公開状態が変更されました");
+    if (!run) throw new AutomationRunError("公開状態が変更されました");
     return (await this.runDetail(run.id))!.run;
   }
   public async pendingTargets(runId: string, limit = 100) {

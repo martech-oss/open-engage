@@ -2,6 +2,7 @@ import { ContactRepository } from "@openengage/database/contacts";
 import {
   DealRecordRepository,
   DealTaskRepository,
+  SalesReferenceError,
   SalesRepository,
 } from "@openengage/database/deals";
 import { ack } from "@openengage/orpc";
@@ -19,9 +20,8 @@ export const salesProcedures = {
     try {
       result = await new SalesRepository(context.database, context.workspace).handoff(input);
     } catch (error) {
-      throw errors.INVALID_DEAL_REFERENCE({
-        message: error instanceof Error ? error.message : "Handoff failed",
-      });
+      if (!(error instanceof SalesReferenceError)) throw error;
+      throw errors.INVALID_DEAL_REFERENCE({ message: error.message });
     }
     await reconcileContactSegmentMemberships(
       context.database,
@@ -39,9 +39,8 @@ export const salesProcedures = {
       try {
         return await new SalesRepository(context.database, context.workspace).saveGroup(input);
       } catch (error) {
-        throw errors.INVALID_DEAL_REFERENCE({
-          message: error instanceof Error ? error.message : "Invalid group",
-        });
+        if (!(error instanceof SalesReferenceError)) throw error;
+        throw errors.INVALID_DEAL_REFERENCE({ message: error.message });
       }
     },
   ),
