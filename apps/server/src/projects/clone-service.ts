@@ -1,6 +1,7 @@
 import type { ProjectCloneOptions } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
+import { writeAuditLog } from "@openengage/database/platform";
 import {
   ProjectCloneError,
   ProjectCloneRecoveryRepository,
@@ -12,6 +13,7 @@ import {
 
 import type { RuntimeEnv } from "../env";
 import { logError } from "../observability";
+import type { JobsQueue } from "../platform/queue-messages";
 
 export async function previewProjectClone(
   database: OpenEngageDatabase,
@@ -56,6 +58,44 @@ export async function getProjectCloneProgress(
   if (!job || job.sourceProjectId !== projectId)
     throw new ProjectCloneError("not_found", "複製ジョブが見つかりません");
   return job;
+}
+
+/** Starts a previewed clone once per request key and hands queued work to the jobs consumer. */
+export async function startProjectClone(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  queue: JobsQueue,
+  input: { projectId: string; jobId: string; requestKey: string },
+) {
+  await getProjectCloneProgress(database, workspace.workspaceId, input.projectId, input.jobId);
+  const job = await new ProjectCloneJobRepository(database, workspace).start(
+    input.jobId,
+    input.requestKey,
+  );
+  if (job.status === "queued") await enqueueProjectClone(queue, workspace.workspaceId, job.id);
+  await writeAuditLog(database, workspace, {
+    action: "project.clone.start",
+    resourceType: "project",
+    resourceId: input.projectId,
+    metadata: { jobId: job.id, targetProjectId: job.targetProjectId },
+  });
+  return job;
+}
+
+export async function retryProjectClone(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  queue: JobsQueue,
+  input: { projectId: string; jobId: string },
+) {
+  await getProjectCloneProgress(database, workspace.workspaceId, input.projectId, input.jobId);
+  const job = await new ProjectCloneJobRepository(database, workspace).retry(input.jobId);
+  if (job.status === "queued") await enqueueProjectClone(queue, workspace.workspaceId, job.id);
+  return job;
+}
+
+function enqueueProjectClone(queue: JobsQueue, workspaceId: string, jobId: string) {
+  return queue.send({ kind: "project_clone", workspaceId, jobId });
 }
 
 export async function processProjectClone(env: RuntimeEnv, workspaceId: string, jobId: string) {
