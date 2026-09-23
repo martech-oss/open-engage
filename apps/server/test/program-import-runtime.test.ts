@@ -10,6 +10,7 @@ import { processProgramMemberImport } from "../src/projects/program-import-servi
 import { queue, scheduled } from "../src/runtime/dispatch";
 import { queueStub, seedAutomationJob } from "./automation-recovery-test-support";
 import { programFixture } from "./program-test-support";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -72,7 +73,7 @@ describe("program import runtime integration", () => {
       JOBS_QUEUE: queueStub(async () => {
         throw outage;
       }),
-      PROGRAM_MEMBER_IMPORT_QUEUE: { send },
+      PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({ send }),
     } as typeof env;
     await expect(
       scheduled(

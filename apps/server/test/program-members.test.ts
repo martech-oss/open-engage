@@ -195,7 +195,7 @@ describe("program forms", () => {
       id: crypto.randomUUID(),
       workspaceId: f.workspaceId,
       name: "Inquiry",
-      definition: {},
+      definition: { progressiveMaxFields: 3 },
       allowedDomains: [],
       turnstileEnabled: false,
       successMessage: "Thanks",

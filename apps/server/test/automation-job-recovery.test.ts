@@ -45,7 +45,7 @@ describe("automation job recovery", () => {
         createScheduledController({ cron: "* * * * *" }),
         runtimeWithJobsQueue(
           queueStub(async (messages) => {
-            published.push(...messages.map((message) => message.body));
+            published.push(...Array.from(messages, (message) => message.body));
           }),
         ),
         createExecutionContext(),

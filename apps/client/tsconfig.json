@@ -13,6 +13,7 @@
   "include": [
     "src",
     "vite.config.ts",
+    "vite.verify.config.ts",
     "vitest.config.ts",
     "worker-configuration.d.ts",
     "../server/worker-configuration.d.ts"

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "deploy": "pnpm build && wrangler deploy --config dist/server/wrangler.json",
     "cf:types": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings --config wrangler.jsonc --config ../server/wrangler.jsonc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p preview/tsconfig.json",
     "test": "vitest run && pnpm test:preview",
     "dev:preview": "vite --config preview/vite.config.ts",
     "test:preview": "vitest run --config preview/vitest.config.ts"

@@ -15,7 +15,9 @@ type Client = ContractRouterClient<typeof contract>;
 
 afterEach(() => vi.restoreAllMocks());
 
-function bindings(overrides: Partial<RuntimeEnv>): RuntimeEnv {
+function bindings(overrides: {
+  [Key in keyof RuntimeEnv]?: RuntimeEnv[Key] | undefined;
+}): RuntimeEnv {
   return new Proxy(env, {
     get(target, property, receiver) {
       if (Object.prototype.hasOwnProperty.call(overrides, property)) {
@@ -43,7 +45,7 @@ function clientFor(token: string, runtime: RuntimeEnv): Client {
     new RPCLink({
       url: "http://localhost:8787/api/rpc",
       headers: { authorization: `Bearer ${token}` },
-      fetch: (request) => app.fetch(request, runtime, createExecutionContext()),
+      fetch: async (request) => app.fetch(request, runtime, createExecutionContext()),
     }),
   );
 }

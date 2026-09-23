@@ -64,7 +64,11 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
       });
       const db = createDatabase(env.DB);
       const engine = new AutomationJobRepository(db);
-      const contactRepository = new ContactRepository(db, { workspaceId: seeded.workspaceId });
+      const contactRepository = new ContactRepository(db, {
+        workspaceId: seeded.workspaceId,
+        userId: "owner",
+        role: "owner",
+      });
       await db.orm.update(contacts).set({ score: 20 }).where(eq(contacts.id, seeded.contactId));
       if (categoryId) {
         await db.orm.insert(scoringCategories).values({

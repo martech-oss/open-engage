@@ -44,7 +44,7 @@ async function seedDelivery(label: string): Promise<Seeded> {
     channel: "email",
     purpose: "transactional",
     provider: "cloudflare",
-    recipient: contact.email,
+    recipient: `${label}@example.com`,
     idempotencyKey: `tracking-${label}`,
     payload: "{}",
   });
@@ -97,7 +97,7 @@ async function seedAttributedDelivery(label: string): Promise<AttributedSeeded> 
     channel: "email",
     purpose: "marketing",
     provider: "cloudflare",
-    recipient: contact.email,
+    recipient: `${label}@example.com`,
     templateId,
     idempotencyKey: `tracking-${label}`,
     payload: "{}",

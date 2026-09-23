@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import type { ContactExportFilter } from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   companies,
   companyContacts,
@@ -15,7 +16,6 @@ import {
   tags,
   uuidv7,
 } from "@openengage/database/testing";
-import type { WorkspaceContext } from "@openengage/orpc";
 
 import {
   getContactExportFile,

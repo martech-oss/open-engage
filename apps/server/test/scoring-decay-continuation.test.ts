@@ -8,6 +8,7 @@ import { queue as dispatchQueue } from "../src/runtime/dispatch";
 import { runScoringDecay } from "../src/scoring/decay-service";
 import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { seedWorkspace } from "./factory";
+import { queueDouble } from "./queue-double";
 
 const occurredAt = "2026-09-09T00:00:00.000Z";
 const now = new Date("2026-09-10T00:00:00.000Z");
@@ -42,21 +43,22 @@ async function seed(count: number) {
   }
   const continuations: unknown[] = [];
   const projections: unknown[] = [];
-  const queue = {
-    send: async (message: unknown) => {
+  const sendBatch = async (messages: Iterable<MessageSendRequest<unknown>>) => {
+    projections.push(...Array.from(messages, (message) => message.body));
+  };
+  const queue = queueDouble({
+    send: async (message) => {
       continuations.push(message);
     },
-    sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-      projections.push(...Array.from(messages, (message) => message.body));
-    },
-  } as unknown as Queue;
+    sendBatch,
+  });
   const score = async () => {
     const row = await env.DB.prepare("SELECT score FROM contacts WHERE id=?")
       .bind(contactId)
       .first<{ score: number }>();
     return row?.score;
   };
-  return { database, contactId, continuations, projections, queue, score };
+  return { database, contactId, continuations, projections, queue, sendBatch, score };
 }
 
 async function consume(body: unknown, queue: Queue) {
@@ -111,12 +113,12 @@ it("drains multiple decay pages through the jobs queue without another cron or a
 
 it("leaves unpublished continuation work recoverable by the next cron without double decay", async () => {
   const f = await seed(21);
-  const unavailableQueue = {
-    sendBatch: f.queue.sendBatch,
+  const unavailableQueue = queueDouble({
+    sendBatch: f.sendBatch,
     send: async () => {
       throw new Error("Queue unavailable");
     },
-  } as unknown as Queue;
+  });
   await expect(runScoringDecay(f.database, unavailableQueue, now)).rejects.toThrow(
     "Queue unavailable",
   );

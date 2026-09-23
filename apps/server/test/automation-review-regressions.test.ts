@@ -36,6 +36,7 @@ import {
   expectJobAndEnrollment,
 } from "./automation-recovery-test-support";
 import { seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 
 it("rejects a stale publication atomically and preserves the concurrently saved draft", async () => {
   const { client, workspaceId } = await seedWorkspaceClient(env.DB),
@@ -172,12 +173,11 @@ it("visits later schedule pages and only queues registration with a frozen scan 
   }
   type Continuation = { kind: string; now?: string; afterAutomationId?: string };
   const sent: Continuation[] = [];
-  const queue = {
-    ...queueStub(),
-    send: async (message: Continuation) => {
-      sent.push(message);
+  const queue = queueDouble({
+    send: async (message) => {
+      sent.push(message as Continuation);
     },
-  } as Queue;
+  });
   await dispatchScheduledAutomationRuns(db, new Date(now), 1, queue);
   for (let i = 0; i < sent.length; i++) {
     const message = sent[i]!;

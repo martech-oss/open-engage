@@ -40,7 +40,7 @@ describe("Cloudflare Email Sending events", () => {
         channel: "email",
         purpose: "transactional",
         provider: "cloudflare",
-        recipient: contact.email,
+        recipient: `${kind}@example.com`,
         idempotencyKey: `event-${kind}`,
         payload: JSON.stringify({
           kind: "email",

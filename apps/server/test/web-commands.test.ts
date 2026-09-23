@@ -323,7 +323,7 @@ describe("Web commands", () => {
       vi.spyOn(LandingDesignRepository.prototype, "page").mockImplementationOnce(async (id) => {
         const page = await readPage(id);
         return outcome === "not_found"
-          ? null
+          ? undefined
           : { ...page!, currentVersionId: "concurrent-version" };
       });
       const created = await pages.create(

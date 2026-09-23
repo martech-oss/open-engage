@@ -1,12 +1,18 @@
 const empty = new URLSearchParams(globalThis.location?.search ?? "").get("state") === "empty";
-const points = Array.from({ length: 30 }, (_, i) => ({
-  date: `2026-09-${String(i + 1).padStart(2, "0")}`,
-  label: String(i + 1),
-  sends: empty ? 0 : 30 + i * 3,
-  delivered: empty ? 0 : 29 + i * 3,
-  undelivered: empty ? 0 : i % 4,
-  added: empty ? 0 : 12 + (i % 9),
-}));
+const points = Array.from({ length: 30 }, (_, i) => {
+  const day = new Date(Date.UTC(2026, 7, 14 + i)).toISOString().slice(0, 10);
+  const sends = empty ? 0 : 30 + i * 3;
+  const undelivered = empty ? 0 : i % 4;
+  return {
+    day,
+    date: day,
+    label: String(i + 1),
+    sends,
+    delivered: sends - undelivered,
+    undelivered,
+    added: empty ? 0 : 12 + (i % 9),
+  };
+});
 const dashboard = {
   contacts: { count: empty ? 0 : 2486, changePercent: 12.4, trend: { points } },
   deliveries: {
@@ -147,11 +153,6 @@ function oldFixture(path: string, _input: any) {
   return undefined;
 }
 const range = { from: "2026-08-14", to: "2026-09-12" };
-points.forEach((p, i) => {
-  p.day = new Date(Date.UTC(2026, 7, 14 + i)).toISOString().slice(0, 10);
-  p.date = p.day;
-  p.delivered = p.sends - p.undelivered;
-});
 Object.assign(dashboard, {
   asOf: "2026-09-12T06:00:00Z",
   timezone: "Asia/Tokyo",
@@ -165,8 +166,10 @@ dashboard.recentActivity.forEach((e, i) =>
   Object.assign(e, { contactId: `contact-${i}`, properties: {} }),
 );
 if (empty) {
-  for (const section of [dashboard.automations, dashboard.deals, dashboard.deliveries])
-    for (const key of Object.keys(section)) if (typeof section[key] === "number") section[key] = 0;
+  for (const section of [dashboard.automations, dashboard.deals, dashboard.deliveries]) {
+    const values: Record<string, unknown> = section;
+    for (const key of Object.keys(values)) if (typeof values[key] === "number") values[key] = 0;
+  }
 }
 import { PROJECT_PROGRAM_TEMPLATES } from "@openengage/core/projects";
 const definition = PROJECT_PROGRAM_TEMPLATES.event;
@@ -202,8 +205,8 @@ function extendedFixture(path: string, input: any) {
             member: {
               id: `member-${i}`,
               contactId: c.id,
-              statusLabel: definition.statuses[0].label,
-              statusId: definition.statuses[0].id,
+              statusLabel: definition.statuses[0]?.label ?? "",
+              statusId: definition.statuses[0]?.id ?? "",
               definitionVersion: 1,
               joinedAt: "2026-09-01T01:00:00Z",
               firstSuccessAt: i % 2 ? null : "2026-09-03T07:00:00Z",
@@ -216,7 +219,7 @@ function extendedFixture(path: string, input: any) {
   if (path === "projects.briefOptions")
     return { members: [], projects, forms: [], automations: [], emails: [], segments: [] };
   if (path === "contacts.profile") {
-    const c = contacts.find((c) => c.id === input?.contactId) ?? contacts[0];
+    const c = contacts.find((c) => c.id === input?.contactId) ?? contacts[0]!;
     return {
       contact: {
         ...c,
@@ -381,7 +384,7 @@ const previewLists = ["秋の展示会 来場者", "ウェビナー参加者", "
     filterAst: null,
     membershipSource: ["展示会受付", "参加者インポート", "手動選定"][i],
     filterVersion: 1,
-    memberCount: empty ? 0 : listMemberIds[i].length,
+    memberCount: empty ? 0 : (listMemberIds[i]?.length ?? 0),
     evaluatedAt: null,
     evaluationStatus: "ready",
     evaluationError: null,
@@ -401,7 +404,7 @@ function listFixture(path: string, input: any) {
     const items =
       empty || index < 0
         ? []
-        : contacts.filter((contact) => listMemberIds[index].includes(contact.id));
+        : contacts.filter((contact) => listMemberIds[index]?.includes(contact.id));
     return { items, total: items.length, nextCursor: null };
   }
   return undefined;

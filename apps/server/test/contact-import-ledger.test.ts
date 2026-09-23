@@ -108,7 +108,7 @@ describe("contact import exact-once ledger", () => {
     barrier.resume();
     const results = await Promise.all([first, second]);
 
-    expect(results.toSorted((left, right) => Number(left) - Number(right))).toEqual([false, true]);
+    expect([...results].sort((left, right) => Number(left) - Number(right))).toEqual([false, true]);
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({
       status: "processing",
       processed: 1,

@@ -14,7 +14,7 @@ async function seed() {
     workspaceId,
     userId: "owner",
     role: "owner",
-  }).createContact({ email: "limits@example.com" });
+  }).createContact({ email: "limits@example.com", customFields: {} });
   const scoring = new ScoringRepository(env.DB, { workspaceId });
   const category = await scoring.createCategory({ name: "Product", slug: "product" });
   return { workspaceId, contactId: contact.id, scoring, categoryId: category.id };

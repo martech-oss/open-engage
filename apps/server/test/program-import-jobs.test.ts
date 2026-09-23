@@ -16,6 +16,7 @@ import {
   recoverProgramMemberImports,
 } from "../src/projects/program-import-service";
 import { programFixture } from "./program-test-support";
+import { queueDouble } from "./queue-double";
 async function fixture() {
   const f = await programFixture();
   await f.client.projects.programSave({
@@ -51,9 +52,9 @@ describe("resumable program member CSV jobs", () => {
     ).rejects.toMatchObject({ code: "PROGRAM_CONFLICT" });
     const runtime = {
       ...env,
-      PROGRAM_MEMBER_IMPORT_QUEUE: {
+      PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({
         send: vi.fn<(message: unknown) => Promise<void>>().mockResolvedValue(undefined),
-      },
+      }),
     };
     await processProgramMemberImport(runtime as typeof env, f.workspaceId, accepted.jobId);
     expect(
@@ -92,7 +93,7 @@ describe("resumable program member CSV jobs", () => {
     const send = vi.fn<(message: unknown) => Promise<void>>().mockResolvedValue(undefined);
     await recoverProgramMemberImports({
       ...env,
-      PROGRAM_MEMBER_IMPORT_QUEUE: { send },
+      PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({ send }),
     } as typeof env);
     expect(send).toHaveBeenCalledWith({
       kind: "program_member_import",
@@ -100,7 +101,7 @@ describe("resumable program member CSV jobs", () => {
       jobId: accepted.jobId,
     });
     await processProgramMemberImport(
-      { ...env, PROGRAM_MEMBER_IMPORT_QUEUE: { send } } as typeof env,
+      { ...env, PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({ send }) } as typeof env,
       f.workspaceId,
       accepted.jobId,
     );
@@ -117,7 +118,7 @@ describe("resumable program member CSV jobs", () => {
     const send = vi
       .fn<(message: unknown) => Promise<void>>()
       .mockRejectedValue(new Error("queue unavailable"));
-    const runtime = { ...env, PROGRAM_MEMBER_IMPORT_QUEUE: { send } } as typeof env;
+    const runtime = { ...env, PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({ send }) } as typeof env;
     const input = {
       projectId: f.projectId,
       idempotencyKey: crypto.randomUUID(),
@@ -193,9 +194,9 @@ describe("resumable program member CSV jobs", () => {
     });
     const runtime = {
       ...env,
-      PROGRAM_MEMBER_IMPORT_QUEUE: {
+      PROGRAM_MEMBER_IMPORT_QUEUE: queueDouble({
         send: vi.fn<(message: unknown) => Promise<void>>().mockResolvedValue(undefined),
-      },
+      }),
     };
     for (let i = 0; i < 40; i++)
       await processProgramMemberImport(runtime as typeof env, f.workspaceId, accepted.jobId);
