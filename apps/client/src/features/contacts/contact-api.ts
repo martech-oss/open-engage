@@ -1,10 +1,6 @@
-import {
-  type QueryClient,
-  keepPreviousData,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { type QueryClient, keepPreviousData } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
   ContactBulkAction,
@@ -170,11 +166,10 @@ export function invalidateContactOptions(queryClient: QueryClient): Promise<void
 }
 
 export function useCreateContact() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.contacts.create.mutationOptions(),
-    onSuccess: (_contact, variables) => invalidateCreatedContactQueries(queryClient, variables),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.contacts.create.mutationOptions(),
+    (queryClient, variables) => invalidateCreatedContactQueries(queryClient, variables),
+  );
 }
 
 /** Refreshes every read model affected by the single atomic create command. */

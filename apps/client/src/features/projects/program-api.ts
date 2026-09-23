@@ -1,7 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
+import { invalidateQueryRoots } from "@/lib/query-invalidation";
 import type { ProgramCohortInput } from "@openengage/core/projects";
 export function projectsQueryOptions() {
   return orpcQuery.projects.programCatalog.queryOptions();
@@ -20,53 +22,54 @@ export function projectMemberHistoryQueryOptions(id: string, contactId: string) 
 export function programCohortQueryOptions(id: string, cohort: ProgramCohortInput) {
   return orpcQuery.projects.programCohort.queryOptions({ input: { id, ...cohort } });
 }
-export function useProgramInvalidator() {
-  const client = useQueryClient();
-  return useCallback(
-    () =>
-      Promise.all([
-        client.invalidateQueries({ queryKey: orpcQuery.projects.key() }),
-        client.invalidateQueries({ queryKey: orpcQuery.contacts.key() }),
-        client.invalidateQueries({ queryKey: orpcQuery.segments.key() }),
-      ]),
-    [client],
+/** Program writes change projects, the contacts they enroll and segment memberships. */
+function invalidateProgramQueries(queryClient: QueryClient) {
+  return invalidateQueryRoots(
+    queryClient,
+    orpcQuery.projects.key(),
+    orpcQuery.contacts.key(),
+    orpcQuery.segments.key(),
   );
 }
+export function useProgramInvalidator() {
+  const queryClient = useQueryClient();
+  return useCallback(() => invalidateProgramQueries(queryClient), [queryClient]);
+}
 export function useCreateProject() {
-  return useMutation({
-    ...orpcQuery.projects.create.mutationOptions(),
-    onSuccess: useProgramInvalidator(),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.projects.create.mutationOptions(),
+    invalidateProgramQueries,
+  );
 }
 export function useSaveProgram() {
-  return useMutation({
-    ...orpcQuery.projects.programSave.mutationOptions(),
-    onSuccess: useProgramInvalidator(),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.projects.programSave.mutationOptions(),
+    invalidateProgramQueries,
+  );
 }
 export function usePublishProgram() {
-  return useMutation({
-    ...orpcQuery.projects.programPublish.mutationOptions(),
-    onSuccess: useProgramInvalidator(),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.projects.programPublish.mutationOptions(),
+    invalidateProgramQueries,
+  );
 }
 export function useMutateProjectMember() {
-  return useMutation({
-    ...orpcQuery.projects.memberMutate.mutationOptions(),
-    onSuccess: useProgramInvalidator(),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.projects.memberMutate.mutationOptions(),
+    invalidateProgramQueries,
+  );
 }
 export function useImportProjectMembers() {
-  return useMutation({
-    ...orpcQuery.projects.memberImport.mutationOptions(),
-    onSuccess: useProgramInvalidator(),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.projects.memberImport.mutationOptions(),
+    invalidateProgramQueries,
+  );
 }
 export function useBindProgramForm() {
-  return useMutation({
-    ...orpcQuery.projects.programBindForm.mutationOptions(),
-    onSuccess: useProgramInvalidator(),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.projects.programBindForm.mutationOptions(),
+    invalidateProgramQueries,
+  );
 }
 
 export function programMemberImportQueryOptions(id: string, jobId: string) {

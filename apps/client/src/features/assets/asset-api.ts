@@ -1,10 +1,6 @@
-import {
-  type QueryClient,
-  keepPreviousData,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { type QueryClient, keepPreviousData } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { Asset, AssetListInput, AssetSummary } from "@openengage/core/assets";
 import type { AssetKind, AssetVisibility } from "@openengage/core/shared";
@@ -96,41 +92,28 @@ export function invalidateAssetsList(queryClient: QueryClient): Promise<void> {
 }
 
 export function useUpdateAsset() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.assets.update.mutationOptions(),
-    onSuccess: (_data, variables) =>
+  return useInvalidatingMutation(
+    orpcQuery.assets.update.mutationOptions(),
+    (queryClient, variables) =>
       Promise.all([
         queryClient.invalidateQueries({
           queryKey: orpcQuery.assets.get.key({ input: { id: variables.id } }),
         }),
         invalidateAssetsList(queryClient),
       ]),
-  });
+  );
 }
 
 export function useArchiveAsset() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.assets.archive.mutationOptions(),
-    onSuccess: () => invalidateAssetsList(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.assets.archive.mutationOptions(), invalidateAssetsList);
 }
 
 export function useRestoreAsset() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.assets.restore.mutationOptions(),
-    onSuccess: () => invalidateAssetsList(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.assets.restore.mutationOptions(), invalidateAssetsList);
 }
 
 export function useDeleteAsset() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.assets.delete.mutationOptions(),
-    onSuccess: () => invalidateAssetsList(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.assets.delete.mutationOptions(), invalidateAssetsList);
 }
 
 /**

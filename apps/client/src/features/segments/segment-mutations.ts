@@ -1,5 +1,6 @@
-import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import { invalidateProjectBriefQueries } from "@/lib/project-brief-cache";
 import { invalidateQueryRoots } from "@/lib/query-invalidation";
@@ -32,24 +33,21 @@ export function createDynamicSegment(input: {
 }
 
 export function useCreateSegment() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.segments.create.mutationOptions(),
-    onSuccess: async (_, variables) => {
-      await Promise.all([
+  return useInvalidatingMutation(
+    orpcQuery.segments.create.mutationOptions(),
+    (queryClient, variables) =>
+      Promise.all([
         invalidateSegmentQueries(queryClient),
         ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
-      ]);
-    },
-  });
+      ]),
+  );
 }
 
 export function useUpdateSegment() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.segments.update.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateSegmentQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.segments.update.mutationOptions(),
+    (queryClient, variables) => invalidateSegmentQueries(queryClient, variables.id),
+  );
 }
 
 export function usePreviewSegment() {
@@ -61,11 +59,10 @@ export function useGenerateSegment() {
 }
 
 export function useRefreshSegment() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.segments.refresh.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateSegmentQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.segments.refresh.mutationOptions(),
+    (queryClient, variables) => invalidateSegmentQueries(queryClient, variables.id),
+  );
 }
 
 export function refreshSegment(segmentId: string) {

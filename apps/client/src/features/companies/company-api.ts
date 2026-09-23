@@ -1,5 +1,6 @@
-import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { CompanyContactDto, CompanySummary } from "@openengage/core/contacts";
 
@@ -60,19 +61,16 @@ export function invalidateCompanyQueries(
 }
 
 export function useCreateCompany() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.create.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.companies.create.mutationOptions(), [
+    orpcQuery.companies.list.key(),
+  ]);
 }
 
 export function useUpdateCompany() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.update.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.companies.update.mutationOptions(),
+    (queryClient, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  );
 }
 
 export function useEnrichCompany() {
@@ -80,17 +78,15 @@ export function useEnrichCompany() {
 }
 
 export function useAssignCompanyContact() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.assignContact.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.companies.assignContact.mutationOptions(),
+    (queryClient, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  );
 }
 
 export function useRemoveCompanyContact() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.removeContact.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.companies.removeContact.mutationOptions(),
+    (queryClient, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  );
 }

@@ -1,5 +1,6 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 import type {
   DealCreate,
@@ -94,7 +95,7 @@ export function tasksQueryOptions(search: TaskSearch) {
   });
 }
 
-function invalidateDealQueries(queryClient: ReturnType<typeof useQueryClient>, dealId?: string) {
+function invalidateDealQueries(queryClient: QueryClient, dealId?: string) {
   return Promise.all([
     ...(dealId
       ? [
@@ -110,11 +111,9 @@ function invalidateDealQueries(queryClient: ReturnType<typeof useQueryClient>, d
 }
 
 export function useCreateDeal() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.create.mutationOptions(),
-    onSuccess: () => invalidateDealQueries(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.deals.create.mutationOptions(), (queryClient) =>
+    invalidateDealQueries(queryClient),
+  );
 }
 
 /**
@@ -124,73 +123,59 @@ export function useCreateDeal() {
  * would re-enable a beat before the card actually settles into its column.
  */
 export function useMoveDeal() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.move.mutationOptions(),
-    onSuccess: () => invalidateDealQueries(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.deals.move.mutationOptions(), (queryClient) =>
+    invalidateDealQueries(queryClient),
+  );
 }
 
 export function useUpdateDeal() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.update.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.deals.update.mutationOptions(),
+    (queryClient, variables) => invalidateDealQueries(queryClient, variables.id),
+  );
 }
 
 export function useArchiveDeal() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.archive.mutationOptions(),
-    onSuccess: () => invalidateDealQueries(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.deals.archive.mutationOptions(), (queryClient) =>
+    invalidateDealQueries(queryClient),
+  );
 }
 
 export function useCreateDealTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.createTask.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.deals.createTask.mutationOptions(),
+    (queryClient, variables) => invalidateDealQueries(queryClient, variables.dealId),
+  );
 }
 
 export function useUpdateDealTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.updateTask.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.deals.updateTask.mutationOptions(),
+    (queryClient, variables) => invalidateDealQueries(queryClient, variables.dealId),
+  );
 }
 
 export function useDeleteDealTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.deleteTask.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateDealQueries(queryClient, variables.dealId),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.deals.deleteTask.mutationOptions(),
+    (queryClient, variables) => invalidateDealQueries(queryClient, variables.dealId),
+  );
 }
 
 export function useCreateDealPipeline() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.createPipeline.mutationOptions(),
-    onSuccess: () => invalidateDealQueries(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.deals.createPipeline.mutationOptions(), (queryClient) =>
+    invalidateDealQueries(queryClient),
+  );
 }
 
 export function useUpdateDealPipeline() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.updatePipeline.mutationOptions(),
-    onSuccess: () => invalidateDealQueries(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.deals.updatePipeline.mutationOptions(), (queryClient) =>
+    invalidateDealQueries(queryClient),
+  );
 }
 
 export function useArchiveDealPipeline() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.deals.archivePipeline.mutationOptions(),
-    onSuccess: () => invalidateDealQueries(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.deals.archivePipeline.mutationOptions(), (queryClient) =>
+    invalidateDealQueries(queryClient),
+  );
 }

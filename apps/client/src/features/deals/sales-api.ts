@@ -1,5 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 
 export const assignmentGroupsQueryOptions = () => orpcQuery.deals.assignmentGroups.queryOptions();
@@ -7,47 +6,54 @@ export const notificationsQueryOptions = () =>
   orpcQuery.deals.notifications.queryOptions({ input: {} });
 export const contactTasksQueryOptions = (contactId: string) =>
   orpcQuery.deals.contactTasks.queryOptions({ input: { contactId } });
-function useSalesInvalidation() {
-  const client = useQueryClient();
-  return () =>
-    Promise.all([
-      client.invalidateQueries({ queryKey: orpcQuery.deals.key() }),
-      client.invalidateQueries({ queryKey: orpcQuery.contacts.key() }),
-      client.invalidateQueries({ queryKey: orpcQuery.segments.key() }),
-    ]);
-}
+/** Handoffs and tasks change deals, the contact's owner and lifecycle, and segment memberships. */
+const SALES_WRITE_ROOTS = [
+  orpcQuery.deals.key(),
+  orpcQuery.contacts.key(),
+  orpcQuery.segments.key(),
+];
 export function useSalesHandoff() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.handoff.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(orpcQuery.deals.handoff.mutationOptions(), SALES_WRITE_ROOTS);
 }
 export function useSaveAssignmentGroup() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.saveAssignmentGroup.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(orpcQuery.deals.saveAssignmentGroup.mutationOptions(), [
+    orpcQuery.deals.assignmentGroups.key(),
+  ]);
 }
 export function useDeleteAssignmentGroup() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.deleteAssignmentGroup.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(orpcQuery.deals.deleteAssignmentGroup.mutationOptions(), [
+    orpcQuery.deals.assignmentGroups.key(),
+  ]);
 }
 export function useReadNotification() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.readNotification.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(orpcQuery.deals.readNotification.mutationOptions(), [
+    orpcQuery.deals.notifications.key(),
+  ]);
 }
 export function useCreateContactTask() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.createContactTask.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(
+    orpcQuery.deals.createContactTask.mutationOptions(),
+    SALES_WRITE_ROOTS,
+  );
 }
 export function useSetTaskStatus() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.setTaskStatus.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(
+    orpcQuery.deals.setTaskStatus.mutationOptions(),
+    SALES_WRITE_ROOTS,
+  );
 }
 
 export const salesMembersQueryOptions = () => orpcQuery.deals.salesMembers.queryOptions();
 
 export function useUpdateTaskResource() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.updateTaskResource.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(
+    orpcQuery.deals.updateTaskResource.mutationOptions(),
+    SALES_WRITE_ROOTS,
+  );
 }
 export function useDeleteTaskResource() {
-  const onSuccess = useSalesInvalidation();
-  return useMutation(orpcQuery.deals.deleteTaskResource.mutationOptions({ onSuccess }));
+  return useInvalidatingMutation(
+    orpcQuery.deals.deleteTaskResource.mutationOptions(),
+    SALES_WRITE_ROOTS,
+  );
 }

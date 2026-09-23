@@ -1,7 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 import { invalidateProjectBriefQueries } from "@/lib/project-brief-cache";
+import { invalidateQueryRoots } from "@/lib/query-invalidation";
 
 export function automationsQueryOptions() {
   return orpcQuery.automations.list.queryOptions();
@@ -20,16 +22,14 @@ export function segmentOptionsQueryOptions() {
 }
 
 export function useCreateAutomation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.create.mutationOptions(),
-    onSuccess: async (_, variables) => {
-      await Promise.all([
+  return useInvalidatingMutation(
+    orpcQuery.automations.create.mutationOptions(),
+    (queryClient, variables) =>
+      Promise.all([
         queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
         ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
-      ]);
-    },
-  });
+      ]),
+  );
 }
 
 export function useGenerateAutomation() {
@@ -41,47 +41,40 @@ export function useGenerateEmailSequence() {
 }
 
 export function useApplyEmailSequence() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.applySequence.mutationOptions(),
-    onSuccess: async (_, variables) => {
-      await Promise.all([
+  return useInvalidatingMutation(
+    orpcQuery.automations.applySequence.mutationOptions(),
+    (queryClient, variables) =>
+      Promise.all([
         queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
         queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
         ...(variables.projectId ? [invalidateProjectBriefQueries(queryClient)] : []),
-      ]);
-    },
-  });
+      ]),
+  );
 }
 
 /** Shared by the list page and the editor header, both of which only toggle active/paused. */
 export function useSetAutomationStatus() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.setStatus.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.automations.setStatus.mutationOptions(), [
+    orpcQuery.automations.list.key(),
+  ]);
 }
 
 export function useSaveAutomationDraft() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.saveDraft.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.automations.saveDraft.mutationOptions(), [
+    orpcQuery.automations.list.key(),
+  ]);
 }
 
 export function usePublishAutomationDraft() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.publish.mutationOptions(),
-    onSuccess: async (_, { id }) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() }),
-        queryClient.invalidateQueries({ queryKey: automationDraftQueryOptions(id).queryKey }),
-      ]);
-    },
-  });
+  return useInvalidatingMutation(
+    orpcQuery.automations.publish.mutationOptions(),
+    (queryClient, { id }) =>
+      invalidateQueryRoots(
+        queryClient,
+        orpcQuery.automations.list.key(),
+        automationDraftQueryOptions(id).queryKey,
+      ),
+  );
 }
 
 export function automationExecutionOptionsQueryOptions() {
@@ -117,25 +110,19 @@ export function usePreviewAutomationRun() {
   return useMutation(orpcQuery.automations.previewRun.mutationOptions());
 }
 export function useStartAutomationRun() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.startRun.mutationOptions(),
-    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.automations.listRuns.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.automations.startRun.mutationOptions(), [
+    orpcQuery.automations.listRuns.key(),
+  ]);
 }
 export function useCancelAutomationRun() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.cancelRun.mutationOptions(),
-    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.automations.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.automations.cancelRun.mutationOptions(), [
+    orpcQuery.automations.key(),
+  ]);
 }
 export function useCancelAutomationEnrollment() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.automations.cancelEnrollment.mutationOptions(),
-    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.automations.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.automations.cancelEnrollment.mutationOptions(), [
+    orpcQuery.automations.key(),
+  ]);
 }
 
 export function automationEnrollmentsQueryOptions(id: string) {

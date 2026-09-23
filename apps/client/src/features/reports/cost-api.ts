@@ -1,28 +1,22 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 export const campaignCostsQueryOptions = (id: string) =>
   orpcQuery.projects.listCosts.queryOptions({ input: { id }, enabled: Boolean(id) });
-function useCostInvalidation() {
-  const client = useQueryClient();
-  return () =>
-    Promise.all([
-      client.invalidateQueries({ queryKey: orpcQuery.projects.key() }),
-      client.invalidateQueries({ queryKey: orpcQuery.reports.key() }),
-    ]);
-}
 export function useCreateCampaignCost() {
-  return useMutation(
-    orpcQuery.projects.createCost.mutationOptions({ onSuccess: useCostInvalidation() }),
-  );
+  return useInvalidatingMutation(orpcQuery.projects.createCost.mutationOptions(), [
+    orpcQuery.projects.key(),
+    orpcQuery.reports.key(),
+  ]);
 }
 export function useUpdateCampaignCost() {
-  return useMutation(
-    orpcQuery.projects.updateCost.mutationOptions({ onSuccess: useCostInvalidation() }),
-  );
+  return useInvalidatingMutation(orpcQuery.projects.updateCost.mutationOptions(), [
+    orpcQuery.projects.key(),
+    orpcQuery.reports.key(),
+  ]);
 }
 export function useDeleteCampaignCost() {
-  return useMutation(
-    orpcQuery.projects.deleteCost.mutationOptions({ onSuccess: useCostInvalidation() }),
-  );
+  return useInvalidatingMutation(orpcQuery.projects.deleteCost.mutationOptions(), [
+    orpcQuery.projects.key(),
+    orpcQuery.reports.key(),
+  ]);
 }
