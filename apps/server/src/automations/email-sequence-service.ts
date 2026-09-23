@@ -9,6 +9,7 @@ import {
   type EmailSequenceInputRequest,
   type EmailSequenceProposal,
   type GenerateEmailSequenceInput,
+  validateEmailSequenceCatalogReferences,
   validateEmailSequenceProposal,
 } from "@openengage/core/automations";
 import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
@@ -25,7 +26,6 @@ import { AiGenerationError } from "../agents/generation-error";
 import { loadMarketingAgentContext } from "../agents/marketing-context";
 import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
-import { collectEmailAssetIds } from "../messaging/email-template-service";
 import {
   loadAutomationResourceContext,
   optionsForResourceKind,
@@ -33,7 +33,6 @@ import {
 } from "./resource-validation";
 
 const MAX_PROPOSAL_BYTES = 512 * 1_024;
-const MESSAGE_VARIABLE_PATTERN = /\{\{\s*message\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g;
 
 /** Why a sequence proposal cannot be applied: it fails validation, or the drafts changed underneath it. */
 export type EmailSequenceFailure = "invalid" | "conflict";
@@ -189,18 +188,8 @@ async function validateReadyProposal(
   if (resourceIssues.length > 0) {
     fail(resourceIssues.map((issue) => issue.message).join("; "));
   }
-  const allowedAssets = new Set(context.publicImages.map((image) => image.id));
-  const allowedVariables = new Set(context.variables.map((variable) => variable.key));
-  for (const email of proposal.emails) {
-    for (const assetId of collectEmailAssetIds(email.content)) {
-      if (!allowedAssets.has(assetId)) fail(`Unknown email asset: ${assetId}`);
-    }
-    const serialized = JSON.stringify(email.content);
-    for (const match of serialized.matchAll(MESSAGE_VARIABLE_PATTERN)) {
-      const key = match[1];
-      if (key && !allowedVariables.has(key)) fail(`Unknown message variable: ${key}`);
-    }
-  }
+  const catalogIssue = validateEmailSequenceCatalogReferences(proposal, context);
+  if (catalogIssue) fail(catalogIssue);
 }
 
 async function requestSequenceProposal(

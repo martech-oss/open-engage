@@ -1,9 +1,8 @@
 import { type AgentInitialData, emailDesignerAgent } from "@openengage/core/agents";
 import {
-  type EmailBlockV2,
-  type EmailDocumentV2,
   type EmailGenerationResult,
   type GenerateEmailInput,
+  validateEmailGenerationResult,
 } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
@@ -33,7 +32,8 @@ export async function generateEmail(
     variables: variables.map(({ key, name, description }) => ({ key, name, description })),
     publicImages,
   });
-  validateGeneratedDocument(proposal.proposal.content, new Set(publicImages.map(({ id }) => id)));
+  const issue = validateEmailGenerationResult(proposal, { publicImages });
+  if (issue) throw new AiGenerationError("failed", { cause: new Error(issue) });
   return proposal;
 }
 
@@ -47,41 +47,4 @@ async function requestEmailProposal(
     prompt: initialData.request.prompt,
     initialData,
   });
-}
-
-function validateGeneratedDocument(
-  document: EmailDocumentV2,
-  allowedAssets: ReadonlySet<string>,
-): void {
-  const ids = new Set<string>();
-  for (const block of document.blocks) {
-    if (ids.has(block.id)) fail(`Duplicate block id: ${block.id}`);
-    ids.add(block.id);
-    const children =
-      block.type === "columns"
-        ? block.columns.flatMap((column) => column.blocks)
-        : block.type === "conditional"
-          ? block.blocks
-          : [];
-    validateImage(block, allowedAssets);
-    for (const child of children) {
-      if (ids.has(child.id)) fail(`Duplicate block id: ${child.id}`);
-      ids.add(child.id);
-      validateImage(child, allowedAssets);
-    }
-  }
-}
-
-function validateImage(block: EmailBlockV2, allowedAssets: ReadonlySet<string>): void {
-  if (!isImageBlock(block)) return;
-  if (!allowedAssets.has(block.source.assetId))
-    fail(`Unknown image asset: ${block.source.assetId}`);
-}
-
-function isImageBlock(value: unknown): value is Extract<EmailBlockV2, { type: "image" }> {
-  return typeof value === "object" && value !== null && "type" in value && value.type === "image";
-}
-
-function fail(message: string): never {
-  throw new AiGenerationError("failed", { cause: new Error(message) });
 }

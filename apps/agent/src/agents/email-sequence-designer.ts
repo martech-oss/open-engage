@@ -3,7 +3,10 @@ import { useInitialData, useModel, useSkill, useTool } from "@flue/runtime";
 import * as v from "valibot";
 
 import { emailSequenceDesignerAgent } from "@openengage/core/agents";
-import { validateEmailSequenceProposal } from "@openengage/core/automations";
+import {
+  validateEmailSequenceCatalogReferences,
+  validateEmailSequenceProposal,
+} from "@openengage/core/automations";
 
 import automationFlowDesigner from "../skills/automation-flow-designer/SKILL.md";
 import emailSequence from "../skills/email-sequence/SKILL.md";
@@ -30,7 +33,8 @@ export function EmailSequenceDesigner() {
     validate: (result) => {
       if (result.status !== "ready") return null;
       const issues = validateEmailSequenceProposal(result.proposal);
-      return issues.length > 0 ? `Sequence validation failed: ${JSON.stringify(issues)}` : null;
+      if (issues.length > 0) return `Sequence validation failed: ${JSON.stringify(issues)}`;
+      return validateEmailSequenceCatalogReferences(result.proposal, initialData);
     },
     retryLimitError: "Email sequence proposal validation retry limit exceeded",
     retrySignal: {

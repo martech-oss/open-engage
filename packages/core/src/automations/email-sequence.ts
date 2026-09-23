@@ -1,6 +1,8 @@
 import * as z from "zod";
 
 import {
+  collectEmailAssetIds,
+  collectMessageVariableKeys,
   emailBrandProfileSchema,
   emailDocumentV2Schema,
   emailHrefSchema,
@@ -325,6 +327,24 @@ export function validateEmailSequenceProposal(
     });
   }
   return issues;
+}
+
+/** Catalog image and variable checks shared by the sequence Agent retry loop and Server. */
+export function validateEmailSequenceCatalogReferences(
+  proposal: Pick<EmailSequenceProposal, "emails">,
+  catalog: { publicImages: readonly { id: string }[]; variables: readonly { key: string }[] },
+): string | null {
+  const assetIds = new Set(catalog.publicImages.map((image) => image.id));
+  const variableKeys = new Set(catalog.variables.map((variable) => variable.key));
+  for (const email of proposal.emails) {
+    for (const assetId of collectEmailAssetIds(email.content)) {
+      if (!assetIds.has(assetId)) return `Unknown email asset: ${assetId}`;
+    }
+    for (const key of collectMessageVariableKeys(email.content)) {
+      if (!variableKeys.has(key)) return `Unknown message variable: ${key}`;
+    }
+  }
+  return null;
 }
 
 export const emailSequenceDesignerInitialDataSchema = z
