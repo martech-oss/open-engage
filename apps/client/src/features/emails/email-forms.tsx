@@ -16,8 +16,9 @@ import {
   useUpdateEmailTemplate,
   useUpdateEmailVariable,
 } from "@/features/emails/email-api";
-import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import {
   defaultEmailDocumentV2,

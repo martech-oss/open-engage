@@ -1,8 +1,6 @@
 import { useState } from "react";
 
-export function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
-}
+import { getErrorMessage } from "@/lib/errors";
 
 /**
  * Wraps a form's submit action with the busy/error state every dialog form in

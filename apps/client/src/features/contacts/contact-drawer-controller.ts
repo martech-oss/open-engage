@@ -7,7 +7,7 @@ import {
   removeCompanyContact,
 } from "@/features/companies/company-api";
 import { invalidateSegmentQueries } from "@/features/segments/segment-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { ContactScoreAdjust, ContactUpdate } from "@openengage/core/contacts";
 
 import {

@@ -3,8 +3,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { getErrorMessage } from "@/hooks/use-form-submission";
 import { useResourceEditor } from "@/hooks/use-resource-editor";
+import { getErrorMessage } from "@/lib/errors";
 
 import {
   gradingCriteriaQueryOptions,

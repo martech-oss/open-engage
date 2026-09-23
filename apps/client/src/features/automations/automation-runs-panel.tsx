@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { AutomationRun } from "@openengage/core/automations";
 
 import {

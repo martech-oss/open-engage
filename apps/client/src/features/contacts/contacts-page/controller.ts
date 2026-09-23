@@ -3,8 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { refreshSegment as refreshSegmentResource } from "@/features/segments/segment-api";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveFile } from "@/lib/csv";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";
 

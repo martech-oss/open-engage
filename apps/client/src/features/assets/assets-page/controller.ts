@@ -4,8 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { getErrorMessage } from "@/hooks/use-form-submission";
 import { useUrlSearchDraft } from "@/hooks/use-url-search-draft";
+import { getErrorMessage } from "@/lib/errors";
 import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
 import {

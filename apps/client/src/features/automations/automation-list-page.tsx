@@ -17,7 +17,7 @@ import {
 import { FieldGroup } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceTime } from "@/lib/workspace-time";
 
 import { automationsQueryOptions, useCreateAutomation } from "./automation-api";

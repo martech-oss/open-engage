@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ErrorAlert, LoadingButton } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { signupFormsQueryOptions } from "@/features/website/website-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { ProjectProgramDetail } from "@openengage/core/projects";
 
 import { useBindProgramForm } from "./program-api";

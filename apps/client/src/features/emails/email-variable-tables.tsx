@@ -16,7 +16,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { type MessageVariable, useArchiveEmailVariable } from "@/features/emails/email-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function VariableReference({ variables }: { variables: MessageVariable[] }): ReactNode {

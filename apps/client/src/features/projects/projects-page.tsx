@@ -12,7 +12,7 @@ import {
 import { AppDialog } from "@/components/app-ui/dialogs";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 import { projectsQueryOptions, useCreateProject } from "./program-api";

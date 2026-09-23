@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ErrorAlert, PageLayout } from "@/components/app-ui";
 import { useCreateAutomation } from "@/features/automations/automation-api";
 import { useCreateSegment } from "@/features/segments/segment-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type {
   ProjectBriefDraftInput,
   ProjectLinkedResource,

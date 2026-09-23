@@ -15,7 +15,7 @@ import {
   type DealTaskListItem,
   type TaskSearch,
 } from "@/features/deals/deal-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 

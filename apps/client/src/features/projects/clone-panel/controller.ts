@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 import type {

@@ -11,7 +11,7 @@ import {
   useArchiveEmailTemplate,
   usePublishEmailTemplate,
 } from "@/features/emails/email-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function TemplateTable({

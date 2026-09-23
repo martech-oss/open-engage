@@ -21,7 +21,8 @@ import {
 import { contactName } from "@/features/contacts/contact-bits";
 import { ContactPickerField } from "@/features/contacts/contact-picker";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useFormSubmission } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ContactSummary } from "@openengage/core/contacts";

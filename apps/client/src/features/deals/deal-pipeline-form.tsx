@@ -16,7 +16,8 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useFormSubmission } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import { defaultDealStages } from "@openengage/core/deals";
 

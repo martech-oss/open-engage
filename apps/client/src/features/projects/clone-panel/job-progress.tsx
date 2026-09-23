@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 
 import { ErrorAlert, LoadingButton } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { ProjectCloneSummary } from "@openengage/core/projects";
 
 import { useCloneJobController } from "./controller";

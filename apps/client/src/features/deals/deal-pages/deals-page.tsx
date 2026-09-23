@@ -20,7 +20,7 @@ import {
   type DealStage,
 } from "@/features/deals/deal-api";
 import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 
 import { DealBoard } from "../deal-board";
 import { DealForm } from "../deal-forms";
