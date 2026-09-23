@@ -17,7 +17,7 @@ const companyFieldsSchema = z.object({
 export const companyCreateSchema = companyFieldsSchema;
 export type CompanyCreate = z.infer<typeof companyCreateSchema>;
 
-const companyUpdateSchema = companyFieldsSchema.partial().extend({
+export const companyUpdateSchema = companyFieldsSchema.partial().extend({
   domain: companyFieldsSchema.shape.domain.unwrap().nullable().optional(),
 });
 export type CompanyUpdate = z.infer<typeof companyUpdateSchema>;

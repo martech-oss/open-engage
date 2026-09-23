@@ -34,6 +34,22 @@ describe("accounts over oRPC", () => {
     ]);
   });
 
+  it("validates the domain on update exactly as on create", async () => {
+    const { client } = await seedWorkspace();
+    const created = await client.companies.create({ name: "Globex", domain: "globex.example" });
+
+    await expect(
+      client.companies.update({ id: created.id, domain: "not a domain" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", status: 400 });
+    await expect(client.companies.get({ id: created.id })).resolves.toMatchObject({
+      domain: "globex.example",
+    });
+
+    await expect(client.companies.update({ id: created.id, domain: null })).resolves.toMatchObject({
+      domain: null,
+    });
+  });
+
   it("reports a typed error for an account in another workspace", async () => {
     const { client } = await seedWorkspace();
     const other = await seedWorkspace();
