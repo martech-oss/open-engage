@@ -1,13 +1,11 @@
 import { writeAuditLog } from "@openengage/database/platform";
 import { ack } from "@openengage/orpc";
 
+import { aiGenerationProcedureErrors, rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
 import { projectCloneProcedures } from "./clone-router";
 import { costProcedures } from "./cost-router";
-import {
-  generateMarketingBrief,
-  MarketingBriefGenerationError,
-} from "./project-brief-generation-service";
+import { generateMarketingBrief } from "./project-brief-generation-service";
 import {
   addProjectBriefItem,
   archiveProjectBrief,
@@ -116,10 +114,7 @@ export const generateProjectBriefProcedure = authed.projects.briefGenerate.handl
       });
       return result;
     } catch (error) {
-      if (!(error instanceof MarketingBriefGenerationError)) throw error;
-      if (error.kind === "failed") throw errors.AI_GENERATION_FAILED();
-      if (error.kind === "timeout") throw errors.AI_GENERATION_TIMEOUT();
-      throw errors.AI_GENERATION_UNAVAILABLE();
+      rethrowAiGenerationError(error, aiGenerationProcedureErrors(errors));
     }
   },
 );

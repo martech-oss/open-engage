@@ -1,12 +1,13 @@
 import { ack } from "@openengage/orpc";
 
+import { aiGenerationProcedureErrors, rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
 import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
 import { getAutomationAnalytics } from "./analytics-service";
 import { createAutomationCommandService } from "./command-service";
-import { EmailSequenceError, generateEmailSequence } from "./email-sequence-service";
+import { generateEmailSequence } from "./email-sequence-service";
 import { enrollContactManually } from "./enrollment";
-import { AutomationGenerationError, generateAutomation } from "./generation-service";
+import { generateAutomation } from "./generation-service";
 import { getAutomationDraft, listAutomations } from "./list-service";
 
 export const listAutomationsProcedure = authed.automations.list.handler(async ({ context }) => {
@@ -54,15 +55,7 @@ export const generateAutomationProcedure = authed.automations.generate.handler(
         trustedBrief,
       );
     } catch (error) {
-      if (!(error instanceof AutomationGenerationError)) throw error;
-      switch (error.kind) {
-        case "failed":
-          throw errors.AI_GENERATION_FAILED();
-        case "timeout":
-          throw errors.AI_GENERATION_TIMEOUT();
-        case "unavailable":
-          throw errors.AI_GENERATION_UNAVAILABLE();
-      }
+      rethrowAiGenerationError(error, aiGenerationProcedureErrors(errors));
     }
   },
 );
@@ -85,16 +78,7 @@ export const generateEmailSequenceProcedure = authed.automations.generateSequenc
         trustedBrief,
       );
     } catch (error) {
-      if (!(error instanceof EmailSequenceError)) throw error;
-      switch (error.kind) {
-        case "failed":
-        case "conflict":
-          throw errors.AI_GENERATION_FAILED();
-        case "timeout":
-          throw errors.AI_GENERATION_TIMEOUT();
-        case "unavailable":
-          throw errors.AI_GENERATION_UNAVAILABLE();
-      }
+      rethrowAiGenerationError(error, aiGenerationProcedureErrors(errors));
     }
   },
 );

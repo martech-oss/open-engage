@@ -1,9 +1,9 @@
 import { FlueApiError, FlueExecutionError } from "@flue/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { AiGenerationError } from "./generation-error";
 import {
   type AgentProposalEnv,
-  type AgentProposalError,
   type AgentProposalTransport,
   extractLatestProposal,
   requestAgentProposal,
@@ -55,7 +55,7 @@ describe("requestAgentProposal", () => {
         timeoutMs: 1_000,
         transport,
       }),
-    ).rejects.toMatchObject({ kind: "failed" } satisfies Partial<AgentProposalError>);
+    ).rejects.toMatchObject({ kind: "failed" } satisfies Partial<AiGenerationError>);
   });
 
   it.each([

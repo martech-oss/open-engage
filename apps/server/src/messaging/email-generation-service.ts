@@ -9,23 +9,12 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { EmailDesignRepository, MessagingRepository } from "@openengage/database/messaging";
 
+import { AiGenerationError } from "../agents/generation-error";
 import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
-import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
+import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 
 const GENERATION_TIMEOUT_MS = 60_000;
-
-export type EmailGenerationFailure = "failed" | "timeout" | "unavailable";
-
-export class EmailGenerationError extends Error {
-  public constructor(
-    public readonly kind: EmailGenerationFailure,
-    options?: ErrorOptions,
-  ) {
-    super(`Email generation ${kind}`, options);
-    this.name = "EmailGenerationError";
-  }
-}
 
 export async function generateEmail(
   database: OpenEngageDatabase,
@@ -60,21 +49,14 @@ async function requestEmailProposal(
     publicImages: Awaited<ReturnType<EmailDesignRepository["listAiImageCatalog"]>>;
   },
 ): Promise<EmailGenerationResult> {
-  try {
-    return await requestAgentProposal({
-      env,
-      agent: "email-designer",
-      prompt: initialData.request.prompt,
-      initialData,
-      schema: emailGenerationResultSchema,
-      timeoutMs: GENERATION_TIMEOUT_MS,
-    });
-  } catch (error) {
-    if (error instanceof AgentProposalError) {
-      throw new EmailGenerationError(error.kind, { cause: error });
-    }
-    throw error;
-  }
+  return await requestAgentProposal({
+    env,
+    agent: "email-designer",
+    prompt: initialData.request.prompt,
+    initialData,
+    schema: emailGenerationResultSchema,
+    timeoutMs: GENERATION_TIMEOUT_MS,
+  });
 }
 
 function validateGeneratedDocument(
@@ -111,5 +93,5 @@ function isImageBlock(value: unknown): value is Extract<EmailBlockV2, { type: "i
 }
 
 function fail(message: string): never {
-  throw new EmailGenerationError("failed", { cause: new Error(message) });
+  throw new AiGenerationError("failed", { cause: new Error(message) });
 }

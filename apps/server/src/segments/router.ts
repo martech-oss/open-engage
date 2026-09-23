@@ -1,9 +1,10 @@
 import { ack } from "@openengage/orpc";
 
+import { aiGenerationProcedureErrors, rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
 import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
 import { createSegmentCommandService } from "./command-service";
-import { SegmentGenerationError, generateSegment } from "./generation-service";
+import { generateSegment } from "./generation-service";
 import { getSegment, listSegments, previewSegment } from "./list-service";
 import { loadSegmentCatalog, validateSegmentFilter } from "./validation-service";
 
@@ -100,15 +101,7 @@ export const generateSegmentProcedure = authed.segments.generate.handler(
         trustedBrief,
       );
     } catch (error) {
-      if (!(error instanceof SegmentGenerationError)) throw error;
-      switch (error.kind) {
-        case "failed":
-          throw errors.AI_GENERATION_FAILED();
-        case "timeout":
-          throw errors.AI_GENERATION_TIMEOUT();
-        case "unavailable":
-          throw errors.AI_GENERATION_UNAVAILABLE();
-      }
+      rethrowAiGenerationError(error, aiGenerationProcedureErrors(errors));
     }
   },
 );

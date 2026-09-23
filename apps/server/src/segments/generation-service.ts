@@ -10,25 +10,14 @@ import {
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 
+import { AiGenerationError } from "../agents/generation-error";
 import { loadMarketingAgentContext } from "../agents/marketing-context";
-import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
+import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 import { previewSegment } from "./list-service";
 import { loadSegmentCatalog, optionsForKind, validateSegmentFilter } from "./validation-service";
 
 const GENERATION_TIMEOUT_MS = 60_000;
-
-export type SegmentGenerationFailure = "failed" | "timeout" | "unavailable";
-
-export class SegmentGenerationError extends Error {
-  public constructor(
-    public readonly kind: SegmentGenerationFailure,
-    options?: ErrorOptions,
-  ) {
-    super(`Segment generation ${kind}`, options);
-    this.name = "SegmentGenerationError";
-  }
-}
 
 export async function generateSegment(
   database: OpenEngageDatabase,
@@ -61,7 +50,7 @@ export async function generateSegment(
     catalog,
   );
   if (!validation.valid) {
-    throw new SegmentGenerationError("failed", {
+    throw new AiGenerationError("failed", {
       cause: new Error(validation.issues.map((issue) => issue.message).join("; ")),
     });
   }
@@ -79,21 +68,14 @@ async function requestSegmentProposal(
   catalog: SegmentGenerationCatalog,
   trustedBrief?: ApprovedMarketingBriefContext,
 ) {
-  try {
-    return await requestAgentProposal({
-      env,
-      agent: "segment-designer",
-      prompt: request.prompt,
-      initialData: { request, catalog, ...loadMarketingAgentContext(trustedBrief) },
-      schema: segmentGenerationAgentResultSchema,
-      timeoutMs: GENERATION_TIMEOUT_MS,
-    });
-  } catch (error) {
-    if (error instanceof AgentProposalError) {
-      throw new SegmentGenerationError(error.kind, { cause: error });
-    }
-    throw error;
-  }
+  return await requestAgentProposal({
+    env,
+    agent: "segment-designer",
+    prompt: request.prompt,
+    initialData: { request, catalog, ...loadMarketingAgentContext(trustedBrief) },
+    schema: segmentGenerationAgentResultSchema,
+    timeoutMs: GENERATION_TIMEOUT_MS,
+  });
 }
 
 function unresolvedContinuation(
@@ -133,7 +115,7 @@ function assertUniqueRequests(requests: SegmentResourceRequest[]): void {
   const ids = new Set<string>();
   for (const request of requests) {
     if (ids.has(request.requestId)) {
-      throw new SegmentGenerationError("failed", {
+      throw new AiGenerationError("failed", {
         cause: new Error(`Duplicate resource request: ${request.requestId}`),
       });
     }

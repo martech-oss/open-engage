@@ -1,13 +1,10 @@
 import { type CompanyEnrichmentAgentRequest } from "@openengage/core/contacts";
 import { ack } from "@openengage/orpc";
 
+import { rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
-import {
-  CompanyEnrichmentError,
-  enrichCompany,
-  isCompanyEnrichmentEnabled,
-} from "./company-enrichment-service";
+import { enrichCompany, isCompanyEnrichmentEnabled } from "./company-enrichment-service";
 import {
   CompanyConflictError,
   assignCompanyContact,
@@ -59,15 +56,11 @@ export const enrichCompanyProcedure = authed.companies.enrich.handler(
     try {
       return await enrichCompany(context.env, request);
     } catch (error) {
-      if (!(error instanceof CompanyEnrichmentError)) throw error;
-      switch (error.kind) {
-        case "failed":
-          throw errors.COMPANY_ENRICHMENT_FAILED();
-        case "timeout":
-          throw errors.COMPANY_ENRICHMENT_TIMEOUT();
-        case "unavailable":
-          throw errors.COMPANY_ENRICHMENT_UNAVAILABLE();
-      }
+      rethrowAiGenerationError(error, {
+        failed: () => errors.COMPANY_ENRICHMENT_FAILED(),
+        timeout: () => errors.COMPANY_ENRICHMENT_TIMEOUT(),
+        unavailable: () => errors.COMPANY_ENRICHMENT_UNAVAILABLE(),
+      });
     }
   },
 );
