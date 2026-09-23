@@ -1,4 +1,5 @@
 import type { Dashboard } from "@openengage/core/reports";
+import { lastWorkspaceDays, shiftIsoDate } from "@openengage/core/shared/time";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { DashboardReportsRepository } from "@openengage/database/reports";
 import { WorkspaceSettingsRepository } from "@openengage/database/workspaces";
@@ -23,8 +24,8 @@ export async function getDashboard(
   const workspace = await new WorkspaceSettingsRepository(database, { workspaceId }).getWorkspace();
   if (!workspace) throw new Error("Workspace organization could not be loaded");
 
-  const trendRange = lastDaysRange(asOf, workspace.timezone, TREND_DAYS);
-  const totalsRange = lastDaysRange(asOf, workspace.timezone, TOTAL_DAYS);
+  const trendRange = lastWorkspaceDays(asOf, workspace.timezone, TREND_DAYS);
+  const totalsRange = lastWorkspaceDays(asOf, workspace.timezone, TOTAL_DAYS);
   const trendReportRange = toReportRange(trendRange.from, trendRange.to, workspace.timezone);
   const totalsReportRange = toReportRange(totalsRange.from, totalsRange.to, workspace.timezone);
   const summary = await new DashboardReportsRepository(database).dashboardSummary(workspaceId, {
@@ -119,29 +120,6 @@ export async function getDashboard(
 interface DateRange {
   from: string;
   to: string;
-}
-
-function lastDaysRange(asOf: string, timeZone: string, days: number): DateRange {
-  const to = workspaceDate(new Date(asOf), timeZone);
-  return { from: shiftIsoDate(to, -(days - 1)), to };
-}
-
-function workspaceDate(date: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value;
-  return `${value("year")}-${value("month")}-${value("day")}`;
-}
-
-function shiftIsoDate(day: string, amount: number): string {
-  const date = new Date(`${day}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + amount);
-  return date.toISOString().slice(0, 10);
 }
 
 function fillDailySeries<Source extends { day: string }, Value, Result>(

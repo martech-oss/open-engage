@@ -51,6 +51,36 @@ export function workspaceDateTimeToUtc(value: string, timeZone: string): string 
   return new Date(instant).toISOString();
 }
 
+/** `YYYY-MM-DD` calendar date of `instant` in `timeZone`. */
+export function workspaceDate(instant: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/** `YYYY-MM-DD` shifted by `days` calendar days (negative moves back). */
+export function shiftIsoDate(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** The `days` workspace calendar days ending on the date of `asOf`, both ends inclusive. */
+export function lastWorkspaceDays(
+  asOf: string | Date,
+  timeZone: string,
+  days: number,
+): { from: string; to: string } {
+  const to = workspaceDate(new Date(asOf), timeZone);
+  return { from: shiftIsoDate(to, -(days - 1)), to };
+}
+
 export interface WorkspaceReportDay {
   day: string;
   fromTimestamp: string;

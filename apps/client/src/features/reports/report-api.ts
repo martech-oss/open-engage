@@ -1,6 +1,5 @@
 import type { QueryFunction, QueryKey } from "@tanstack/react-query";
 
-import { formatIsoDate } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import type {
   AcquisitionReport,
@@ -14,6 +13,7 @@ import type {
   ReportsOverview,
   SiteReport,
 } from "@openengage/core/reports";
+import { lastWorkspaceDays } from "@openengage/core/shared/time";
 
 export type {
   AcquisitionReport,
@@ -73,15 +73,8 @@ interface ReportQueryOptions {
 }
 
 export function createReportSearchDefaults(clock: ReportClock): ReportSearch {
-  const to = formatIsoDate(new Date(clock.now), clock.timeZone);
-  const fromDate = new Date(`${to}T00:00:00.000Z`);
-  fromDate.setUTCDate(fromDate.getUTCDate() - 29);
-  return {
-    view: "overview",
-    from: formatIsoDate(fromDate),
-    to,
-    currency: "",
-  };
+  const { from, to } = lastWorkspaceDays(clock.now, clock.timeZone, 30);
+  return { view: "overview", from, to, currency: "" };
 }
 
 function isReportView(value: unknown): value is ReportView {
