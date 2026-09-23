@@ -1,25 +1,10 @@
 /// <reference types="node" />
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
-const migrationFiles = [
-  "0000_quick_ender_wiggin.sql",
-  "0001_workable_hitman.sql",
-  "0002_breezy_photon.sql",
-  "0003_faulty_hobgoblin.sql",
-  "0004_groovy_pete_wisdom.sql",
-  "0005_swift_microchip.sql",
-  "0006_red_crusher_hogan.sql",
-  "0007_clumsy_bloodscream.sql",
-  "0008_polite_pete_wisdom.sql",
-  "0009_chemical_loki.sql",
-] as const;
+import { applyMigrations, migrationRange } from "../shared/migration-test-support";
 
 const compositeWorkspaceForeignKeyCases = [
   {
@@ -86,10 +71,10 @@ describe("tenant-safe scoring migration 0009", () => {
   it("cleans legacy cross-workspace references and enforces composite ownership", () => {
     database = new DatabaseSync(":memory:");
     database.exec("PRAGMA foreign_keys = ON");
-    applyMigrations(database, migrationFiles.slice(0, 9));
+    applyMigrations(database, migrationRange("0000", "0009"));
     seedLegacyFixture(database);
 
-    applyMigrations(database, migrationFiles.slice(9));
+    applyMigrations(database, migrationRange("0009", "0010"));
 
     expect(
       database
@@ -171,9 +156,9 @@ describe("tenant-safe scoring migration 0009", () => {
     ({ insert }) => {
       database = new DatabaseSync(":memory:");
       database.exec("PRAGMA foreign_keys = ON");
-      applyMigrations(database, migrationFiles.slice(0, 9));
+      applyMigrations(database, migrationRange("0000", "0009"));
       seedLegacyFixture(database);
-      applyMigrations(database, migrationFiles.slice(9));
+      applyMigrations(database, migrationRange("0009", "0010"));
       database.exec(`
         INSERT INTO tags (id, workspace_id, name, slug, created_at)
         VALUES ('tag-a', 'workspace-a', 'Tag A', 'tag-a', '2026-01-01');
@@ -187,12 +172,6 @@ describe("tenant-safe scoring migration 0009", () => {
     },
   );
 });
-
-function applyMigrations(database: DatabaseSync, files: readonly string[]): void {
-  for (const file of files) {
-    database.exec(readFileSync(resolve(migrationsDirectory, file), "utf8"));
-  }
-}
 
 function count(database: DatabaseSync, table: string): number {
   const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as {

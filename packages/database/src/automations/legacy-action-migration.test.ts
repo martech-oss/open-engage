@@ -1,33 +1,12 @@
 /// <reference types="node" />
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { applyMigrations, migrationRange } from "../shared/migration-test-support";
 import { AutomationActionRepository } from "./action-repository";
 import { AutomationJobRecoveryRepository } from "./job-recovery-repository";
-
-const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
-const migrationsBefore0015 = [
-  "0000_quick_ender_wiggin.sql",
-  "0001_workable_hitman.sql",
-  "0002_breezy_photon.sql",
-  "0003_faulty_hobgoblin.sql",
-  "0004_groovy_pete_wisdom.sql",
-  "0005_swift_microchip.sql",
-  "0006_red_crusher_hogan.sql",
-  "0007_clumsy_bloodscream.sql",
-  "0008_polite_pete_wisdom.sql",
-  "0009_chemical_loki.sql",
-  "0010_giant_bishop.sql",
-  "0011_condemned_rocket_raccoon.sql",
-  "0012_keen_boom_boom.sql",
-  "0013_omniscient_jasper_sitwell.sql",
-  "0014_deep_logan.sql",
-] as const;
 
 describe("legacy automation action quarantine migration 0015", () => {
   let database: DatabaseSync | undefined;
@@ -41,7 +20,7 @@ describe("legacy automation action quarantine migration 0015", () => {
     database = createPre0015Database();
     seedLegacyAutomationActions(database);
 
-    applyMigrations(database, ["0015_quarantine_legacy_automation_actions.sql"]);
+    applyMigrations(database, migrationRange("0015", "0016"));
 
     expect(
       database
@@ -137,14 +116,8 @@ describe("legacy automation action quarantine migration 0015", () => {
 function createPre0015Database(): DatabaseSync {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
-  applyMigrations(database, migrationsBefore0015);
+  applyMigrations(database, migrationRange("0000", "0015"));
   return database;
-}
-
-function applyMigrations(database: DatabaseSync, files: readonly string[]): void {
-  for (const file of files) {
-    database.exec(readFileSync(resolve(migrationsDirectory, file), "utf8"));
-  }
 }
 
 function seedLegacyAutomationActions(database: DatabaseSync): void {

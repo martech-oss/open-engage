@@ -1,20 +1,10 @@
 /// <reference types="node" />
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
-const migrationFiles = [
-  "0000_quick_ender_wiggin.sql",
-  "0001_workable_hitman.sql",
-  "0002_breezy_photon.sql",
-  "0003_faulty_hobgoblin.sql",
-  "0004_groovy_pete_wisdom.sql",
-] as const;
+import { applyMigrations, migrationRange } from "../shared/migration-test-support";
 
 describe("project brief migration 0004", () => {
   let database: DatabaseSync | undefined;
@@ -27,10 +17,10 @@ describe("project brief migration 0004", () => {
   it("upgrades a 0003 fixture and enforces the new invariants", () => {
     database = new DatabaseSync(":memory:");
     database.exec("PRAGMA foreign_keys = ON");
-    applyMigrations(database, migrationFiles.slice(0, 4));
+    applyMigrations(database, migrationRange("0000", "0004"));
     seedLegacyFixture(database);
 
-    applyMigrations(database, migrationFiles.slice(4));
+    applyMigrations(database, migrationRange("0004", "0005"));
 
     expect(
       database
@@ -112,12 +102,6 @@ describe("project brief migration 0004", () => {
     }
   });
 });
-
-function applyMigrations(database: DatabaseSync, files: readonly string[]): void {
-  for (const file of files) {
-    database.exec(readFileSync(resolve(migrationsDirectory, file), "utf8"));
-  }
-}
 
 function seedLegacyFixture(database: DatabaseSync): void {
   const createdAt = "2026-01-01T00:00:00.000Z";

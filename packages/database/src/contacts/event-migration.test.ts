@@ -1,41 +1,12 @@
 /// <reference types="node" />
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { processPendingPublicFormEvent } from "../../../../apps/server/src/runtime/contact-event-service";
 import { OpenEngageDatabase } from "../client";
-
-const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
-const migrationFiles = [
-  "0000_quick_ender_wiggin.sql",
-  "0001_workable_hitman.sql",
-  "0002_breezy_photon.sql",
-  "0003_faulty_hobgoblin.sql",
-  "0004_groovy_pete_wisdom.sql",
-  "0005_swift_microchip.sql",
-  "0006_red_crusher_hogan.sql",
-  "0007_clumsy_bloodscream.sql",
-  "0008_polite_pete_wisdom.sql",
-  "0009_chemical_loki.sql",
-  "0010_giant_bishop.sql",
-  "0011_condemned_rocket_raccoon.sql",
-  "0012_keen_boom_boom.sql",
-  "0013_omniscient_jasper_sitwell.sql",
-  "0014_deep_logan.sql",
-  "0015_quarantine_legacy_automation_actions.sql",
-  "0016_lonely_maggott.sql",
-  "0017_visitor_identity_sales.sql",
-  "0018_contact_lifecycle.sql",
-  "0019_task_reference_integrity.sql",
-  "0020_form_retry_proof.sql",
-  "0021_landing_costs.sql",
-  "0022_landing_optimization.sql",
-] as const;
+import { applyMigrations, migrationRange } from "../shared/migration-test-support";
 
 describe("contact projection migration 0012", () => {
   let database: DatabaseSync | undefined;
@@ -48,7 +19,7 @@ describe("contact projection migration 0012", () => {
   it("quarantines all six projections for unfinished legacy outbox work", () => {
     database = new DatabaseSync(":memory:");
     database.exec("PRAGMA foreign_keys = ON");
-    applyMigrations(database, migrationFiles.slice(0, 12));
+    applyMigrations(database, migrationRange("0000", "0012"));
     database.exec(`
       INSERT INTO organization (id, name, slug, created_at)
       VALUES ('workspace', 'Workspace', 'workspace', 1);
@@ -61,7 +32,7 @@ describe("contact projection migration 0012", () => {
              ('processed-event', 'workspace', 'processed', '2026-01-01', '2026-01-01');
     `);
 
-    applyMigrations(database, migrationFiles.slice(12));
+    applyMigrations(database, migrationRange("0012", "0023"));
 
     expect(
       database
@@ -122,7 +93,7 @@ describe("contact projection migration 0012", () => {
   it("does not replay legacy score and campaign effects when the outbox retries", async () => {
     database = new DatabaseSync(":memory:");
     database.exec("PRAGMA foreign_keys = ON");
-    applyMigrations(database, migrationFiles.slice(0, 12));
+    applyMigrations(database, migrationRange("0000", "0012"));
     database.exec(`
       INSERT INTO organization (id, name, slug, created_at)
       VALUES ('workspace', 'Workspace', 'workspace', 1);
@@ -169,7 +140,7 @@ describe("contact projection migration 0012", () => {
       VALUES ('legacy-event', 'workspace', 'pending', '2026-01-01');
     `);
 
-    applyMigrations(database, migrationFiles.slice(12));
+    applyMigrations(database, migrationRange("0012", "0023"));
     await processPendingPublicFormEvent(
       new OpenEngageDatabase(createSqliteD1Binding(database)),
       "legacy-event",
@@ -199,12 +170,6 @@ describe("contact projection migration 0012", () => {
     ).toEqual({ status: "processed", processed_at: expect.any(String) });
   });
 });
-
-function applyMigrations(database: DatabaseSync, files: readonly string[]): void {
-  for (const file of files) {
-    database.exec(readFileSync(resolve(migrationsDirectory, file), "utf8"));
-  }
-}
 
 interface SqliteBoundStatement {
   execute(): D1Result;
