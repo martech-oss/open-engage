@@ -46,31 +46,37 @@ export const emailGenerationResultSchema = z.object({
 });
 export type EmailGenerationResult = z.infer<typeof emailGenerationResultSchema>;
 
+/** Message variables a generation Agent may reference as {{ message.key }}. */
+export const messageVariableCatalogSchema = z
+  .array(
+    z.object({
+      key: z.string().min(1).max(191),
+      name: z.string().min(1).max(191),
+      description: z.string().max(500),
+    }),
+  )
+  .max(1_000);
+
+/** Public image assets a generation Agent may place by id. */
+export const publicImageCatalogSchema = z
+  .array(
+    z.object({
+      id: z.string().min(1).max(191),
+      name: z.string().min(1).max(191),
+      altText: z.string().max(500),
+      width: z.number().int().positive().nullable(),
+      height: z.number().int().positive().nullable(),
+    }),
+  )
+  .max(1_000);
+
 export const emailGenerationAgentInitialDataSchema = z
   .object({
     request: generateEmailInputSchema,
     capabilities: marketingCapabilitySnapshotSchema,
     brand: emailBrandProfileSchema,
-    variables: z
-      .array(
-        z.object({
-          key: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          description: z.string().max(500),
-        }),
-      )
-      .max(1_000),
-    publicImages: z
-      .array(
-        z.object({
-          id: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          altText: z.string().max(500),
-          width: z.number().int().positive().nullable(),
-          height: z.number().int().positive().nullable(),
-        }),
-      )
-      .max(1_000),
+    variables: messageVariableCatalogSchema,
+    publicImages: publicImageCatalogSchema,
   })
   .strict();
 export type EmailGenerationAgentInitialData = z.infer<typeof emailGenerationAgentInitialDataSchema>;

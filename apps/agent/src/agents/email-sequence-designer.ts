@@ -2,11 +2,8 @@
 import { useInitialData, useModel, useSkill, useTool } from "@flue/runtime";
 import * as v from "valibot";
 
-import {
-  emailSequenceAgentResultSchema,
-  emailSequenceDesignerInitialDataSchema,
-  validateEmailSequenceProposal,
-} from "@openengage/core/automations";
+import { emailSequenceDesignerAgent } from "@openengage/core/agents";
+import { validateEmailSequenceProposal } from "@openengage/core/automations";
 
 import automationFlowDesigner from "../skills/automation-flow-designer/SKILL.md";
 import emailSequence from "../skills/email-sequence/SKILL.md";
@@ -23,12 +20,12 @@ export function EmailSequenceDesigner() {
   useSkill(automationFlowDesigner);
   useTool(validateEmailSequenceProposalTool);
 
-  const initialData = emailSequenceDesignerInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = emailSequenceDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_email_sequence_proposal",
     description:
       "Submit the final structured email sequence result. This is the only successful way to finish.",
-    schema: emailSequenceAgentResultSchema,
+    schema: emailSequenceDesignerAgent.result,
     schemaErrorLabel: "Sequence schema validation failed",
     validate: (result) => {
       if (result.status !== "ready") return null;
@@ -70,4 +67,7 @@ Rules:
 }
 
 EmailSequenceDesigner.initialData = v.unknown();
-EmailSequenceDesigner.durability = { maxAttempts: 3, timeoutMs: 85_000 };
+EmailSequenceDesigner.durability = {
+  maxAttempts: 3,
+  timeoutMs: emailSequenceDesignerAgent.agentTimeoutMs,
+};

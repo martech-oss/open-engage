@@ -1,5 +1,8 @@
 import { FlueApiError, FlueExecutionError } from "@flue/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as z from "zod";
+
+import type { AgentDefinition } from "@openengage/core/agents";
 
 import type { AiGenerationError } from "./generation-error";
 import {
@@ -18,9 +21,13 @@ const env = {
   AGENT_APP: { fetch: vi.fn<typeof fetch>() },
 } satisfies AgentProposalEnv;
 
-const validSchema = {
-  safeParse: (value: unknown) => ({ success: true as const, data: value }),
-};
+const testAgent = {
+  name: "test-agent",
+  initialData: z.unknown(),
+  result: z.unknown(),
+  agentTimeoutMs: 1_000,
+  serverTimeoutMs: 1_000,
+} satisfies AgentDefinition;
 
 describe("requestAgentProposal", () => {
   beforeEach(() => {
@@ -32,11 +39,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: testAgent,
         prompt: "design",
         initialData: { trusted: true },
-        schema: validSchema,
-        timeoutMs: 1_000,
         transport,
       }),
     ).resolves.toEqual({ value: 42 });
@@ -46,13 +51,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: { ...testAgent, result: z.object({ value: z.string() }) },
         prompt: "design",
         initialData: {},
-        schema: {
-          safeParse: () => ({ success: false as const, error: new Error("invalid") }),
-        },
-        timeoutMs: 1_000,
         transport,
       }),
     ).rejects.toMatchObject({ kind: "failed" } satisfies Partial<AiGenerationError>);
@@ -83,11 +84,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: testAgent,
         prompt: "design",
         initialData: {},
-        schema: validSchema,
-        timeoutMs: 1_000,
         transport,
       }),
     ).rejects.toMatchObject({ kind });
@@ -106,11 +105,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: { ...testAgent, serverTimeoutMs: 1 },
         prompt: "design",
         initialData: {},
-        schema: validSchema,
-        timeoutMs: 1,
         transport,
       }),
     ).rejects.toMatchObject({ kind: "timeout" });
@@ -131,11 +128,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: { ...testAgent, serverTimeoutMs: 1 },
         prompt: "design",
         initialData: {},
-        schema: validSchema,
-        timeoutMs: 1,
         abortCleanupTimeoutMs: 2,
         transport,
       }),
@@ -148,11 +143,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: { ...testAgent, serverTimeoutMs: 1 },
         prompt: "design",
         initialData: {},
-        schema: validSchema,
-        timeoutMs: 1,
         abortCleanupTimeoutMs: 2,
         transport,
       }),
@@ -168,11 +161,9 @@ describe("requestAgentProposal", () => {
     await expect(
       requestAgentProposal({
         env,
-        agent: "test-agent",
+        agent: { ...testAgent, serverTimeoutMs: 1 },
         prompt: "design",
         initialData: {},
-        schema: validSchema,
-        timeoutMs: 1,
         abortCleanupTimeoutMs: 2,
         transport,
       }),

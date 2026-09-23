@@ -1,5 +1,5 @@
+import { type AgentInitialData, emailDesignerAgent } from "@openengage/core/agents";
 import {
-  emailGenerationResultSchema,
   type EmailBlockV2,
   type EmailDocumentV2,
   type EmailGenerationResult,
@@ -13,8 +13,6 @@ import { AiGenerationError } from "../agents/generation-error";
 import { loadMarketingCapabilitySnapshot } from "../agents/marketing-context";
 import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
-
-const GENERATION_TIMEOUT_MS = 60_000;
 
 export async function generateEmail(
   database: OpenEngageDatabase,
@@ -41,21 +39,13 @@ export async function generateEmail(
 
 async function requestEmailProposal(
   env: RuntimeEnv,
-  initialData: {
-    request: GenerateEmailInput;
-    capabilities: ReturnType<typeof loadMarketingCapabilitySnapshot>;
-    brand: Awaited<ReturnType<EmailDesignRepository["getBrandProfile"]>>;
-    variables: Array<{ key: string; name: string; description: string }>;
-    publicImages: Awaited<ReturnType<EmailDesignRepository["listAiImageCatalog"]>>;
-  },
+  initialData: AgentInitialData<typeof emailDesignerAgent>,
 ): Promise<EmailGenerationResult> {
   return await requestAgentProposal({
     env,
-    agent: "email-designer",
+    agent: emailDesignerAgent,
     prompt: initialData.request.prompt,
     initialData,
-    schema: emailGenerationResultSchema,
-    timeoutMs: GENERATION_TIMEOUT_MS,
   });
 }
 

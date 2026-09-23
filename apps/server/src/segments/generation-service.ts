@@ -1,11 +1,11 @@
+import { segmentDesignerAgent } from "@openengage/core/agents";
 import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
-import {
-  segmentGenerationAgentResultSchema,
-  type GenerateSegmentInput,
-  type SegmentGenerationCatalog,
-  type SegmentGenerationContinuation,
-  type SegmentGenerationResult,
-  type SegmentResourceRequest,
+import type {
+  GenerateSegmentInput,
+  SegmentGenerationCatalog,
+  SegmentGenerationContinuation,
+  SegmentGenerationResult,
+  SegmentResourceRequest,
 } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
@@ -16,8 +16,6 @@ import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
 import { previewSegment } from "./list-service";
 import { loadSegmentCatalog, optionsForKind, validateSegmentFilter } from "./validation-service";
-
-const GENERATION_TIMEOUT_MS = 60_000;
 
 export async function generateSegment(
   database: OpenEngageDatabase,
@@ -70,11 +68,9 @@ async function requestSegmentProposal(
 ) {
   return await requestAgentProposal({
     env,
-    agent: "segment-designer",
+    agent: segmentDesignerAgent,
     prompt: request.prompt,
     initialData: { request, catalog, ...loadMarketingAgentContext(trustedBrief) },
-    schema: segmentGenerationAgentResultSchema,
-    timeoutMs: GENERATION_TIMEOUT_MS,
   });
 }
 

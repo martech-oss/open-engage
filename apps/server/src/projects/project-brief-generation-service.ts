@@ -1,8 +1,10 @@
-import { validateMarketingBriefGenerationResult } from "@openengage/core/agents";
 import {
-  marketingBriefGenerationResultSchema,
-  type GenerateMarketingBriefInput,
-  type MarketingBriefGenerationResult,
+  marketingAutomationDesignerAgent,
+  validateMarketingBriefGenerationResult,
+} from "@openengage/core/agents";
+import type {
+  GenerateMarketingBriefInput,
+  MarketingBriefGenerationResult,
 } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
@@ -14,8 +16,6 @@ import { loadAutomationResourceContext } from "../automations/resource-validatio
 import type { RuntimeEnv } from "../env";
 import { loadSegmentCatalog } from "../segments/validation-service";
 
-const GENERATION_TIMEOUT_MS = 60_000;
-
 export async function generateMarketingBrief(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
@@ -26,20 +26,17 @@ export async function generateMarketingBrief(
     loadAutomationResourceContext(database, workspace),
     loadSegmentCatalog(database, workspace),
   ]);
-  const initialData = {
-    request: input,
-    now: new Date().toISOString(),
-    catalog: resources.catalog,
-    segmentCatalog,
-    capabilities: loadMarketingCapabilitySnapshot(),
-  };
   const result = await requestAgentProposal({
     env,
-    agent: "marketing-automation-designer",
+    agent: marketingAutomationDesignerAgent,
     prompt: input.prompt,
-    initialData,
-    schema: marketingBriefGenerationResultSchema,
-    timeoutMs: GENERATION_TIMEOUT_MS,
+    initialData: {
+      request: input,
+      now: new Date().toISOString(),
+      catalog: resources.catalog,
+      segmentCatalog,
+      capabilities: loadMarketingCapabilitySnapshot(),
+    },
   });
   const issues = validateMarketingBriefGenerationResult(result, input, segmentCatalog);
   if (issues.length > 0) {

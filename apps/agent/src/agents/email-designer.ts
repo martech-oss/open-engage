@@ -2,11 +2,8 @@
 import { useInitialData, useModel, useSkill } from "@flue/runtime";
 import * as v from "valibot";
 
-import {
-  emailGenerationAgentInitialDataSchema,
-  emailGenerationResultSchema,
-  type EmailDocumentV2,
-} from "@openengage/core/messaging";
+import { emailDesignerAgent } from "@openengage/core/agents";
+import type { EmailDocumentV2 } from "@openengage/core/messaging";
 
 import emailTemplateDesigner from "../skills/email-template-designer/SKILL.md";
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
@@ -17,11 +14,11 @@ export function EmailDesigner() {
   useModel(MODEL);
   useSkill(emailTemplateDesigner);
 
-  const initialData = emailGenerationAgentInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = emailDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_email_proposal",
     description: "Submit the final structured email proposal. This is the only successful finish.",
-    schema: emailGenerationResultSchema,
+    schema: emailDesignerAgent.result,
     schemaErrorLabel: "Proposal schema validation failed",
     validate: (result) => {
       const assetIssue = validateProposalAssets(
@@ -61,7 +58,7 @@ Rules:
 }
 
 EmailDesigner.initialData = v.unknown();
-EmailDesigner.durability = { maxAttempts: 3, timeoutMs: 55_000 };
+EmailDesigner.durability = { maxAttempts: 3, timeoutMs: emailDesignerAgent.agentTimeoutMs };
 
 function validateProposalAssets(
   document: EmailDocumentV2,

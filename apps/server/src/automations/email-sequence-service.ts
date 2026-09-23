@@ -1,9 +1,9 @@
+import { type AgentInitialData, emailSequenceDesignerAgent } from "@openengage/core/agents";
 import {
   AUTOMATION_RESOURCE_KINDS,
   type AutomationGenerationCatalog,
   type AutomationResourceKind,
   capabilityForSequence,
-  emailSequenceAgentResultSchema,
   type EmailSequenceContinuation,
   type EmailSequenceGenerationResult,
   type EmailSequenceInputRequest,
@@ -32,7 +32,6 @@ import {
   validateAutomationResources,
 } from "./resource-validation";
 
-const GENERATION_TIMEOUT_MS = 90_000;
 const MAX_PROPOSAL_BYTES = 512 * 1_024;
 const MESSAGE_VARIABLE_PATTERN = /\{\{\s*message\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g;
 
@@ -206,23 +205,13 @@ async function validateReadyProposal(
 
 async function requestSequenceProposal(
   env: RuntimeEnv,
-  initialData: {
-    request: GenerateEmailSequenceInput;
-    trustedBrief?: ApprovedMarketingBriefContext;
-    catalog: AutomationGenerationCatalog;
-    brand: SequenceContext["brand"];
-    variables: SequenceContext["variables"];
-    publicImages: SequenceContext["publicImages"];
-    reserved: ReturnType<typeof reservedIds>;
-  },
+  initialData: AgentInitialData<typeof emailSequenceDesignerAgent>,
 ) {
   return requestAgentProposal({
     env,
-    agent: "email-sequence-designer",
+    agent: emailSequenceDesignerAgent,
     prompt: initialData.request.prompt,
     initialData,
-    schema: emailSequenceAgentResultSchema,
-    timeoutMs: GENERATION_TIMEOUT_MS,
   });
 }
 

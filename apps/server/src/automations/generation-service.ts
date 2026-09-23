@@ -1,5 +1,5 @@
+import { automationDesignerAgent } from "@openengage/core/agents";
 import {
-  automationGenerationAgentResultSchema,
   type AutomationGenerationAgentResult,
   type AutomationGenerationCatalog,
   type AutomationGenerationContinuation,
@@ -23,8 +23,6 @@ import {
   optionsForResourceKind,
   validateAutomationResources,
 } from "./resource-validation";
-
-const GENERATION_TIMEOUT_MS = 60_000;
 
 export async function generateAutomation(
   database: OpenEngageDatabase,
@@ -78,11 +76,9 @@ async function requestAutomationProposal(
 ): Promise<AutomationGenerationAgentResult> {
   return await requestAgentProposal({
     env,
-    agent: "automation-designer",
+    agent: automationDesignerAgent,
     prompt: request.prompt,
     initialData: { request, catalog, ...loadMarketingAgentContext(trustedBrief) },
-    schema: automationGenerationAgentResultSchema,
-    timeoutMs: GENERATION_TIMEOUT_MS,
   });
 }
 

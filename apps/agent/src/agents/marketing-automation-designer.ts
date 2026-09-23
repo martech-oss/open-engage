@@ -3,10 +3,9 @@ import { useInitialData, useModel, useSkill } from "@flue/runtime";
 import * as v from "valibot";
 
 import {
-  marketingBriefDesignerInitialDataSchema,
+  marketingAutomationDesignerAgent,
   validateMarketingBriefGenerationResult,
 } from "@openengage/core/agents";
-import { marketingBriefGenerationResultSchema } from "@openengage/core/projects";
 
 import marketingAutomation from "../skills/marketing-automation/SKILL.md";
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
@@ -17,11 +16,11 @@ export function MarketingAutomationDesigner() {
   useModel(MODEL);
   useSkill(marketingAutomation);
 
-  const initialData = marketingBriefDesignerInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = marketingAutomationDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_marketing_automation_brief",
     description: "Submit the final structured brief proposal. This is the only successful finish.",
-    schema: marketingBriefGenerationResultSchema,
+    schema: marketingAutomationDesignerAgent.result,
     schemaErrorLabel: "Brief schema validation failed",
     validate: (result) => {
       const issues = validateMarketingBriefGenerationResult(
@@ -56,4 +55,7 @@ Rules:
 }
 
 MarketingAutomationDesigner.initialData = v.unknown();
-MarketingAutomationDesigner.durability = { maxAttempts: 3, timeoutMs: 55_000 };
+MarketingAutomationDesigner.durability = {
+  maxAttempts: 3,
+  timeoutMs: marketingAutomationDesignerAgent.agentTimeoutMs,
+};

@@ -2,17 +2,17 @@
 import { useInitialData, useModel } from "@flue/runtime";
 import * as v from "valibot";
 
-import { landingGenerationResultSchema } from "@openengage/core/web";
+import { landingPageDesignerAgent } from "@openengage/core/agents";
 
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
 
 export function LandingPageDesigner() {
   useModel("anthropic/claude-haiku-4-5");
-  const context = useInitialData<unknown>();
+  const context = landingPageDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_landing_page",
     description: "Submit the complete landing page document and explanation.",
-    schema: landingGenerationResultSchema,
+    schema: landingPageDesignerAgent.result,
     schemaErrorLabel: "Invalid landing page",
     validate: () => null,
     retryLimitError: "Landing page validation retry limit exceeded",
@@ -32,4 +32,7 @@ Rules:
 - Explain your changes briefly in Japanese. Finish only with submit_landing_page.`;
 }
 LandingPageDesigner.initialData = v.unknown();
-LandingPageDesigner.durability = { maxAttempts: 3, timeoutMs: 55_000 };
+LandingPageDesigner.durability = {
+  maxAttempts: 3,
+  timeoutMs: landingPageDesignerAgent.agentTimeoutMs,
+};

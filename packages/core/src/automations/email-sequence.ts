@@ -5,6 +5,8 @@ import {
   emailDocumentV2Schema,
   emailHrefSchema,
   emailPurposeSchema,
+  messageVariableCatalogSchema,
+  publicImageCatalogSchema,
 } from "../messaging/index.js";
 import {
   approvedMarketingBriefContextSchema,
@@ -332,26 +334,8 @@ export const emailSequenceDesignerInitialDataSchema = z
     capabilities: marketingCapabilitySnapshotSchema,
     catalog: automationGenerationCatalogSchema,
     brand: emailBrandProfileSchema,
-    variables: z
-      .array(
-        z.object({
-          key: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          description: z.string().max(500),
-        }),
-      )
-      .max(1_000),
-    publicImages: z
-      .array(
-        z.object({
-          id: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          altText: z.string().max(500),
-          width: z.number().int().positive().nullable(),
-          height: z.number().int().positive().nullable(),
-        }),
-      )
-      .max(1_000),
+    variables: messageVariableCatalogSchema,
+    publicImages: publicImageCatalogSchema,
     reserved: z.object({
       proposalId: z.string().min(1),
       automationId: z.string().min(1),
