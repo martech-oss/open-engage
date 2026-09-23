@@ -63,7 +63,9 @@ export class SalesRepository extends WorkspaceRepository {
   async saveGroup(input: AssignmentGroupWrite) {
     for (const id of input.userIds)
       if (!(await this.eligibleUser(id)))
-        throw new SalesReferenceError("Group users must be workspace members able to manage marketing");
+        throw new SalesReferenceError(
+          "Group users must be workspace members able to manage marketing",
+        );
     const id = input.id ?? uuidv7();
     const now = nowIso();
     if (input.id) {

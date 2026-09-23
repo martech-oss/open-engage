@@ -25,14 +25,18 @@ export async function pinAutomationDependencies(
     pinned?: Record<string, AutomationDependency>,
   ): Promise<AutomationExecutionSnapshot> {
     if (path.includes(id))
-      throw new AutomationPublicationError(`Callable automation cycle: ${[...path, id].join(" → ")}`);
-    if (++count > 100 || path.length >= 20) throw new AutomationPublicationError("Callable dependency limit exceeded");
+      throw new AutomationPublicationError(
+        `Callable automation cycle: ${[...path, id].join(" → ")}`,
+      );
+    if (++count > 100 || path.length >= 20)
+      throw new AutomationPublicationError("Callable dependency limit exceeded");
     const graph = resolveAutomationVariables(
       { ...source, variableProjectId: snapshot.projectId },
       snapshot,
     );
     const issues = validateAutomation(graph);
-    if (issues.length) throw new AutomationPublicationError(issues.map((issue) => issue.message).join("; "));
+    if (issues.length)
+      throw new AutomationPublicationError(issues.map((issue) => issue.message).join("; "));
     await validateResources?.(graph);
     const dependencies: Record<string, AutomationDependency> = {};
     for (const node of graph.nodes) {
@@ -42,7 +46,9 @@ export async function pinAutomationDependencies(
       const child =
         pinned?.[node.id] ?? (pinned ? null : await loadPublished(node.config.automationId));
       if (!child || child.automationId !== node.config.automationId)
-        throw new AutomationPublicationError(`Published callable automation unavailable: ${node.config.automationId}`);
+        throw new AutomationPublicationError(
+          `Published callable automation unavailable: ${node.config.automationId}`,
+        );
       const sourceGraph = child.sourceGraph ?? child.graph;
       if (
         !sourceGraph.nodes.some(

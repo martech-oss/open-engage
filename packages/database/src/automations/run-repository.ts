@@ -61,7 +61,8 @@ export class AutomationRunRepository extends WorkspaceRepository {
     if (!row) throw new AutomationRunError("公開中のオートメーションがありません");
     const graph = automationDefinitionSchema.parse(JSON.parse(row.graph));
     const source = graph.nodes.find((node) => node.type === "source");
-    if (source?.config.source !== "batch") throw new AutomationRunError("バッチ開始のフローを選択してください");
+    if (source?.config.source !== "batch")
+      throw new AutomationRunError("バッチ開始のフローを選択してください");
     return { ...row, graph, source: { ...source, config: source.config } };
   }
   public async preview(audience: AutomationAudience) {
