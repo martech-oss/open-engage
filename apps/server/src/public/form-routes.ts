@@ -5,7 +5,7 @@ import { PublicFormRepository } from "@openengage/database/web";
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
 import { logError } from "../observability";
-import type { JobsQueueMessage } from "../runtime/queues";
+import type { JobsQueueMessage } from "../platform/queue-messages";
 import { hasTurnstileConfiguration } from "../web/config";
 import { VisitorIdentityService } from "../web/visitor-identity-service";
 import { resolvePublicForm } from "./form-context";

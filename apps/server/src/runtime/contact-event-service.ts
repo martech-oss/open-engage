@@ -11,6 +11,7 @@ import {
   type ContactEventProjectionRunner,
   type ProcessableContactEvent,
 } from "../contacts/event-service";
+import type { JobsQueue } from "../platform/queue-messages";
 import { applyScoringForEvent, recomputeContactGrade } from "../scoring/engine";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 import {
@@ -21,7 +22,7 @@ import {
 type ProjectionHandler = (
   database: OpenEngageDatabase,
   event: ProcessableContactEvent,
-  queue?: Queue,
+  queue?: JobsQueue,
 ) => Promise<ContactEventProjectionResult>;
 
 const completedProjection: ContactEventProjectionResult = {
@@ -121,14 +122,14 @@ export function recordContactEvent(
 export async function processPendingPublicFormEvent(
   database: OpenEngageDatabase,
   eventId: string,
-  queue?: Queue,
+  queue?: JobsQueue,
 ): Promise<void> {
   await createContactEventProcessor(database).process(eventId, queue);
 }
 
 export function retryPendingPublicFormEvents(
   database: OpenEngageDatabase,
-  queue: Queue,
+  queue: JobsQueue,
   limit = 50,
 ): Promise<Array<{ eventId: string; error: unknown }>> {
   return createContactEventProcessor(database).retryDue(queue, limit);

@@ -10,6 +10,12 @@ import { processCloudflareEmailEvent } from "../messaging/cloudflare-events";
 import { processDelivery } from "../messaging/delivery-worker";
 import { logError } from "../observability";
 import { persistDeadLetter } from "../platform/maintenance-worker";
+import {
+  deliveryQueueMessageSchema,
+  jobsQueueMessageSchema,
+  programMemberImportQueueMessageSchema,
+  type JobsQueueMessage,
+} from "../platform/queue-messages";
 import { processProjectClone } from "../projects/clone-service";
 import { processProgramMemberImport } from "../projects/program-import-service";
 import { runScoringDecay } from "../scoring/decay-service";
@@ -20,12 +26,6 @@ import {
 import { processLandingGeneration } from "../web/landing-generation-service";
 import { createAutomationExecutionDependencies } from "./automation-execution";
 import { processPendingPublicFormEvent } from "./contact-event-service";
-import {
-  deliveryQueueMessageSchema,
-  jobsQueueMessageSchema,
-  programMemberImportQueueMessageSchema,
-  type JobsQueueMessage,
-} from "./queues";
 import { processVisitorHistory } from "./visitor-history-worker";
 
 type JobsQueueHandlerMap = {

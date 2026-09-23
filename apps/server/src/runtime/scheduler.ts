@@ -1,5 +1,5 @@
+import type { AutomationJobQueueMessage } from "../platform/queue-messages";
 import { publishQueueBatches, type QueuePublisher } from "../platform/queue-publisher";
-import type { AutomationJobQueueMessage } from "./queues";
 
 export interface ScheduledTask {
   name: string;

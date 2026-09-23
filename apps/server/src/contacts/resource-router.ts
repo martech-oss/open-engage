@@ -3,6 +3,7 @@ import type { OpenEngageDatabase } from "@openengage/database/client";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import type { JobsQueue } from "../platform/queue-messages";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 import {
   addContactTag,
@@ -23,7 +24,7 @@ export interface ContactResourceRouterDependencies {
     database: OpenEngageDatabase;
     workspace: WorkspaceContext;
     relation: { contactId: string; resourceId: string };
-    queue: Queue;
+    queue: JobsQueue;
   }): Promise<boolean>;
 }
 

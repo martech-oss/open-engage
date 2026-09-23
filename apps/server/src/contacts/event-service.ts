@@ -6,6 +6,8 @@ import {
 } from "@openengage/database/contacts";
 import { uuidv7 } from "@openengage/database/shared";
 
+import type { JobsQueue } from "../platform/queue-messages";
+
 export interface ContactEventInput {
   id?: string;
   workspaceId: string;
@@ -16,7 +18,7 @@ export interface ContactEventInput {
   resourceId?: string | null;
   properties?: Record<string, unknown>;
   occurredAt?: string;
-  queue?: Queue;
+  queue?: JobsQueue;
 }
 
 export type ProcessableContactEvent = ContactEventRecord & { contactId: string };
@@ -28,7 +30,7 @@ export type ContactEventProjectionRunner = (context: {
   database: OpenEngageDatabase;
   event: ProcessableContactEvent;
   projection: ContactEventProjection;
-  queue: Queue | undefined;
+  queue: JobsQueue | undefined;
 }) => Promise<ContactEventProjectionResult>;
 
 export class ContactEventProcessor {
@@ -59,7 +61,7 @@ export class ContactEventProcessor {
   }
 
   public async retryDue(
-    queue: Queue,
+    queue: JobsQueue,
     limit = 50,
   ): Promise<Array<{ eventId: string; error: unknown }>> {
     const repository = new ContactEventRepository(this.database);
@@ -77,7 +79,7 @@ export class ContactEventProcessor {
 
   public async process(
     eventId: string,
-    queue?: Queue,
+    queue?: JobsQueue,
   ): Promise<{ eventId: string; enrollmentCount: number }> {
     const repository = new ContactEventRepository(this.database);
     const startedAt = new Date();
