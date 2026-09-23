@@ -7,7 +7,7 @@ import {
   type ReportSearch,
 } from "@/features/reports/report-api";
 import { ReportsPage } from "@/features/reports/report-pages";
-import { ensureAppBootstrap } from "@/lib/app-bootstrap";
+import { ensureWorkspace } from "@/lib/app-bootstrap";
 
 export const Route = createFileRoute("/_app/reports")({
   validateSearch: (search: Partial<ReportSearch> & SearchSchemaInput): ReportSearch =>
@@ -18,11 +18,10 @@ export const Route = createFileRoute("/_app/reports")({
       currency: "",
     }),
   beforeLoad: async ({ context, search }) => {
-    const bootstrap = await ensureAppBootstrap(context.queryClient);
-    if (!bootstrap.workspace) throw new Error("Workspace bootstrap is required");
+    const workspace = await ensureWorkspace(context.queryClient);
     const defaults = createReportSearchDefaults({
       now: context.renderedAt,
-      timeZone: bootstrap.workspace.timezone,
+      timeZone: workspace.timezone,
     });
     return { reportSearch: parseReportSearch(search, defaults) };
   },

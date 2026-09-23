@@ -2,16 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { SignupFormsPage } from "@/features/website/signup-forms-page";
 import { signupFormsQueryOptions } from "@/features/website/website-api";
-import { ensureAppBootstrap } from "@/lib/app-bootstrap";
+import { ensureWorkspace } from "@/lib/app-bootstrap";
 
 export const Route = createFileRoute("/_app/website/forms")({
   loader: async ({ context }) => {
-    const [, bootstrap] = await Promise.all([
+    const [, workspace] = await Promise.all([
       context.queryClient.ensureQueryData(signupFormsQueryOptions()),
-      ensureAppBootstrap(context.queryClient),
+      ensureWorkspace(context.queryClient),
     ]);
-    if (!bootstrap.workspace) throw new Error("Workspace bootstrap is required");
-    return { workspaceSlug: bootstrap.workspace.slug };
+    return { workspaceSlug: workspace.slug };
   },
   component: SignupFormsRoute,
 });

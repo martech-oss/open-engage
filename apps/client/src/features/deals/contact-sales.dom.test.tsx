@@ -10,10 +10,7 @@ const { create, handoff } = vi.hoisted(() => ({
   handoff: vi.fn<(...args: unknown[]) => void>(),
 }));
 vi.mock("@/lib/app-bootstrap", () => ({
-  appBootstrapQueryOptions: () => ({
-    queryKey: ["bootstrap"],
-    queryFn: async () => ({ workspace: { capabilities: { manageMarketing: true } } }),
-  }),
+  useWorkspaceCapability: (capability: string) => capability === "manageMarketing",
 }));
 vi.mock("@/lib/workspace-time", () => ({
   useWorkspaceFormatters: () => ({

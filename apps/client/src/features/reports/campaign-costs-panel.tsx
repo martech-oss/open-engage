@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { FormInput, FormNativeSelect, FormSelectOption } from "@/components/app-ui";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { appBootstrapQueryOptions } from "@/lib/app-bootstrap";
+import { useWorkspaceCapability } from "@/lib/app-bootstrap";
 import { getFormString } from "@/lib/form-data";
 import { formatMoney } from "@/lib/format";
 import type { CampaignCostInput } from "@openengage/core/projects";
@@ -50,8 +50,7 @@ export function CampaignCostsPanel({
 }
 function ProjectCosts({ projectId, currency }: { projectId: string; currency: string }) {
   const { data: costs = [], error } = useQuery(campaignCostsQueryOptions(projectId));
-  const { data: bootstrap } = useQuery(appBootstrapQueryOptions());
-  const canManage = bootstrap?.workspace?.capabilities.manageMarketing ?? false;
+  const canManage = useWorkspaceCapability("manageMarketing");
   const [editing, setEditing] = useState<Cost | null>(null);
   const [formKey, setFormKey] = useState(0);
   const create = useCreateCampaignCost(),
