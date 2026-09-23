@@ -1,6 +1,4 @@
-import { ContactRepository } from "@openengage/database/contacts";
 import {
-  DealRecordRepository,
   DealTaskRepository,
   SalesReferenceError,
   SalesRepository,
@@ -8,7 +6,7 @@ import {
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { reconcileContactSegmentMemberships } from "../segments/membership-service";
+import { createContactTask, handoffToSales, updateTask } from "./sales-service";
 
 export const salesProcedures = {
   salesMembers: authed.deals.salesMembers.handler(({ context }) =>
@@ -16,19 +14,11 @@ export const salesProcedures = {
   ),
   handoff: authed.deals.handoff.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    let result;
-    try {
-      result = await new SalesRepository(context.database, context.workspace).handoff(input);
-    } catch (error) {
-      if (!(error instanceof SalesReferenceError)) throw error;
-      throw errors.INVALID_DEAL_REFERENCE({ message: error.message });
+    const outcome = await handoffToSales(context.database, context.workspace, input);
+    if (outcome.kind === "invalid_reference") {
+      throw errors.INVALID_DEAL_REFERENCE({ message: outcome.message });
     }
-    await reconcileContactSegmentMemberships(
-      context.database,
-      context.workspace.workspaceId,
-      input.contactId,
-    );
-    return result;
+    return outcome.result;
   }),
   assignmentGroups: authed.deals.assignmentGroups.handler(({ context }) =>
     new SalesRepository(context.database, context.workspace).listGroups(),
@@ -68,51 +58,25 @@ export const salesProcedures = {
   ),
   createContactTask: authed.deals.createContactTask.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const contact = input.contactId
-      ? await new ContactRepository(context.database, context.workspace).getContact(input.contactId)
-      : null;
-    const deal = input.dealId
-      ? await new DealRecordRepository(context.database, context.workspace).getDeal(input.dealId)
-      : null;
-    if (
-      (input.contactId && !contact) ||
-      (input.dealId && !deal) ||
-      (input.contactId && deal && deal.contactId !== input.contactId)
-    )
-      throw errors.INVALID_DEAL_REFERENCE({
-        message: "Contact and deal must exist in this workspace and agree",
-      });
-    if (
-      input.assignedUserId &&
-      !(await new SalesRepository(context.database, context.workspace).eligibleUser(
-        input.assignedUserId,
-      ))
-    )
-      throw errors.INVALID_DEAL_REFERENCE({ message: "Assignee must be able to manage marketing" });
-    return new DealTaskRepository(context.database, context.workspace).createContactTask({
-      ...input,
-      contactId: input.contactId ?? deal?.contactId ?? null,
-    });
+    const outcome = await createContactTask(context.database, context.workspace, input);
+    if (outcome.kind === "invalid_reference") {
+      throw errors.INVALID_DEAL_REFERENCE({ message: outcome.message });
+    }
+    return outcome.task;
   }),
   updateTaskResource: authed.deals.updateTaskResource.handler(
     async ({ context, input, errors }) => {
       requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-      if (
-        input.assignedUserId &&
-        !(await new SalesRepository(context.database, context.workspace).eligibleUser(
-          input.assignedUserId,
-        ))
-      )
-        throw errors.INVALID_DEAL_REFERENCE({
-          message: "Assignee must be able to manage marketing",
-        });
       const { taskId, ...changes } = input;
-      const task = await new DealTaskRepository(context.database, context.workspace).updateTaskById(
-        taskId,
-        changes,
-      );
-      if (!task) throw errors.DEAL_TASK_NOT_FOUND();
-      return task;
+      const outcome = await updateTask(context.database, context.workspace, taskId, changes);
+      switch (outcome.kind) {
+        case "ok":
+          return outcome.task;
+        case "not_found":
+          throw errors.DEAL_TASK_NOT_FOUND();
+        case "invalid_reference":
+          throw errors.INVALID_DEAL_REFERENCE({ message: outcome.message });
+      }
     },
   ),
   deleteTaskResource: authed.deals.deleteTaskResource.handler(
