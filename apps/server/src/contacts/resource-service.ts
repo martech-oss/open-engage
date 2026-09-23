@@ -18,10 +18,12 @@ import {
   ContactStateRepository,
 } from "@openengage/database/contacts";
 import { ManualScoringRepository } from "@openengage/database/scoring";
-import { isConstraintError, uuidv7 } from "@openengage/database/shared";
+import { isUniqueConstraintError, uuidv7 } from "@openengage/database/shared";
 
 import { resourceSlug } from "../platform/values";
 import { updateSegmentMemberCount } from "../segments/membership-service";
+
+const TAG_SLUG_UNIQUE_COLUMNS = ["tags.workspace_id", "tags.slug"] as const;
 
 /** A resource name already taken within the workspace. */
 export class ResourceConflictError extends Error {
@@ -120,7 +122,7 @@ export async function createTag(
       color: input.color,
     });
   } catch (error) {
-    if (!isConstraintError(error)) throw error;
+    if (!isUniqueConstraintError(error, TAG_SLUG_UNIQUE_COLUMNS)) throw error;
     throw new ResourceConflictError("tag");
   }
   return { id, slug, name: input.name, color: input.color };
@@ -140,7 +142,7 @@ export async function updateTag(
       color: input.color,
     });
   } catch (error) {
-    if (!isConstraintError(error)) throw error;
+    if (!isUniqueConstraintError(error, TAG_SLUG_UNIQUE_COLUMNS)) throw error;
     throw new ResourceConflictError("tag");
   }
 }

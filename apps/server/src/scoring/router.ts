@@ -1,8 +1,13 @@
 import { ScoringRepository } from "@openengage/database/scoring";
-import { isConstraintError } from "@openengage/database/shared";
+import { isUniqueConstraintError } from "@openengage/database/shared";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+
+const CATEGORY_SLUG_UNIQUE_COLUMNS = [
+  "scoring_categories.workspace_id",
+  "scoring_categories.slug",
+] as const;
 
 export const listCategoriesProcedure = authed.scoring.listCategories.handler(({ context }) =>
   new ScoringRepository(context.database, context.workspace).listCategories(),
@@ -14,7 +19,8 @@ export const createCategoryProcedure = authed.scoring.createCategory.handler(
     try {
       return await new ScoringRepository(context.database, context.workspace).createCategory(input);
     } catch (error) {
-      if (isConstraintError(error)) throw errors.SCORING_CATEGORY_SLUG_TAKEN();
+      if (isUniqueConstraintError(error, CATEGORY_SLUG_UNIQUE_COLUMNS))
+        throw errors.SCORING_CATEGORY_SLUG_TAKEN();
       throw error;
     }
   },

@@ -1,11 +1,13 @@
 import { signupFormDefinitionSchema, type FormHandlerWrite } from "@openengage/core/web";
 import type { OpenEngageDatabase } from "@openengage/database/client";
-import { isConstraintError } from "@openengage/database/shared";
+import { isUniqueConstraintError } from "@openengage/database/shared";
 import { FormHandlerRepository, PublicFormHandlerRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { isValidDomain, normalizeDomain } from "./domain";
+
+const HANDLER_SLUG_UNIQUE_COLUMNS = ["form_handlers.workspace_id", "form_handlers.slug"] as const;
 
 async function validate(
   database: OpenEngageDatabase,
@@ -38,7 +40,8 @@ export const formHandlerProcedures = {
       try {
         return await new FormHandlerRepository(context.database, context.workspace).create(input);
       } catch (error) {
-        if (isConstraintError(error)) throw errors.HANDLER_SLUG_TAKEN();
+        if (isUniqueConstraintError(error, HANDLER_SLUG_UNIQUE_COLUMNS))
+          throw errors.HANDLER_SLUG_TAKEN();
         throw error;
       }
     },
@@ -57,7 +60,8 @@ export const formHandlerProcedures = {
         )
           throw errors.HANDLER_NOT_FOUND();
       } catch (error) {
-        if (isConstraintError(error)) throw errors.HANDLER_SLUG_TAKEN();
+        if (isUniqueConstraintError(error, HANDLER_SLUG_UNIQUE_COLUMNS))
+          throw errors.HANDLER_SLUG_TAKEN();
         throw error;
       }
       return ack;
