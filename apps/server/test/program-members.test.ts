@@ -97,6 +97,37 @@ describe("program membership persistence and API", () => {
       await f.client.projects.memberHistory({ id: f.projectId, contactId: f.contactId }),
     ).toHaveLength(2);
   });
+  it("matches member search wildcards literally", async () => {
+    const f = await fixture();
+    await f.client.projects.programSave({
+      id: f.projectId,
+      expectedRowVersion: 0,
+      definition: PROJECT_PROGRAM_TEMPLATES.event,
+    });
+    await f.client.projects.programPublish({
+      id: f.projectId,
+      expectedRowVersion: 1,
+      confirmed: true,
+    });
+    const suffix = crypto.randomUUID();
+    const emails = [`john_doe+${suffix}@example.com`, `johnxdoe+${suffix}@example.com`];
+    for (const email of emails) {
+      const contact = await f.client.contacts.create({ email });
+      await f.client.projects.memberMutate({
+        id: f.projectId,
+        contactId: contact.id,
+        statusId: "attended",
+        source: "manual",
+        idempotencyKey: crypto.randomUUID(),
+      });
+    }
+
+    const underscore = await f.client.projects.memberList({ id: f.projectId, query: "john_doe" });
+    expect(underscore.items.map((item) => item.email)).toEqual([emails[0]]);
+    const percent = await f.client.projects.memberList({ id: f.projectId, query: "john%doe" });
+    expect(percent.items).toEqual([]);
+  });
+
   it("returns rowwise CSV errors for unknown contacts and scopes every read and write to a workspace", async () => {
     expect(service.mutateProjectMember).toBeTypeOf("function");
     const f = await fixture();
@@ -164,7 +195,7 @@ describe("program forms", () => {
       id: crypto.randomUUID(),
       workspaceId: f.workspaceId,
       name: "Inquiry",
-      definition: {},
+      definition: { progressiveMaxFields: 3 },
       allowedDomains: [],
       turnstileEnabled: false,
       successMessage: "Thanks",

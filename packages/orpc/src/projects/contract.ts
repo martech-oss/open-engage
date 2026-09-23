@@ -15,6 +15,7 @@ import {
 } from "@openengage/core/projects";
 
 import {
+  aiGenerationErrors,
   authedErrors,
   projectBriefMemberError,
   projectBriefNotFoundError,
@@ -137,12 +138,7 @@ export const projectsContract = {
     .route({ method: "POST", path: "/projects/briefs/generate" })
     .errors({
       ...authedErrors,
-      AI_GENERATION_FAILED: {
-        status: 502,
-        message: "AIが有効な施策ブリーフを生成できませんでした",
-      },
-      AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
-      AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+      ...aiGenerationErrors("AIが有効な施策ブリーフを生成できませんでした"),
     })
     .input(generateMarketingBriefInputSchema)
     .output(marketingBriefGenerationResultSchema),

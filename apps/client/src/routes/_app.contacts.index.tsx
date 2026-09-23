@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   contactOptionsQueryOptions,
   contactSearchDefaults,
@@ -23,7 +22,6 @@ export const Route = createFileRoute("/_app/contacts/")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: ContactsRoute,
 });
 

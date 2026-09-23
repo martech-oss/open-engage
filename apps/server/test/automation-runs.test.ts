@@ -7,8 +7,8 @@ import { createDatabase } from "@openengage/database/client";
 import { contacts } from "@openengage/database/testing";
 
 import { processAutomationRun } from "../src/automations/run-service";
-import { queueStub } from "./automation-recovery-test-support";
 import { seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 it("freezes run targets at start and replays the same slot without adding new contacts", async () => {
   const { client, workspaceId } = await seedWorkspaceClient(env.DB);
   const first = await client.contacts.create({
@@ -90,12 +90,11 @@ it("continues bounded queue chunks from the fixed ledger despite audience change
   await db.orm.update(contacts).set({ score: 0 }).where(eq(contacts.id, second.id));
   await client.contacts.create({ email: "chunk-late@example.com", customFields: {} });
   const sent: unknown[] = [];
-  const queue = {
-    ...queueStub(),
-    send: async (message: unknown) => {
+  const queue = queueDouble({
+    send: async (message) => {
       sent.push(message);
     },
-  } as Queue;
+  });
   await processAutomationRun(run.id, workspaceId, db, 1, queue);
   expect(sent).toEqual([{ kind: "automation_run", workspaceId, runId: run.id }]);
   await processAutomationRun(run.id, workspaceId, db, 1, queue);

@@ -8,16 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  type EmailTemplateRow,
-  type MessageVariableRow,
+  type EmailTemplate,
+  type MessageVariable,
   useCreateEmailTemplate,
   useCreateEmailVariable,
   usePreviewEmailTemplate,
   useUpdateEmailTemplate,
   useUpdateEmailVariable,
 } from "@/features/emails/email-api";
-import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { saveResource } from "@/hooks/use-resource-editor";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import {
   defaultEmailDocumentV2,
@@ -38,7 +39,7 @@ export function TemplateForm({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  template: EmailTemplateRow | null;
+  template: EmailTemplate | null;
   onSaved: () => void;
   initialAiOpen?: boolean;
 }): ReactNode {
@@ -192,7 +193,7 @@ export function VariableForm({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  variable: MessageVariableRow | null;
+  variable: MessageVariable | null;
   onSaved: () => void;
 }): ReactNode {
   const createVariable = useCreateEmailVariable();

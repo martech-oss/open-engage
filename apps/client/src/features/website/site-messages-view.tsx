@@ -7,7 +7,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 
 import { summarizeSiteMessages } from "./resource-model";
-import type { SiteMessageRow } from "./website-api";
+import type { SiteMessage } from "./website-api";
 import { PublishStatusBadge } from "./website-shared";
 
 export function siteMessageColumns({
@@ -16,9 +16,9 @@ export function siteMessageColumns({
   onArchive,
 }: {
   formatDateTime: (value: string) => string;
-  onEdit: (item: SiteMessageRow) => void;
-  onArchive: (item: SiteMessageRow) => Promise<void>;
-}): DataTableColumn<SiteMessageRow>[] {
+  onEdit: (item: SiteMessage) => void;
+  onArchive: (item: SiteMessage) => Promise<void>;
+}): DataTableColumn<SiteMessage>[] {
   return [
     {
       key: "name",
@@ -86,7 +86,7 @@ export function siteMessageColumns({
   ];
 }
 
-export function SiteMessagesSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
+export function SiteMessagesSummary({ items }: { items: SiteMessage[] }): ReactNode {
   const summary = summarizeSiteMessages(items);
   const cards = [
     {

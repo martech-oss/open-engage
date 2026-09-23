@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ContactSummary } from "@openengage/core/contacts";
 
@@ -212,8 +212,6 @@ beforeEach(() => {
   doubles.exportCsv.mockReset();
   doubles.saveFile.mockReset();
 });
-
-afterEach(cleanup);
 
 describe("ContactsPage keyed selection", () => {
   it("does not resurrect selected IDs or expose a bulk action after an immediate A → B → A", () => {

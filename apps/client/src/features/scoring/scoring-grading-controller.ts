@@ -3,14 +3,14 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { getErrorMessage } from "@/hooks/use-form-submission";
 import { useResourceEditor } from "@/hooks/use-resource-editor";
+import { getErrorMessage } from "@/lib/errors";
 
 import {
   gradingCriteriaQueryOptions,
-  type GradingCriterionRow,
+  type GradingCriterion,
   scoringCategoriesQueryOptions,
-  type ScoringCategoryRow,
+  type ScoringCategory,
   useArchiveGradingCriterion,
   useArchiveScoringCategory,
 } from "./scoring-api";
@@ -22,14 +22,14 @@ export function useScoringGradingController() {
   );
   const criteria = page.items;
   const { data: categories } = useSuspenseQuery(scoringCategoriesQueryOptions());
-  const resourceEditor = useResourceEditor<GradingCriterionRow>();
+  const resourceEditor = useResourceEditor<GradingCriterion>();
   const [criterionSessionId, setCriterionSessionId] = useState(0);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categorySessionId, setCategorySessionId] = useState(0);
   const archiveCriterionMutation = useArchiveGradingCriterion();
   const archiveCategoryMutation = useArchiveScoringCategory();
 
-  async function archiveCriterion(item: GradingCriterionRow): Promise<void> {
+  async function archiveCriterion(item: GradingCriterion): Promise<void> {
     try {
       await archiveCriterionMutation.mutateAsync({ id: item.id });
       toast.success("グレード条件を削除しました");
@@ -38,7 +38,7 @@ export function useScoringGradingController() {
     }
   }
 
-  async function archiveCategory(item: ScoringCategoryRow): Promise<void> {
+  async function archiveCategory(item: ScoringCategory): Promise<void> {
     try {
       await archiveCategoryMutation.mutateAsync({ id: item.id });
       toast.success("カテゴリを削除しました");
@@ -52,7 +52,7 @@ export function useScoringGradingController() {
     resourceEditor.openCreate();
   }
 
-  function openCriterionEdit(item: GradingCriterionRow): void {
+  function openCriterionEdit(item: GradingCriterion): void {
     setCriterionSessionId((current) => current + 1);
     resourceEditor.openEdit(item);
   }

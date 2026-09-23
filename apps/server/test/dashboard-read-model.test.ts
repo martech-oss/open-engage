@@ -14,7 +14,7 @@ describe("dashboard read model", () => {
       timezone: "America/Los_Angeles",
     });
 
-    const dashboard = await getDashboard(env.DB, workspaceId, {
+    const dashboard = await getDashboard(createDatabase(env.DB), workspaceId, {
       now: "2026-01-02T01:30:00.000Z",
     });
 
@@ -93,7 +93,7 @@ describe("dashboard read model", () => {
 
     // 08:00Z is midnight in Los Angeles on Dec 19. The record one millisecond
     // earlier belongs to Dec 18 and is outside the 14-day Dec 19-Jan 1 window.
-    const dashboard = await getDashboard(env.DB, workspaceId, {
+    const dashboard = await getDashboard(createDatabase(env.DB), workspaceId, {
       now: "2026-01-02T01:30:00.000Z",
     });
 
@@ -129,7 +129,7 @@ describe("dashboard read model", () => {
       ).bind(uuidv7(), workspaceId, contactId, `tokyo-${contactId}`, at, at),
     ]);
 
-    const dashboard = await getDashboard(env.DB, workspaceId, {
+    const dashboard = await getDashboard(createDatabase(env.DB), workspaceId, {
       now: "2026-08-23T03:00:00.000Z",
     });
 

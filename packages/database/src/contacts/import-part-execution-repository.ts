@@ -1,7 +1,7 @@
 import { and, eq, exists, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import { changedExactlyOne } from "../shared/database-utils";
+import { changedExactlyOne, runBatch } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import type { ContactImportRow } from "./data-job-repository";
@@ -132,7 +132,7 @@ export class ContactImportPartExecutionRepository extends DatabaseRepository {
         ),
       );
     const statements: BatchItem<"sqlite">[] = [acquirePhase, ...inserts, phaseUpdate];
-    await orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    await runBatch(orm, statements);
   }
 
   public completePersistedPartForLiveLease(input: CompletionInput): Promise<boolean> {

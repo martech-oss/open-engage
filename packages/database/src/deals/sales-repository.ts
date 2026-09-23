@@ -18,6 +18,11 @@ import { uuidv7 } from "../shared/uuid";
 import { appNotifications, assignmentGroups, salesHandoffs } from "./sales-schema";
 import { dealTasks } from "./schema";
 
+/** A handoff or assignment group naming a contact, member or group it cannot use; shown to the user. */
+export class SalesReferenceError extends Error {
+  public override readonly name = "SalesReferenceError";
+}
+
 export class SalesRepository extends WorkspaceRepository {
   async eligibleMembers() {
     return this.database.orm
@@ -58,7 +63,9 @@ export class SalesRepository extends WorkspaceRepository {
   async saveGroup(input: AssignmentGroupWrite) {
     for (const id of input.userIds)
       if (!(await this.eligibleUser(id)))
-        throw new Error("Group users must be workspace members able to manage marketing");
+        throw new SalesReferenceError(
+          "Group users must be workspace members able to manage marketing",
+        );
     const id = input.id ?? uuidv7();
     const now = nowIso();
     if (input.id) {
@@ -72,7 +79,7 @@ export class SalesRepository extends WorkspaceRepository {
         })
         .where(and(this.inWorkspace(assignmentGroups), eq(assignmentGroups.id, id)))
         .returning({ id: assignmentGroups.id });
-      if (!result.length) throw new Error("Assignment group not found");
+      if (!result.length) throw new SalesReferenceError("Assignment group not found");
     } else
       await this.database.orm.insert(assignmentGroups).values({
         id,
@@ -141,7 +148,7 @@ export class SalesRepository extends WorkspaceRepository {
       .get();
     if (previous) {
       if (previous.contactId !== input.contactId)
-        throw new Error("Execution key belongs to a different contact");
+        throw new SalesReferenceError("Execution key belongs to a different contact");
       return salesHandoffResultSchema.parse(previous);
     }
     const id = uuidv7(),
@@ -210,7 +217,7 @@ export class SalesRepository extends WorkspaceRepository {
       )
       .get();
     if (!result || result.contactId !== input.contactId)
-      throw new Error("No eligible sales owner or contact; handoff was not applied");
+      throw new SalesReferenceError("No eligible sales owner or contact; handoff was not applied");
     return salesHandoffResultSchema.parse(result);
   }
 }

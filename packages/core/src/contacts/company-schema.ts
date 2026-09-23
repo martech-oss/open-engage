@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import { companyUpdateSchema } from "./company-dto.js";
+
 export const companyListInputSchema = z.object({
   query: z.string().trim().optional(),
   limit: z.number().int().min(1).max(200).optional(),
@@ -10,10 +12,9 @@ export const companyGetInputSchema = z.object({
   id: z.string().min(1),
 });
 
-export const companyUpdateInputSchema = z.object({
+/** Same field rules as create, so an update cannot store a domain create would reject. */
+export const companyUpdateInputSchema = companyUpdateSchema.extend({
   id: z.string().min(1),
-  name: z.string().trim().min(1).max(191).optional(),
-  domain: z.string().trim().max(253).nullable().optional(),
 });
 
 export const companyAssignContactInputSchema = z.object({

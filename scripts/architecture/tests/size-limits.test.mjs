@@ -25,29 +25,34 @@ await runScenarios("architecture: size-limits", [
     },
   ]),
   {
+    name: "applies the controller ceiling to any extracted client controller",
+    files: { "apps/client/src/features/contacts/contacts-page/controller.ts": componentLines(251) },
+    want: "function-like node.*over 250 lines",
+  },
+  {
     name: "does not expand the controller ceiling to unrelated client TS modules",
     files: { "apps/client/src/lib/example.ts": componentLines(251) },
   },
   {
-    name: "allows focused Task 6 files and functions at their ratchet limits",
+    name: "allows focused UI files and functions at their ratchet limits",
     files: {
       "apps/client/src/features/segments/segment-builder.tsx": componentLines(120),
       "apps/client/src/features/emails/email-block-editor.tsx": sourceLines(250),
     },
   },
   {
-    name: "rejects a focused Task 6 file above 250 lines",
+    name: "rejects a focused UI file above 250 lines",
     files: {
       "apps/client/src/features/emails/email-block-editor.tsx": sourceLines(251),
     },
-    want: "Task 6 hotspot.*over 250 lines",
+    want: "focused UI file.*over 250 lines",
   },
   {
-    name: "rejects a focused Task 6 function above 120 lines",
+    name: "rejects a focused UI function above 120 lines",
     files: {
       "apps/client/src/features/segments/segment-builder.tsx": componentLines(121),
     },
-    want: "Task 6 hotspot function.*over 120 lines",
+    want: "focused UI function.*over 120 lines",
   },
   {
     name: "allows a handwritten source file at exactly 500 actual lines",

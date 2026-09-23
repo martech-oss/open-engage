@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { VariableSettings } from "./variable-settings";
@@ -90,7 +90,6 @@ vi.mock("./variable-api", () => ({
   }),
 }));
 afterEach(() => {
-  cleanup();
   state.canEdit = true;
   state.previewed = false;
   state.saved = [];

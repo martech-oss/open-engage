@@ -7,17 +7,17 @@ import { ContactImportRecoveryRepository, createDatabase } from "@openengage/dat
 import { processContactImport } from "../src/contacts/worker";
 import { persistDeadLetter } from "../src/platform/maintenance-worker";
 import { scheduled } from "../src/runtime/dispatch";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import {
   countContacts,
   expirePartLease,
   failNextDatabaseBatch,
   pauseNextDatabaseBatch,
-  queueStub,
   readJob,
   readPart,
-  runtimeWithJobsQueue,
   seedImport,
 } from "./contact-import-recovery-test-support";
+import { queueDouble, recordingQueue } from "./queue-double";
 
 describe("contact import lease and terminal recovery", () => {
   it("does not insert or reconcile after its expired lease is replaced and terminated", async () => {
@@ -28,7 +28,7 @@ describe("contact import lease and terminal recovery", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub(published), paused.database),
+      runtimeWithJobsQueue(recordingQueue(published), paused.database),
     );
     await paused.reached;
     await expirePartLease(fixture.jobId);
@@ -46,7 +46,7 @@ describe("contact import lease and terminal recovery", () => {
       "openengage-dead-letter",
       { kind: "contact_import", importJobId: fixture.jobId, part: 0, totalParts: 1 },
       5,
-      runtimeWithJobsQueue(queueStub([])),
+      runtimeWithJobsQueue(recordingQueue([])),
     );
 
     paused.resume();
@@ -66,7 +66,7 @@ describe("contact import lease and terminal recovery", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub(stalePublished), stale.database),
+      runtimeWithJobsQueue(recordingQueue(stalePublished), stale.database),
     );
     await stale.reached;
     await expirePartLease(fixture.jobId);
@@ -75,7 +75,7 @@ describe("contact import lease and terminal recovery", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub(currentPublished), current.database),
+      runtimeWithJobsQueue(recordingQueue(currentPublished), current.database),
     );
     await current.reached;
 
@@ -107,12 +107,13 @@ describe("contact import lease and terminal recovery", () => {
 
   it("leaves the next part durable when completion commits but direct publication fails", async () => {
     const fixture = await seedImport([{ email: "part-zero@example.com" }], 2);
-    const runtime = runtimeWithJobsQueue({
-      send: async () => {
-        throw new Error("injected next-part publish failure");
-      },
-      sendBatch: async () => {},
-    } as unknown as Queue);
+    const runtime = runtimeWithJobsQueue(
+      queueDouble({
+        send: async () => {
+          throw new Error("injected next-part publish failure");
+        },
+      }),
+    );
 
     await expect(processContactImport(fixture.jobId, 0, 2, runtime)).rejects.toThrow(
       "injected next-part publish failure",
@@ -123,7 +124,7 @@ describe("contact import lease and terminal recovery", () => {
     const published: unknown[] = [];
     await scheduled(
       createScheduledController({ cron: "* * * * *" }),
-      runtimeWithJobsQueue(queueStub(published)),
+      runtimeWithJobsQueue(recordingQueue(published)),
       createExecutionContext(),
     );
     expect(published).toContainEqual({
@@ -142,7 +143,7 @@ describe("contact import lease and terminal recovery", () => {
       .bind(fixture.jobId)
       .run();
     const runtime = runtimeWithJobsQueue(
-      queueStub([]),
+      recordingQueue([]),
       failNextDatabaseBatch(env.DB, new Error("fifth attempt outage")),
     );
 
@@ -172,7 +173,7 @@ describe("contact import lease and terminal recovery", () => {
 
     await scheduled(
       createScheduledController({ cron: "* * * * *" }),
-      runtimeWithJobsQueue(queueStub(published)),
+      runtimeWithJobsQueue(recordingQueue(published)),
       createExecutionContext(),
     );
 
@@ -196,7 +197,7 @@ describe("contact import lease and terminal recovery", () => {
       "openengage-dead-letter",
       { kind: "contact_import", importJobId: fixture.jobId, part: 0, totalParts: 1 },
       5,
-      runtimeWithJobsQueue(queueStub([])),
+      runtimeWithJobsQueue(recordingQueue([])),
     );
 
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({ status: "failed" });

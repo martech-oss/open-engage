@@ -6,7 +6,7 @@ import { DataTable } from "@/components/data-table";
 import { customRedirectColumns } from "./custom-redirects-view";
 import { landingPageColumns } from "./landing-pages-view";
 import { signupFormColumns } from "./signup-forms-view";
-import type { CustomRedirectRow, LandingPageRow, SignupFormRow } from "./website-api";
+import type { CustomRedirect, LandingPage, SignupForm } from "./website-api";
 
 const noop = () => undefined;
 const archive = async () => undefined;
@@ -30,7 +30,7 @@ describe("website resource tables on SSR", () => {
         submissionCount: 4,
         createdAt: timestamp,
         updatedAt: timestamp,
-      } satisfies SignupFormRow,
+      } satisfies SignupForm,
       columns: signupFormColumns({
         formatDateTime: (value) => value,
         onEdit: noop,
@@ -55,7 +55,7 @@ describe("website resource tables on SSR", () => {
         publishedVersionId: null,
         createdAt: timestamp,
         updatedAt: timestamp,
-      } satisfies LandingPageRow,
+      } satisfies LandingPage,
       columns: landingPageColumns({
         formatDateTime: (value) => value,
         onEdit: noop,
@@ -74,7 +74,7 @@ describe("website resource tables on SSR", () => {
         clickCount: 3,
         createdAt: timestamp,
         updatedAt: timestamp,
-      } satisfies CustomRedirectRow,
+      } satisfies CustomRedirect,
       columns: customRedirectColumns({
         formatDateTime: (value) => value,
         onEdit: noop,

@@ -9,7 +9,7 @@ import { saveResource } from "@/hooks/use-resource-editor";
 import { getFormString } from "@/lib/form-data";
 
 import {
-  type CustomRedirectRow,
+  type CustomRedirect,
   type useCreateCustomRedirect,
   type useUpdateCustomRedirect,
 } from "./website-api";
@@ -22,7 +22,7 @@ export function CustomRedirectEditorDialog({
   createMutation,
   updateMutation,
 }: {
-  item: CustomRedirectRow | null;
+  item: CustomRedirect | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;

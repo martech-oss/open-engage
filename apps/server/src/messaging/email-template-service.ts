@@ -1,8 +1,9 @@
-import type {
-  EmailBrandProfile,
-  EmailDocumentV2,
-  EmailTemplateUpdate,
-  EmailTemplateWrite,
+import {
+  collectEmailAssetIds,
+  type EmailBrandProfile,
+  type EmailDocumentV2,
+  type EmailTemplateUpdate,
+  type EmailTemplateWrite,
 } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { AssetRepository } from "@openengage/database/assets";
@@ -141,34 +142,6 @@ export async function resolveEmailRenderOptions(
     throw new EmailTemplateServiceError("invalid_asset");
   }
   return { brand, assetUrls };
-}
-
-export function collectEmailAssetIds(document: EmailDocumentV2): Set<string> {
-  const ids = new Set<string>();
-  collectV2AssetIds(document, ids);
-  return ids;
-}
-
-function collectV2AssetIds(document: EmailDocumentV2, ids: Set<string>): void {
-  for (const block of document.blocks) {
-    if (block.type === "image") {
-      ids.add(block.source.assetId);
-    } else if (block.type === "columns") {
-      for (const column of block.columns) {
-        for (const child of column.blocks) {
-          if (child.type === "image") {
-            ids.add(child.source.assetId);
-          }
-        }
-      }
-    } else if (block.type === "conditional") {
-      for (const child of block.blocks) {
-        if (child.type === "image") {
-          ids.add(child.source.assetId);
-        }
-      }
-    }
-  }
 }
 
 async function validateDraftAssets(

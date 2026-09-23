@@ -1,28 +1,15 @@
 import { createFlueClient, FlueApiError, FlueExecutionError } from "@flue/sdk";
+import type * as z from "zod";
 
+import type { AgentDefinition } from "@openengage/core/agents";
 import { uuidv7 } from "@openengage/database/shared";
 
 import type { RuntimeEnv } from "../env";
 import { isAbortError } from "../platform/abort";
+import { AiGenerationError } from "./generation-error";
 
 const PROPOSAL_PART_NAME = "proposal";
 const ABORT_CLEANUP_TIMEOUT_MS = 1_000;
-
-export type AgentProposalFailure = "failed" | "timeout" | "unavailable";
-
-export class AgentProposalError extends Error {
-  public constructor(
-    public readonly kind: AgentProposalFailure,
-    options?: ErrorOptions,
-  ) {
-    super(`Agent proposal ${kind}`, options);
-    this.name = "AgentProposalError";
-  }
-}
-
-interface ProposalSchema<T> {
-  safeParse(value: unknown): { success: true; data: T } | { success: false; error: unknown };
-}
 
 export interface AgentProposalEnv {
   AGENT_APP: Pick<RuntimeEnv["AGENT_APP"], "fetch">;
@@ -35,28 +22,30 @@ export interface AgentProposalTransport {
 
 /**
  * Runs one structured Agent request through the internal service binding.
- * Domain services remain responsible for catalogs and semantic validation;
- * this helper owns transport, cancellation, proposal extraction, and parsing.
+ * The shared definition fixes the route, deadline, and schemas. Domain services
+ * remain responsible for catalogs and semantic validation; this helper owns
+ * transport, cancellation, proposal extraction, and parsing.
  */
-export async function requestAgentProposal<T>(input: {
+export async function requestAgentProposal<
+  InitialData extends z.ZodType,
+  Result extends z.ZodType,
+>(input: {
   env: AgentProposalEnv;
-  agent: string;
+  agent: AgentDefinition<InitialData, Result>;
   prompt: string;
-  initialData: unknown;
-  schema: ProposalSchema<T>;
-  timeoutMs: number;
+  initialData: z.input<InitialData>;
   abortCleanupTimeoutMs?: number | undefined;
   transport?: AgentProposalTransport | undefined;
-}): Promise<T> {
+}): Promise<z.output<Result>> {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(new DOMException("Timeout", "AbortError")),
-    input.timeoutMs,
+    input.agent.serverTimeoutMs,
   );
   let transport = input.transport;
 
   try {
-    transport ??= createAgentTransport(input.env, input.agent);
+    transport ??= createAgentTransport(input.env, input.agent.name);
     const proposal = await raceWithAbort(
       transport.run({
         prompt: input.prompt,
@@ -66,29 +55,29 @@ export async function requestAgentProposal<T>(input: {
       controller.signal,
     );
     controller.signal.throwIfAborted();
-    const parsed = input.schema.safeParse(proposal);
+    const parsed = input.agent.result.safeParse(proposal);
     if (!parsed.success) {
-      throw new AgentProposalError("failed", { cause: parsed.error });
+      throw new AiGenerationError("failed", { cause: parsed.error });
     }
     return parsed.data;
   } catch (error) {
-    if (error instanceof AgentProposalError) throw error;
+    if (error instanceof AiGenerationError) throw error;
     if (controller.signal.aborted || isAbortError(error)) {
       if (transport) {
         await abortTransport(transport, input.abortCleanupTimeoutMs ?? ABORT_CLEANUP_TIMEOUT_MS);
       }
-      throw new AgentProposalError("timeout", { cause: error });
+      throw new AiGenerationError("timeout", { cause: error });
     }
     if (error instanceof FlueExecutionError) {
       if (isDurableSubmissionTimeout(error)) {
-        throw new AgentProposalError("timeout", { cause: error });
+        throw new AiGenerationError("timeout", { cause: error });
       }
-      throw new AgentProposalError("failed", { cause: error });
+      throw new AiGenerationError("failed", { cause: error });
     }
     if (error instanceof FlueApiError) {
-      throw new AgentProposalError("unavailable", { cause: error });
+      throw new AiGenerationError("unavailable", { cause: error });
     }
-    throw new AgentProposalError("unavailable", { cause: error });
+    throw new AiGenerationError("unavailable", { cause: error });
   } finally {
     clearTimeout(timeout);
   }

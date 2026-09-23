@@ -1,6 +1,6 @@
 import { ErrorAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { ProjectCloneSummary } from "@openengage/core/projects";
 
 import { CloneJobProgress } from "./job-progress";

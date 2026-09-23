@@ -7,7 +7,7 @@ import { websitePublicUrls } from "./public-urls";
 import { archiveWebsiteResource } from "./resource-controller-actions";
 import {
   signupFormsQueryOptions,
-  type SignupFormRow,
+  type SignupForm,
   useArchiveSignupForm,
   useCreateSignupForm,
   useUpdateSignupForm,
@@ -15,12 +15,12 @@ import {
 
 export function useSignupFormsController(workspaceSlug: string, publicOrigin?: string) {
   const { data: items } = useSuspenseQuery(signupFormsQueryOptions());
-  const editor = useResourceEditor<SignupFormRow>();
+  const editor = useResourceEditor<SignupForm>();
   const archiveMutation = useArchiveSignupForm();
   const createMutation = useCreateSignupForm();
   const updateMutation = useUpdateSignupForm();
   const urls = websitePublicUrls(workspaceSlug, publicOrigin);
-  const archive = (item: SignupFormRow) =>
+  const archive = (item: SignupForm) =>
     archiveWebsiteResource({
       archive: () => archiveMutation.mutateAsync({ id: item.id }),
       onSuccess: () => toast.success("サインアップフォームをアーカイブしました"),
@@ -32,7 +32,7 @@ export function useSignupFormsController(workspaceSlug: string, publicOrigin?: s
     archive,
     createMutation,
     updateMutation,
-    publicUrls: (item: SignupFormRow) => ({
+    publicUrls: (item: SignupForm) => ({
       page: urls.signupForm(item.slug),
       embed: urls.signupFormEmbed(item.slug),
     }),

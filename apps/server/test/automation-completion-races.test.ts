@@ -17,10 +17,11 @@ import {
 } from "@openengage/database/testing";
 
 import { processAutomationJob } from "../src/automations/worker";
-import type { RuntimeEnv } from "../src/env";
 import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { recordContactEvent } from "../src/runtime/contact-event-service";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { seedWorkspace } from "./factory";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -140,7 +141,7 @@ describe("automation stale completion races", () => {
             resourceType: "delivery",
             resourceId: "delivery-while-parking",
             occurredAt: "2026-08-20T02:01:00.000Z",
-            queue: queueStub(),
+            queue: queueDouble(),
           });
         }
         return found;
@@ -150,7 +151,7 @@ describe("automation stale completion races", () => {
     await processAutomationJob(
       seeded.jobId,
       "decision-barrier-lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())),
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())),
     );
 
     expect(await readJobDueAt(seeded.jobId)).toEqual({
@@ -263,19 +264,6 @@ async function readJobDueAt(jobId: string) {
     .from(automationJobs)
     .where(eq(automationJobs.id, jobId))
     .get();
-}
-
-function queueStub(): Queue {
-  return { send: async () => {}, sendBatch: async () => {} } as unknown as Queue;
-}
-
-function runtimeWithJobsQueue(queue: Queue): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
 }
 
 async function readState(jobId: string, enrollmentId: string) {

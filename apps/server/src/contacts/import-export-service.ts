@@ -8,11 +8,12 @@ import { type OpenEngageDatabase } from "@openengage/database/client";
 import { DataJobRepository } from "@openengage/database/contacts";
 import { uuidv7 } from "@openengage/database/shared";
 
+import type { JobsQueue } from "../platform/queue-messages";
 import { parseCsv } from "./csv";
 
 interface ImportDeps {
   bucket: R2Bucket;
-  queue: Queue;
+  queue: JobsQueue;
 }
 
 export type ContactImportOutcome =
@@ -81,7 +82,7 @@ export async function startContactImport(
 
 export async function startContactExport(
   database: OpenEngageDatabase,
-  queue: Queue,
+  queue: JobsQueue,
   workspace: WorkspaceContext,
   input?: { filter?: ContactExportFilter | undefined },
 ): Promise<{ jobId: string }> {

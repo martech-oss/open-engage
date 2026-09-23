@@ -4,6 +4,7 @@ import { AssetRepository } from "@openengage/database/assets";
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
 
+import { AiGenerationError } from "../agents/generation-error";
 import { loadAssetOrigin, uploadAsset } from "../assets/service";
 import type { RuntimeEnv } from "../env";
 import { isAbortError } from "../platform/abort";
@@ -12,18 +13,6 @@ const IMAGE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b" as const;
 const IMAGE_TIMEOUT_MS = 55_000;
 const GENERATED_IMAGE_TTL_MS = 24 * 60 * 60 * 1_000;
 const MAX_GENERATED_IMAGE_BYTES = 10 * 1024 * 1024;
-
-export type EmailImageGenerationFailure = "failed" | "timeout" | "unavailable";
-
-export class EmailImageGenerationError extends Error {
-  public constructor(
-    public readonly kind: EmailImageGenerationFailure,
-    options?: ErrorOptions,
-  ) {
-    super(`Email image generation ${kind}`, options);
-    this.name = "EmailImageGenerationError";
-  }
-}
 
 export async function generateEmailImage(
   database: OpenEngageDatabase,
@@ -48,7 +37,7 @@ export async function generateEmailImage(
     form.set("height", "672");
     const multipart = new Response(form);
     const contentType = multipart.headers.get("content-type");
-    if (!contentType) throw new EmailImageGenerationError("failed");
+    if (!contentType) throw new AiGenerationError("failed");
     const result = await env.AI.run(
       IMAGE_MODEL,
       { multipart: { body: await multipart.arrayBuffer(), contentType } },
@@ -56,11 +45,11 @@ export async function generateEmailImage(
     );
     image = result.image;
   } catch (error) {
-    if (error instanceof EmailImageGenerationError) throw error;
+    if (error instanceof AiGenerationError) throw error;
     if (controller.signal.aborted || isAbortError(error)) {
-      throw new EmailImageGenerationError("timeout", { cause: error });
+      throw new AiGenerationError("timeout", { cause: error });
     }
-    throw new EmailImageGenerationError("unavailable", { cause: error });
+    throw new AiGenerationError("unavailable", { cause: error });
   } finally {
     clearTimeout(timeout);
   }
@@ -109,21 +98,21 @@ export async function generateEmailImage(
       if (row) await env.ASSETS_BUCKET.delete(row.r2Key).catch(() => undefined);
       await repository.deleteRow(uploadedAssetId).catch(() => undefined);
     }
-    if (error instanceof EmailImageGenerationError) throw error;
-    throw new EmailImageGenerationError("failed", { cause: error });
+    if (error instanceof AiGenerationError) throw error;
+    throw new AiGenerationError("failed", { cause: error });
   }
 }
 
 function decodeImage(encoded: string | undefined): ArrayBuffer {
-  if (!encoded) throw new EmailImageGenerationError("failed");
+  if (!encoded) throw new AiGenerationError("failed");
   try {
     const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_GENERATED_IMAGE_BYTES) {
-      throw new EmailImageGenerationError("failed");
+      throw new AiGenerationError("failed");
     }
     return bytes.buffer;
   } catch (error) {
-    if (error instanceof EmailImageGenerationError) throw error;
-    throw new EmailImageGenerationError("failed", { cause: error });
+    if (error instanceof AiGenerationError) throw error;
+    throw new AiGenerationError("failed", { cause: error });
   }
 }

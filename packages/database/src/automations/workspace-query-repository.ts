@@ -1,22 +1,17 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, max, sql } from "drizzle-orm";
 
-import {
-  automationDefinitionSchema,
-  type AutomationDefinition,
-} from "@openengage/core/automations";
+import { type AutomationDefinition } from "@openengage/core/automations";
 
-import { deliveries, emailTemplates } from "../messaging/schema";
-import { defineJsonCodec } from "../shared/json-codec";
+import { deliveries } from "../messaging/schema";
 import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
 import { WorkspaceRepository } from "../shared/repository-base";
+import { automationGraphCodec } from "./codecs";
 import {
   automationEnrollments,
   automations,
   automationTriggers,
   automationVersions,
 } from "./schema";
-
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
 export interface AutomationAnalyticsRows {
   enrollments: Array<{ status: string; count: number }>;
@@ -170,7 +165,7 @@ export class AutomationQueryRepository extends WorkspaceRepository {
     return row
       ? {
           ...row,
-          graph: graphCodec.decode(row.graph),
+          graph: automationGraphCodec.decode(row.graph),
         }
       : null;
   }
@@ -207,26 +202,9 @@ export class AutomationQueryRepository extends WorkspaceRepository {
     return row
       ? {
           ...row,
-          graph: graphCodec.decode(row.graph),
+          graph: automationGraphCodec.decode(row.graph),
           rawGraph: row.graph,
         }
       : null;
-  }
-
-  /** Of the given templates, those published locally and ready to send. */
-  public async listPublishedTemplateIds(templateIds: string[]): Promise<string[]> {
-    const rows = await this.database.orm
-      .select({ id: emailTemplates.id })
-      .from(emailTemplates)
-      .where(
-        and(
-          this.inWorkspace(emailTemplates),
-          isNull(emailTemplates.archivedAt),
-          eq(emailTemplates.purpose, "transactional"),
-          isNotNull(emailTemplates.publishedRevision),
-          inArray(emailTemplates.id, templateIds),
-        ),
-      );
-    return rows.map((row) => row.id);
   }
 }

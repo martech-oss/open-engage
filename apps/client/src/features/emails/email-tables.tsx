@@ -7,11 +7,11 @@ import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  type EmailTemplateRow,
+  type EmailTemplate,
   useArchiveEmailTemplate,
   usePublishEmailTemplate,
 } from "@/features/emails/email-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 export function TemplateTable({
@@ -19,15 +19,15 @@ export function TemplateTable({
   loading,
   onEdit,
 }: {
-  items: EmailTemplateRow[];
+  items: EmailTemplate[];
   loading: boolean;
-  onEdit: (template: EmailTemplateRow) => void;
+  onEdit: (template: EmailTemplate) => void;
 }): ReactNode {
   const { formatDateTime } = useWorkspaceFormatters();
   const publishTemplate = usePublishEmailTemplate();
   const archiveTemplate = useArchiveEmailTemplate();
 
-  async function publish(template: EmailTemplateRow) {
+  async function publish(template: EmailTemplate) {
     try {
       await publishTemplate.mutateAsync({ id: template.id });
       toast.success("テンプレートを公開しました");
@@ -36,7 +36,7 @@ export function TemplateTable({
     }
   }
 
-  async function archive(template: EmailTemplateRow) {
+  async function archive(template: EmailTemplate) {
     try {
       await archiveTemplate.mutateAsync({ id: template.id });
       toast.success("テンプレートをアーカイブしました");
@@ -45,7 +45,7 @@ export function TemplateTable({
     }
   }
 
-  const columns: DataTableColumn<EmailTemplateRow>[] = [
+  const columns: DataTableColumn<EmailTemplate>[] = [
     {
       key: "template",
       header: "テンプレート",

@@ -2,10 +2,7 @@
 import { useInitialData, useModel, useSkill, useTool } from "@flue/runtime";
 import * as v from "valibot";
 
-import {
-  segmentDesignerInitialDataSchema,
-  segmentGenerationAgentResultSchema,
-} from "@openengage/core/segments";
+import { segmentDesignerAgent } from "@openengage/core/agents";
 
 import segmentDesigner from "../skills/segment-designer/SKILL.md";
 import { validateSegmentFilterTool } from "../tools/schema-validation";
@@ -18,12 +15,12 @@ export function SegmentDesigner() {
   useSkill(segmentDesigner);
   useTool(validateSegmentFilterTool);
 
-  const initialData = segmentDesignerInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = segmentDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_segment_proposal",
     description:
       "Submit the final structured segment proposal. This is the only successful finish.",
-    schema: segmentGenerationAgentResultSchema,
+    schema: segmentDesignerAgent.result,
     schemaErrorLabel: "Proposal schema validation failed",
     retryLimitError: "Segment proposal validation retry limit exceeded",
     retrySignal: {
@@ -58,4 +55,4 @@ Rules:
 }
 
 SegmentDesigner.initialData = v.unknown();
-SegmentDesigner.durability = { maxAttempts: 3, timeoutMs: 55_000 };
+SegmentDesigner.durability = { maxAttempts: 3, timeoutMs: segmentDesignerAgent.agentTimeoutMs };

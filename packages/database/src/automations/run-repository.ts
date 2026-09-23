@@ -1,10 +1,6 @@
 import { and, asc, desc, eq, exists, inArray, sql, type SQL } from "drizzle-orm";
 
-import {
-  automationDefinitionSchema,
-  automationRunSchema,
-  type AutomationAudience,
-} from "@openengage/core/automations";
+import { automationRunSchema, type AutomationAudience } from "@openengage/core/automations";
 
 import { contacts } from "../contacts/schema";
 import { compileWorkspaceSegmentFilter } from "../segments/program-filter-repository";
@@ -13,6 +9,7 @@ import { compiledFilterSql } from "../segments/support";
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import { AutomationExecutionRepository } from "./execution-repository";
 import {
   automations,
@@ -21,6 +18,11 @@ import {
   automationRunTargets,
   automationEnrollments,
 } from "./schema";
+
+/** A manual run the current published state does not allow; the message is shown to the user. */
+export class AutomationRunError extends Error {
+  public override readonly name = "AutomationRunError";
+}
 
 export class AutomationRunRepository extends WorkspaceRepository {
   private audienceQuery(audience: AutomationAudience): SQL {
@@ -53,10 +55,11 @@ export class AutomationRunRepository extends WorkspaceRepository {
         ),
       )
       .get();
-    if (!row) throw new Error("公開中のオートメーションがありません");
-    const graph = automationDefinitionSchema.parse(JSON.parse(row.graph));
+    if (!row) throw new AutomationRunError("公開中のオートメーションがありません");
+    const graph = automationGraphCodec.decode(row.graph);
     const source = graph.nodes.find((node) => node.type === "source");
-    if (source?.config.source !== "batch") throw new Error("バッチ開始のフローを選択してください");
+    if (source?.config.source !== "batch")
+      throw new AutomationRunError("バッチ開始のフローを選択してください");
     return { ...row, graph, source: { ...source, config: source.config } };
   }
   public async preview(audience: AutomationAudience) {
@@ -72,7 +75,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
           ),
         )
         .get();
-      if (!segment) throw new Error("利用できるリストがありません");
+      if (!segment) throw new AutomationRunError("利用できるリストがありません");
     }
     const query = this.audienceQuery(audience);
     const [count, sample] = await Promise.all([
@@ -105,7 +108,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
     if (existing) return (await this.runDetail(existing.id))!.run;
     const version = await this.published(automationId);
     if (expectedVersionId && version.id !== expectedVersionId)
-      throw new Error("公開版が変更されました。対象を再確認してください");
+      throw new AutomationRunError("公開版が変更されました。対象を再確認してください");
     await this.preview(version.source.config.audience);
     const id = uuidv7(),
       orm = this.database.orm,
@@ -148,7 +151,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
         ),
       )
       .get();
-    if (!run) throw new Error("公開状態が変更されました");
+    if (!run) throw new AutomationRunError("公開状態が変更されました");
     return (await this.runDetail(run.id))!.run;
   }
   public async pendingTargets(runId: string, limit = 100) {
@@ -189,9 +192,7 @@ export class AutomationRunRepository extends WorkspaceRepository {
       )
       .where(and(this.inWorkspace(automationRuns), eq(automationRuns.id, runId)))
       .get();
-    return row
-      ? { ...row.run, graph: automationDefinitionSchema.parse(JSON.parse(row.graph)) }
-      : null;
+    return row ? { ...row.run, graph: automationGraphCodec.decode(row.graph) } : null;
   }
   public async skipTarget(runId: string, contactId: string, reason: string) {
     await this.database.orm

@@ -1,12 +1,13 @@
-import { writeAuditLog } from "@openengage/database/platform";
-import {
-  ProjectCloneError,
-  ProjectCloneJobRepository,
-  ProjectCloneQueryRepository,
-} from "@openengage/database/projects";
+import { ProjectCloneError, ProjectCloneQueryRepository } from "@openengage/database/projects";
 
 import { authed, requireRole } from "../orpc/base";
-import { getProjectClone, getProjectCloneProgress, previewProjectClone } from "./clone-service";
+import {
+  getProjectClone,
+  getProjectCloneProgress,
+  previewProjectClone,
+  retryProjectClone,
+  startProjectClone,
+} from "./clone-service";
 
 function rethrow(
   error: unknown,
@@ -66,29 +67,11 @@ export const projectCloneProcedures = {
   cloneStart: authed.projects.cloneStart.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await getProjectCloneProgress(
-        context.database,
-        context.workspace.workspaceId,
-        input.id,
-        input.jobId,
-      );
-      const job = await new ProjectCloneJobRepository(context.database, context.workspace).start(
-        input.jobId,
-        input.requestKey,
-      );
-      if (job.status === "queued")
-        await context.env.JOBS_QUEUE.send({
-          kind: "project_clone",
-          workspaceId: context.workspace.workspaceId,
-          jobId: job.id,
-        });
-      await writeAuditLog(context.database, context.workspace, {
-        action: "project.clone.start",
-        resourceType: "project",
-        resourceId: input.id,
-        metadata: { jobId: job.id, targetProjectId: job.targetProjectId },
+      return await startProjectClone(context.database, context.workspace, context.env.JOBS_QUEUE, {
+        projectId: input.id,
+        jobId: input.jobId,
+        requestKey: input.requestKey,
       });
-      return job;
     } catch (error) {
       rethrow(error, errors);
     }
@@ -96,22 +79,10 @@ export const projectCloneProcedures = {
   cloneRetry: authed.projects.cloneRetry.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await getProjectCloneProgress(
-        context.database,
-        context.workspace.workspaceId,
-        input.id,
-        input.jobId,
-      );
-      const job = await new ProjectCloneJobRepository(context.database, context.workspace).retry(
-        input.jobId,
-      );
-      if (job.status === "queued")
-        await context.env.JOBS_QUEUE.send({
-          kind: "project_clone",
-          workspaceId: context.workspace.workspaceId,
-          jobId: job.id,
-        });
-      return job;
+      return await retryProjectClone(context.database, context.workspace, context.env.JOBS_QUEUE, {
+        projectId: input.id,
+        jobId: input.jobId,
+      });
     } catch (error) {
       rethrow(error, errors);
     }

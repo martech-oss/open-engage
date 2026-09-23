@@ -7,6 +7,7 @@ import {
 import type { OpenEngageDatabase } from "@openengage/database/client";
 
 import { logError } from "../observability";
+import type { JobsQueue } from "../platform/queue-messages";
 
 /** Bounded work; reruns continue the durable target ledger, never reselect the audience. */
 export async function processAutomationRun(
@@ -14,7 +15,7 @@ export async function processAutomationRun(
   workspaceId: string,
   database: OpenEngageDatabase,
   limit = 100,
-  queue?: Queue,
+  queue?: JobsQueue,
 ): Promise<void> {
   const repo = new AutomationRunRepository(database, { workspaceId }),
     run = await repo.runVersion(runId);
@@ -56,7 +57,7 @@ export async function dispatchScheduledAutomationRuns(
   database: OpenEngageDatabase,
   now = new Date(),
   limit = 100,
-  queue?: Queue,
+  queue?: JobsQueue,
   afterAutomationId?: string,
 ): Promise<void> {
   const recovery = new AutomationRunRecoveryRepository(database);

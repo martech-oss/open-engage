@@ -7,10 +7,10 @@ import { createDatabase, deadLetters } from "@openengage/database/testing";
 import { queue } from "../src/runtime/dispatch";
 import {
   expectJobAndEnrollment,
-  queueStub,
   runtimeWithJobsQueue,
   seedAutomationJob,
 } from "./automation-recovery-test-support";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -32,7 +32,7 @@ it("composes real automation execution from a jobs queue message and acknowledge
   const seeded = await seedAutomationJob({ status: "leased", leaseId: "dispatch-lease" });
   const { message, batch } = automationMessage(seeded.jobId);
 
-  await queue(batch, runtimeWithJobsQueue(queueStub()));
+  await queue(batch, runtimeWithJobsQueue(queueDouble()));
 
   await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "succeeded", "completed");
   expect(message.ack).toHaveBeenCalledOnce();
@@ -48,7 +48,7 @@ it("keeps permanent automation failures recognizable by queue dead-letter dispat
   const { message, batch } = automationMessage(seeded.jobId);
   const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  await queue(batch, runtimeWithJobsQueue(queueStub()));
+  await queue(batch, runtimeWithJobsQueue(queueDouble()));
 
   await expectJobAndEnrollment(seeded.jobId, seeded.enrollmentId, "failed", "failed");
   expect(message.ack).toHaveBeenCalledOnce();

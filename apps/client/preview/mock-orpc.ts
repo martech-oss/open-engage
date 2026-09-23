@@ -1,11 +1,17 @@
+import { getContractRouter, isContractProcedure } from "@orpc/contract";
+
+import { contract } from "@openengage/orpc";
+
 import { readFixture } from "./fixture-data";
 
 export const missingFixtures = new Set<string>();
 export const previewWriteMessage = "表示確認用プレビューでは保存・公開・外部送信を実行できません。";
-const isRead = (path: string) =>
-  /(?:^|\.)(?:get[A-Z]?|list[A-Z]?|options|bootstrap|profile|programCatalog|programGet|programCohort|memberList|briefList|briefOptions|variablesList|variablesUses|executionOptions|enrichmentCapability|notifications|salesMembers|assignmentGroups|contactTasks)/.test(
-    path,
-  ) || path.startsWith("reports.");
+
+/** A read is whatever the contract serves over GET; anything else would write in the real app. */
+function isRead(path: readonly string[]): boolean {
+  const procedure = getContractRouter(contract, path);
+  return isContractProcedure(procedure) && procedure["~orpc"].route.method === "GET";
+}
 function read(path: string, input: unknown) {
   try {
     return readFixture(path, input);
@@ -41,9 +47,8 @@ function proxy(path: string[] = []): any {
     },
     apply: (_target, _this, args) =>
       Promise.resolve().then(() => {
-        const name = path.join(".");
-        if (!isRead(name)) throw new Error(previewWriteMessage);
-        return read(name, args[0]);
+        if (!isRead(path)) throw new Error(previewWriteMessage);
+        return read(path.join("."), args[0]);
       }),
   });
 }

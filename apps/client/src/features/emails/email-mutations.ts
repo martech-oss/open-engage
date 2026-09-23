@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 import { invalidateQueryRoots } from "@/lib/query-invalidation";
 
@@ -12,11 +13,10 @@ export function invalidateEmailVariableQueries(queryClient: QueryClient): Promis
 }
 
 export function useCreateEmailTemplate() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.createTemplate.mutationOptions(),
-    onSuccess: () => invalidateEmailTemplateQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.createTemplate.mutationOptions(),
+    invalidateEmailTemplateQueries,
+  );
 }
 
 export function useGenerateEmailTemplate() {
@@ -28,11 +28,10 @@ export function useGenerateEmailImage() {
 }
 
 export function useUpdateEmailTemplate() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.updateTemplate.mutationOptions(),
-    onSuccess: () => invalidateEmailTemplateQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.updateTemplate.mutationOptions(),
+    invalidateEmailTemplateQueries,
+  );
 }
 
 /** Rendering a preview does not write to any stored template. */
@@ -41,43 +40,38 @@ export function usePreviewEmailTemplate() {
 }
 
 export function usePublishEmailTemplate() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.publishTemplate.mutationOptions(),
-    onSuccess: () => invalidateEmailTemplateQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.publishTemplate.mutationOptions(),
+    invalidateEmailTemplateQueries,
+  );
 }
 
 export function useArchiveEmailTemplate() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.archiveTemplate.mutationOptions(),
-    onSuccess: () => invalidateEmailTemplateQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.archiveTemplate.mutationOptions(),
+    invalidateEmailTemplateQueries,
+  );
 }
 
 export function useCreateEmailVariable() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.createVariable.mutationOptions(),
-    onSuccess: () => invalidateEmailVariableQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.createVariable.mutationOptions(),
+    invalidateEmailVariableQueries,
+  );
 }
 
 export function useUpdateEmailVariable() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.updateVariable.mutationOptions(),
-    onSuccess: () => invalidateEmailVariableQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.updateVariable.mutationOptions(),
+    invalidateEmailVariableQueries,
+  );
 }
 
 export function useArchiveEmailVariable() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.archiveVariable.mutationOptions(),
-    onSuccess: () => invalidateEmailVariableQueries(queryClient),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.emails.archiveVariable.mutationOptions(),
+    invalidateEmailVariableQueries,
+  );
 }
 
 export function useUpdateEmailBrandProfile() {
@@ -90,9 +84,7 @@ export function useUpdateEmailBrandProfile() {
 }
 
 export function useUpdateEmailTrackingSettings() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.emails.updateTrackingSettings.mutationOptions(),
-    onSuccess: () => invalidateQueryRoots(queryClient, orpcQuery.emails.getTrackingSettings.key()),
-  });
+  return useInvalidatingMutation(orpcQuery.emails.updateTrackingSettings.mutationOptions(), [
+    orpcQuery.emails.getTrackingSettings.key(),
+  ]);
 }

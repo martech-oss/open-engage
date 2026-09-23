@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { emptyLandingPageDocument, landingPageSchema } from "@openengage/core/web";
@@ -68,7 +68,6 @@ vi.mock("./website-api", () => ({
   useRetryLandingGeneration: () => ({ mutateAsync: retry }),
 }));
 afterEach(() => {
-  cleanup();
   vi.clearAllMocks();
 });
 

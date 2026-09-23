@@ -8,7 +8,7 @@ import {
 
 import { user } from "../auth/schema";
 import { auditLogs } from "../platform/schema";
-import { nowIso } from "../shared/database-utils";
+import { nowIso, runBatch } from "../shared/database-utils";
 import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import {
@@ -128,7 +128,7 @@ export class ProgramMemberImportRepository extends WorkspaceRepository {
       sql`${jobs.leaseUntil}>${now}`,
     );
     // The NOT NULL ledger assertion fences the entire D1 transaction, including member CAS/events.
-    await this.database.orm.batch([
+    await runBatch(this.database.orm, [
       this.database.orm.insert(rows).values({
         jobId: job.id,
         row: result.row,
@@ -143,7 +143,7 @@ export class ProgramMemberImportRepository extends WorkspaceRepository {
           updatedAt: now,
         })
         .where(guard),
-    ] as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    ]);
     job.processed++;
   }
   async release(job: ProgramImportJob) {
@@ -197,7 +197,7 @@ export class ProgramMemberImportRepository extends WorkspaceRepository {
         })
         .where(guard),
     );
-    await this.database.orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    await runBatch(this.database.orm, statements);
   }
 }
 export class ProgramMemberImportRecoveryRepository extends DatabaseRepository {

@@ -1,8 +1,13 @@
-import { isConstraintError } from "@openengage/database/shared";
+import { isUniqueConstraintError } from "@openengage/database/shared";
 import { CustomRedirectRepository } from "@openengage/database/web";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+
+const REDIRECT_SLUG_UNIQUE_COLUMNS = [
+  "custom_redirects.workspace_id",
+  "custom_redirects.slug",
+] as const;
 
 export const listRedirectsProcedure = authed.website.listRedirects.handler(({ context }) =>
   new CustomRedirectRepository(context.database, context.workspace).listRedirects(),
@@ -16,7 +21,8 @@ export const createRedirectProcedure = authed.website.createRedirect.handler(
         input,
       );
     } catch (error) {
-      if (isConstraintError(error)) throw errors.REDIRECT_SLUG_TAKEN();
+      if (isUniqueConstraintError(error, REDIRECT_SLUG_UNIQUE_COLUMNS))
+        throw errors.REDIRECT_SLUG_TAKEN();
       throw error;
     }
   },
@@ -36,7 +42,8 @@ export const updateRedirectProcedure = authed.website.updateRedirect.handler(
         throw errors.REDIRECT_NOT_FOUND();
       }
     } catch (error) {
-      if (isConstraintError(error)) throw errors.REDIRECT_SLUG_TAKEN();
+      if (isUniqueConstraintError(error, REDIRECT_SLUG_UNIQUE_COLUMNS))
+        throw errors.REDIRECT_SLUG_TAKEN();
       throw error;
     }
     return ack;

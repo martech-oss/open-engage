@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { appBootstrapQueryOptions } from "@/lib/app-bootstrap";
+import { useWorkspaceCapability } from "@/lib/app-bootstrap";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { DealTaskType } from "@openengage/core/deals";
 
@@ -21,7 +21,6 @@ import {
 
 export function ContactSales({ contactId }: { contactId: string }) {
   const { toDateTimeLocal, fromDateTimeLocal, formatDateTime } = useWorkspaceFormatters();
-  const { data: bootstrap } = useQuery(appBootstrapQueryOptions());
   const { data: members = [] } = useQuery(salesMembersQueryOptions());
   const { data: groups = [] } = useQuery(assignmentGroupsQueryOptions());
   const { data: tasks = [] } = useQuery(contactTasksQueryOptions(contactId));
@@ -39,7 +38,7 @@ export function ContactSales({ contactId }: { contactId: string }) {
     [preserveOwner, setPreserveOwner] = useState(true);
   const executionKey = useRef<string | null>(null);
   const groupSelected = assignment.startsWith("group:");
-  const canManage = bootstrap?.workspace?.capabilities.manageMarketing ?? false;
+  const canManage = useWorkspaceCapability("manageMarketing");
   const error = handoff.error ?? create.error ?? status.error ?? update.error ?? remove.error;
   return (
     <section className="space-y-3 rounded-lg border p-4">

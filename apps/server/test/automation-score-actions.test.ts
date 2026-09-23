@@ -12,12 +12,8 @@ import {
 
 import { executeNode } from "../src/automations/node-execution";
 import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
-import {
-  graph,
-  seedAutomationJob,
-  queueStub,
-  runtimeWithJobsQueue,
-} from "./automation-recovery-test-support";
+import { graph, seedAutomationJob, runtimeWithJobsQueue } from "./automation-recovery-test-support";
+import { queueDouble } from "./queue-double";
 it.each([false, true])("sets score exactly once with category=%s", async (category) => {
   const node = {
     id: "score",
@@ -64,7 +60,7 @@ it.each([false, true])("sets score exactly once with category=%s", async (catego
       definition,
       job,
       "lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())).nodes,
     );
   const contact = await db.orm
     .select({ score: contacts.score })

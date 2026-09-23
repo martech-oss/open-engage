@@ -1,4 +1,5 @@
 import { authClient } from "@/auth-client";
+import { getErrorMessage } from "@/lib/errors";
 import { orpc } from "@/lib/orpc";
 
 export type WorkspaceOption = {
@@ -46,7 +47,7 @@ export async function createAndActivateWorkspace(
     await orpc.workspace.create({ name });
     return { ok: true };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "作成できませんでした" };
+    return { error: getErrorMessage(error, "作成できませんでした") };
   }
 }
 

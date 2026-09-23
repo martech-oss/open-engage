@@ -1,7 +1,7 @@
 import { FormInput } from "@/components/app-ui/form-fields";
 import { VariableProjectField } from "@/features/projects/variable-project-field";
 
-import type { SignupFormRow } from "./website-api";
+import type { SignupForm } from "./website-api";
 export function SignupFormVariableFields({
   item,
   optionalFields,
@@ -9,7 +9,7 @@ export function SignupFormVariableFields({
   onProjectChange,
   disabled,
 }: {
-  item: SignupFormRow | null;
+  item: SignupForm | null;
   optionalFields: ReadonlySet<string>;
   projectId: string | null;
   onProjectChange: (id: string | null) => void;

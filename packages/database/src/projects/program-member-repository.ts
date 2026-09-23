@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, isNull, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, isNull, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
 import {
@@ -15,14 +15,15 @@ import {
 
 import { runningActionLeaseExists } from "../automations/action-authority";
 import { automationEnrollments, automationJobs } from "../automations/schema";
-import { contactEventProjectionRows } from "../contacts/event-repository";
+import { contactEventStatements } from "../contacts/event-repository";
+import { contacts } from "../contacts/schema";
 import {
-  contacts,
-  contactEvents,
-  contactEventOutbox,
-  contactEventProjections,
-} from "../contacts/schema";
-import { escapeLike, nowIso } from "../shared/database-utils";
+  isNotNullConstraintError,
+  isUniqueConstraintError,
+  likeContains,
+  nowIso,
+  runBatch,
+} from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { ProjectProgramRepository, ProgramError } from "./program-repository";
@@ -45,12 +46,18 @@ export type ProgramMemberCommand = Omit<ProgramMemberMutation, "source" | "mode"
   actorUserId?: string;
   authority?: ProgramMutationAuthority;
 };
+
+const PROGRAM_COMMAND_KEY_COLUMNS = [
+  "project_member_commands.workspace_id",
+  "project_member_commands.project_id",
+  "project_member_commands.idempotency_key",
+] as const;
+
+/** A lost member-command race: the CAS-guarded result was NULL, or the idempotency key was taken. */
 export function isProgramWriteConflict(error: unknown) {
   return (
-    error instanceof Error &&
-    /NOT NULL constraint failed: project_member_commands.result|UNIQUE constraint failed: project_member_commands/i.test(
-      error.message,
-    )
+    isNotNullConstraintError(error, "project_member_commands.result") ||
+    isUniqueConstraintError(error, PROGRAM_COMMAND_KEY_COLUMNS)
   );
 }
 
@@ -332,14 +339,14 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       for (let i = 0; i < eventTypes.length; i++) {
         const id = eventIds[i]!;
         statements.push(
-          orm.insert(contactEvents).values({
+          ...contactEventStatements(orm, {
             id,
             workspaceId: this.context.workspaceId,
             contactId: input.contactId,
             type: eventTypes[i]!,
             resourceType: "project",
             resourceId: input.projectId,
-            properties: JSON.stringify({
+            properties: {
               projectId: input.projectId,
               memberId: member.id,
               definitionVersion,
@@ -348,23 +355,10 @@ export class ProjectMemberRepository extends WorkspaceRepository {
               firstSuccessAt: member.firstSuccessAt,
               transitionId,
               mode: input.mode ?? "progress",
-            }),
+            },
             occurredAt,
             createdAt: occurredAt,
           }),
-          orm.insert(contactEventOutbox).values({
-            eventId: id,
-            workspaceId: this.context.workspaceId,
-            status: "pending",
-            createdAt: occurredAt,
-          }),
-          orm.insert(contactEventProjections).values(
-            contactEventProjectionRows({
-              id,
-              workspaceId: this.context.workspaceId,
-              createdAt: occurredAt,
-            }),
-          ),
         );
       }
     }
@@ -378,9 +372,7 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       const prepared = await this.prepareMutation(input);
       if (!prepared.statements.length) return prepared.result;
       try {
-        await this.database.orm.batch(
-          prepared.statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
-        );
+        await runBatch(this.database.orm, prepared.statements);
         return prepared.result;
       } catch (error) {
         if (!isProgramWriteConflict(error)) throw error;
@@ -407,9 +399,9 @@ export class ProjectMemberRepository extends WorkspaceRepository {
       input.statusId ? eq(projectMembers.statusId, input.statusId) : undefined,
       input.query
         ? or(
-            like(contacts.email, `%${escapeLike(input.query)}%`),
-            like(contacts.firstName, `%${escapeLike(input.query)}%`),
-            like(contacts.lastName, `%${escapeLike(input.query)}%`),
+            likeContains(contacts.email, input.query),
+            likeContains(contacts.firstName, input.query),
+            likeContains(contacts.lastName, input.query),
             eq(contacts.id, input.query),
           )
         : undefined,

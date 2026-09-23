@@ -14,8 +14,9 @@ import { seedWorkspaceClient } from "./factory";
 
 async function fixture() {
   const seeded = await seedWorkspaceClient(env.DB);
-  const contact = await new ContactRepository(env.DB, seeded).createContact({
+  const contact = await new ContactRepository(env.DB, { ...seeded, role: "owner" }).createContact({
     email: "scale@example.com",
+    customFields: {},
   });
   return { ...seeded, contactId: contact.id, repository: new ScoringRepository(env.DB, seeded) };
 }

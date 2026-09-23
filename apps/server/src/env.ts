@@ -1,6 +1,12 @@
 import type { WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 
+import type {
+  DeliveryQueueMessage,
+  JobsQueueMessage,
+  ProgramMemberImportQueueMessage,
+} from "./platform/queue-messages";
+
 export interface RuntimeSecrets {
   BETTER_AUTH_SECRET: string;
   CREDENTIAL_ENCRYPTION_KEY: string;
@@ -9,7 +15,16 @@ export interface RuntimeSecrets {
   TURNSTILE_SECRET?: string;
 }
 
-export type RuntimeEnv = ServerBindings & RuntimeSecrets;
+/** Queue producers typed by the messages their consumers accept (wrangler types them as unknown). */
+interface TypedQueueBindings {
+  JOBS_QUEUE: Queue<JobsQueueMessage>;
+  DELIVERY_QUEUE: Queue<DeliveryQueueMessage>;
+  PROGRAM_MEMBER_IMPORT_QUEUE: Queue<ProgramMemberImportQueueMessage>;
+}
+
+export type RuntimeEnv = Omit<ServerBindings, keyof TypedQueueBindings> &
+  TypedQueueBindings &
+  RuntimeSecrets;
 
 export interface SessionValue {
   user: {

@@ -12,13 +12,13 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { EmailTemplateRow } from "@/features/emails/email-api";
+import type { EmailTemplate } from "@/features/emails/email-api";
 
 export function ArchivedResources({
   templates,
   loading,
 }: {
-  templates: EmailTemplateRow[];
+  templates: EmailTemplate[];
   loading: boolean;
 }): ReactNode {
   if (loading) {

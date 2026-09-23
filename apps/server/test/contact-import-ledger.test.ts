@@ -16,7 +16,9 @@ import {
 import { processContactImport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";
 import { scheduled } from "../src/runtime/dispatch";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { seedWorkspace } from "./factory";
+import { recordingQueue } from "./queue-double";
 
 describe("contact import exact-once ledger", () => {
   it("commits no candidate without evidence when the lease expires inside the insert batch", async () => {
@@ -34,7 +36,12 @@ describe("contact import exact-once ledger", () => {
     ).run();
     const published: unknown[] = [];
     try {
-      await processContactImport(fixture.jobId, 0, 1, runtimeWithJobsQueue(queueStub(published)));
+      await processContactImport(
+        fixture.jobId,
+        0,
+        1,
+        runtimeWithJobsQueue(recordingQueue(published)),
+      );
     } finally {
       await env.DB.prepare(`DROP TRIGGER ${triggerName}`).run();
     }
@@ -44,7 +51,7 @@ describe("contact import exact-once ledger", () => {
     expect(ids).toHaveLength(2);
     expect(JSON.parse(partBeforeRecovery?.reconciliationContactIds ?? "null")).toEqual(ids);
 
-    await runScheduled(runtimeWithJobsQueue(queueStub(published)));
+    await runScheduled(runtimeWithJobsQueue(recordingQueue(published)));
 
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({
       status: "completed",
@@ -66,7 +73,7 @@ describe("contact import exact-once ledger", () => {
     await expireLease(fixture.jobId, 0);
     await createDatabase(env.DB).orm.delete(contacts).where(eq(contacts.id, conflictId));
 
-    await processContactImport(fixture.jobId, 0, 1, runtimeWithJobsQueue(queueStub([])));
+    await processContactImport(fixture.jobId, 0, 1, runtimeWithJobsQueue(recordingQueue([])));
 
     await expect(listContactIds(fixture.workspaceId)).resolves.toEqual([]);
     await expect(readPart(fixture.jobId, 0)).resolves.toMatchObject({
@@ -76,7 +83,7 @@ describe("contact import exact-once ledger", () => {
       reconciliationContactIds: "[]",
     });
 
-    await runScheduled(runtimeWithJobsQueue(queueStub([])));
+    await runScheduled(runtimeWithJobsQueue(recordingQueue([])));
 
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({
       status: "completed",
@@ -108,7 +115,7 @@ describe("contact import exact-once ledger", () => {
     barrier.resume();
     const results = await Promise.all([first, second]);
 
-    expect(results.toSorted((left, right) => Number(left) - Number(right))).toEqual([false, true]);
+    expect([...results].sort((left, right) => Number(left) - Number(right))).toEqual([false, true]);
     await expect(readJob(fixture.jobId)).resolves.toMatchObject({
       status: "processing",
       processed: 1,
@@ -133,7 +140,7 @@ describe("contact import exact-once ledger", () => {
       fixture.jobId,
       0,
       1,
-      runtimeWithJobsQueue(queueStub(published), paused.database),
+      runtimeWithJobsQueue(recordingQueue(published), paused.database),
     );
     await paused.committed;
 
@@ -158,7 +165,7 @@ describe("contact import exact-once ledger", () => {
       lastError: null,
     });
 
-    await runScheduled(runtimeWithJobsQueue(queueStub(published)));
+    await runScheduled(runtimeWithJobsQueue(recordingQueue(published)));
     expect(segmentReconciliations(published, fixture.workspaceId)).toHaveLength(1);
   });
 });
@@ -241,27 +248,6 @@ async function insertContact(workspaceId: string, email: string): Promise<string
     updatedAt: now,
   });
   return id;
-}
-
-function runtimeWithJobsQueue(queue: Queue, database: D1Database = env.DB): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      if (property === "DB") return database;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
-}
-
-function queueStub(published: unknown[]): Queue {
-  return {
-    send: async (body: unknown) => {
-      published.push(body);
-    },
-    sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-      published.push(...[...messages].map((message) => message.body));
-    },
-  } as unknown as Queue;
 }
 
 function pauseTwoDatabaseBatches(source: D1Database): {

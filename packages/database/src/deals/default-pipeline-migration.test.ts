@@ -1,29 +1,10 @@
 /// <reference types="node" />
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
-const migrationsBefore0014 = [
-  "0000_quick_ender_wiggin.sql",
-  "0001_workable_hitman.sql",
-  "0002_breezy_photon.sql",
-  "0003_faulty_hobgoblin.sql",
-  "0004_groovy_pete_wisdom.sql",
-  "0005_swift_microchip.sql",
-  "0006_red_crusher_hogan.sql",
-  "0007_clumsy_bloodscream.sql",
-  "0008_polite_pete_wisdom.sql",
-  "0009_chemical_loki.sql",
-  "0010_giant_bishop.sql",
-  "0011_condemned_rocket_raccoon.sql",
-  "0012_keen_boom_boom.sql",
-  "0013_omniscient_jasper_sitwell.sql",
-] as const;
+import { applyMigrations, migrationRange } from "../shared/migration-test-support";
 
 describe("deal pipeline and project resource migration 0014", () => {
   let database: DatabaseSync | undefined;
@@ -51,7 +32,7 @@ describe("deal pipeline and project resource migration 0014", () => {
         ('archived-a', 'archived', 'Archived A', 0, NULL, '2026-01-01', '2026-01-01');
     `);
 
-    applyMigrations(database, ["0014_deep_logan.sql"]);
+    applyMigrations(database, migrationRange("0014", "0015"));
 
     expect(
       database
@@ -93,7 +74,7 @@ describe("deal pipeline and project resource migration 0014", () => {
         ('workspace', 'project', 'redirect', 'redirect', '2026-01-01');
     `);
 
-    applyMigrations(database, ["0014_deep_logan.sql"]);
+    applyMigrations(database, migrationRange("0014", "0015"));
 
     expect(
       database
@@ -123,17 +104,11 @@ describe("deal pipeline and project resource migration 0014", () => {
 function createPre0014Database(workspaceIds: string[]): DatabaseSync {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
-  applyMigrations(database, migrationsBefore0014);
+  applyMigrations(database, migrationRange("0000", "0014"));
   for (const workspaceId of workspaceIds) {
     database
       .prepare("INSERT INTO organization (id, name, slug, created_at) VALUES (?, ?, ?, 1)")
       .run(workspaceId, workspaceId, workspaceId);
   }
   return database;
-}
-
-function applyMigrations(database: DatabaseSync, files: readonly string[]): void {
-  for (const file of files) {
-    database.exec(readFileSync(resolve(migrationsDirectory, file), "utf8"));
-  }
 }

@@ -1,28 +1,10 @@
 /// <reference types="node" />
 
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const migrationsDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations");
-const migrationsBefore0013 = [
-  "0000_quick_ender_wiggin.sql",
-  "0001_workable_hitman.sql",
-  "0002_breezy_photon.sql",
-  "0003_faulty_hobgoblin.sql",
-  "0004_groovy_pete_wisdom.sql",
-  "0005_swift_microchip.sql",
-  "0006_red_crusher_hogan.sql",
-  "0007_clumsy_bloodscream.sql",
-  "0008_polite_pete_wisdom.sql",
-  "0009_chemical_loki.sql",
-  "0010_giant_bishop.sql",
-  "0011_condemned_rocket_raccoon.sql",
-  "0012_keen_boom_boom.sql",
-] as const;
+import { applyMigrations, migrationRange } from "../shared/migration-test-support";
 
 describe("delivery and import recovery migration 0013", () => {
   let database: DatabaseSync | undefined;
@@ -49,7 +31,7 @@ describe("delivery and import recovery migration 0013", () => {
          '2026-01-01', '2026-01-01');
     `);
 
-    applyMigrations(database, ["0013_omniscient_jasper_sitwell.sql"]);
+    applyMigrations(database, migrationRange("0013", "0014"));
 
     expect(
       database
@@ -99,7 +81,7 @@ describe("delivery and import recovery migration 0013", () => {
          'queued-exhausted-key', '{}', 'queued', 5, '2026-01-01', '2026-01-01');
     `);
 
-    applyMigrations(database, ["0013_omniscient_jasper_sitwell.sql"]);
+    applyMigrations(database, migrationRange("0013", "0014"));
 
     expect(
       database
@@ -117,16 +99,10 @@ describe("delivery and import recovery migration 0013", () => {
 function createPre0013Database(): DatabaseSync {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
-  applyMigrations(database, migrationsBefore0013);
+  applyMigrations(database, migrationRange("0000", "0013"));
   database.exec(`
     INSERT INTO organization (id, name, slug, created_at)
     VALUES ('workspace', 'Workspace', 'workspace', 1);
   `);
   return database;
-}
-
-function applyMigrations(database: DatabaseSync, files: readonly string[]): void {
-  for (const file of files) {
-    database.exec(readFileSync(resolve(migrationsDirectory, file), "utf8"));
-  }
 }

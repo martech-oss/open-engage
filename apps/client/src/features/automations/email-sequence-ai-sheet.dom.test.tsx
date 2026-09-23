@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ApplyEmailSequenceResult,
@@ -51,8 +51,6 @@ beforeEach(() => {
     mutation.isPending = false;
   }
 });
-
-afterEach(cleanup);
 
 describe("EmailSequenceAiSheet flow", () => {
   it("resolves required input, previews a ready proposal, and applies the accepted draft", async () => {

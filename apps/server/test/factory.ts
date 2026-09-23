@@ -4,6 +4,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { makeSignature } from "better-auth/crypto";
 import { exports } from "cloudflare:workers";
 
+import type { WorkspaceContext, WorkspaceRole } from "@openengage/core/shared";
 import {
   apiKeys,
   createDatabase,
@@ -13,7 +14,7 @@ import {
   user,
   uuidv7,
 } from "@openengage/database/testing";
-import type { contract, WorkspaceContext, WorkspaceRole } from "@openengage/orpc";
+import type { contract } from "@openengage/orpc";
 
 import { randomIdentifier, sha256Hex } from "../src/platform/crypto";
 

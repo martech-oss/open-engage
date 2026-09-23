@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DataTableColumn } from "@/components/data-table";
 
-import type { GradingCriterionRow, ScoringCategoryRow } from "./scoring-api";
+import type { GradingCriterion, ScoringCategory } from "./scoring-api";
 import { CategoryCardView } from "./scoring-category-card";
 import { GradingCriterionEditorShell, ScoringRuleEditorShell } from "./scoring-editor-shells";
 import { useScoringGradingController } from "./scoring-grading-controller";
@@ -52,10 +52,6 @@ vi.mock("./scoring-api", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-});
-
-afterEach(() => {
-  cleanup();
 });
 
 describe("scoring editor composition sessions", () => {
@@ -124,14 +120,14 @@ describe("scoring editor composition sessions", () => {
 describe("prop-only scoring views", () => {
   it("renders category rows through provided columns and delegates opening", () => {
     const onOpenChange = vi.fn<(open: boolean) => void>();
-    const category: ScoringCategoryRow = {
+    const category: ScoringCategory = {
       id: "category-1",
       name: "Product A",
       slug: "product-a",
       createdAt: "2026-08-23T00:00:00.000Z",
       updatedAt: "2026-08-23T00:00:00.000Z",
     };
-    const columns: DataTableColumn<ScoringCategoryRow>[] = [
+    const columns: DataTableColumn<ScoringCategory>[] = [
       { key: "name", header: "受け取った列", cell: (item) => item.name },
     ];
 
@@ -170,7 +166,7 @@ function RuleSessionHarness(): ReactNode {
   );
 }
 
-function GradingSessionHarness({ item }: { item: GradingCriterionRow }): ReactNode {
+function GradingSessionHarness({ item }: { item: GradingCriterion }): ReactNode {
   const controller = useScoringGradingController();
   return (
     <>
@@ -210,7 +206,7 @@ function queryWrapper() {
   );
 }
 
-function criterion(): GradingCriterionRow {
+function criterion(): GradingCriterion {
   return {
     id: "criterion-1",
     name: "Qualified stage",

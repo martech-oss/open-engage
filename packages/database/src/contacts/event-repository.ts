@@ -1,7 +1,9 @@
-import { and, asc, eq, exists, isNull, lte, ne, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, isNull, lte, ne, notExists, or, sql, type SQL } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 
 import { jsonRecordSchema } from "@openengage/core/shared";
 
+import type { Database } from "../client";
 import { decodeJson, defineJsonCodec } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { contacts, contactEventOutbox, contactEventProjections, contactEvents } from "./schema";
@@ -17,6 +19,13 @@ export const CONTACT_EVENT_PROJECTIONS = [
 ] as const;
 
 export type ContactEventProjection = (typeof CONTACT_EVENT_PROJECTIONS)[number];
+
+/** Projections a replayed visitor-history event still runs; the rest are skipped. */
+export const HISTORY_REPLAY_PROJECTIONS: readonly ContactEventProjection[] = [
+  "scoring",
+  "grade",
+  "campaign",
+];
 
 export interface ContactEventRecord {
   id: string;
@@ -37,15 +46,28 @@ export interface ContactEventCreate extends Omit<ContactEventRecord, "properties
   createdAt: string;
 }
 
-const propertiesCodec = defineJsonCodec(jsonRecordSchema, "contact_events.properties");
-
-/** Rows inserted alongside an event anywhere that already owns a larger atomic batch. */
-export function contactEventProjectionRows(event: {
+/** A live contact event to write; `contactId` may be a SQL lookup resolved inside the batch. */
+export interface ContactEventWrite {
   id: string;
   workspaceId: string;
+  contactId: string | SQL | null;
+  visitorId?: string | null | undefined;
+  type: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  properties: Record<string, unknown>;
+  occurredAt: string;
   createdAt: string;
-}) {
-  return CONTACT_EVENT_PROJECTIONS.map((projection) => ({
+}
+
+const propertiesCodec = defineJsonCodec(jsonRecordSchema, "contact_events.properties");
+
+/** Pending projection rows for an event; all projections unless a subset is given. */
+export function contactEventProjectionRows(
+  event: { id: string; workspaceId: string; createdAt: string },
+  projections: readonly ContactEventProjection[] = CONTACT_EVENT_PROJECTIONS,
+) {
+  return projections.map((projection) => ({
     eventId: event.id,
     workspaceId: event.workspaceId,
     projection,
@@ -54,35 +76,81 @@ export function contactEventProjectionRows(event: {
   }));
 }
 
+/**
+ * The event row, its outbox marker and its pending projections, for a caller
+ * that owns the atomic batch. With `when`, each insert runs only while that
+ * predicate holds.
+ */
+export function contactEventStatements(
+  orm: Database,
+  event: ContactEventWrite,
+  options: { when?: SQL } = {},
+): [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]] {
+  const properties = propertiesCodec.encode(event.properties);
+  const visitorId = event.visitorId ?? null;
+  const projections = contactEventProjectionRows(event);
+  const { when } = options;
+  if (when) {
+    return [
+      orm.insert(contactEvents).select(
+        sql`SELECT
+          ${event.id}, ${event.workspaceId}, ${event.contactId}, ${visitorId}, 'live', ${event.type},
+          ${event.resourceType}, ${event.resourceId}, ${properties}, ${event.occurredAt}, NULL,
+          ${event.createdAt}
+        WHERE ${when}`,
+      ),
+      orm.insert(contactEventOutbox).select(
+        sql`SELECT
+          ${event.id}, ${event.workspaceId}, 'pending', 0, NULL,
+          NULL, NULL, NULL, ${event.createdAt}, NULL
+        WHERE ${when}`,
+      ),
+      ...projections.map((row) =>
+        orm.insert(contactEventProjections).select(
+          sql`SELECT
+            ${row.eventId}, ${row.workspaceId}, ${row.projection}, ${row.status},
+            ${row.createdAt}, NULL
+          WHERE ${when}`,
+        ),
+      ),
+    ];
+  }
+  return [
+    orm.insert(contactEvents).values({
+      id: event.id,
+      workspaceId: event.workspaceId,
+      contactId: event.contactId,
+      visitorId,
+      type: event.type,
+      resourceType: event.resourceType,
+      resourceId: event.resourceId,
+      properties,
+      occurredAt: event.occurredAt,
+      createdAt: event.createdAt,
+    }),
+    orm.insert(contactEventOutbox).values({
+      eventId: event.id,
+      workspaceId: event.workspaceId,
+      status: "pending",
+      createdAt: event.createdAt,
+    }),
+    orm.insert(contactEventProjections).values(projections),
+  ];
+}
+
 /** Durable contact-event work store shared by synchronous producers and cron retry. */
 export class ContactEventRepository extends DatabaseRepository {
   public async create(input: ContactEventCreate): Promise<void> {
-    const orm = this.database.orm;
-    await orm.batch([
-      orm.insert(contactEvents).values({
-        id: input.id,
-        workspaceId: input.workspaceId,
+    await this.database.orm.batch(
+      contactEventStatements(this.database.orm, {
+        ...input,
         contactId:
           input.contactId ??
           (input.visitorId
             ? sql`(SELECT ${visitorBindings.contactId} FROM ${visitorBindings} WHERE ${visitorBindings.workspaceId} = ${input.workspaceId} AND ${visitorBindings.visitorId} = ${input.visitorId})`
             : null),
-        visitorId: input.visitorId,
-        type: input.type,
-        resourceType: input.resourceType,
-        resourceId: input.resourceId,
-        properties: propertiesCodec.encode(input.properties),
-        occurredAt: input.occurredAt,
-        createdAt: input.createdAt,
       }),
-      orm.insert(contactEventOutbox).values({
-        eventId: input.id,
-        workspaceId: input.workspaceId,
-        status: "pending",
-        createdAt: input.createdAt,
-      }),
-      orm.insert(contactEventProjections).values(contactEventProjectionRows(input)),
-    ]);
+    );
   }
 
   public async listDueIds(now: string, limit = 50): Promise<string[]> {

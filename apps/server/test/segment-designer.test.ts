@@ -144,7 +144,7 @@ describe("segment designer support", () => {
   });
 
   it("leaves memberships and evaluation state untouched for a stale filter version", async () => {
-    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB);
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
     const contact = await client.contacts.create({
       email: "stale-segment@example.com",
       customFields: {},
@@ -167,11 +167,7 @@ describe("segment designer support", () => {
     });
     const beforeStaleRefresh = await client.segments.get({ id: created.id });
 
-    const repository = new SegmentEvaluationRepository(env.DB, {
-      workspaceId,
-      userId,
-      role: "owner",
-    });
+    const repository = new SegmentEvaluationRepository(env.DB, { workspaceId });
     await repository.replaceDynamicMemberships(
       created.id,
       compileSegmentFilter(workspaceId, {
@@ -193,7 +189,7 @@ describe("segment designer support", () => {
   });
 
   it("guards the full-refresh delete, insert, and exact count inside the batch", async () => {
-    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB);
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
     const oldContact = await client.contacts.create({
       email: "old-full-refresh@example.com",
       customFields: {},
@@ -208,11 +204,7 @@ describe("segment designer support", () => {
       operator: "eq",
       value: oldContact.email,
     });
-    const repository = new SegmentEvaluationRepository(env.DB, {
-      workspaceId,
-      userId,
-      role: "owner",
-    });
+    const repository = new SegmentEvaluationRepository(env.DB, { workspaceId });
     await repository.replaceDynamicMemberships(
       "full-refresh-race",
       compileSegmentFilter(workspaceId, {
@@ -234,11 +226,7 @@ describe("segment designer support", () => {
         .run();
     });
 
-    await new SegmentEvaluationRepository(raced, {
-      workspaceId,
-      userId,
-      role: "owner",
-    }).replaceDynamicMemberships(
+    await new SegmentEvaluationRepository(raced, { workspaceId }).replaceDynamicMemberships(
       "full-refresh-race",
       compileSegmentFilter(workspaceId, {
         kind: "condition",

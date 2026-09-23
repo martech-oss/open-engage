@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import type { WorkspaceRole } from "@openengage/orpc";
+import type { WorkspaceRole } from "@openengage/core/shared";
 
 import { seedWorkspaceClient } from "./factory";
 

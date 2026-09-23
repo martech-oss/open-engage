@@ -1,20 +1,18 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { emptyBrief, type ProjectBriefFormDraft } from "./draft";
 import { ProjectBriefForm } from "./form";
-
-afterEach(cleanup);
 
 describe("ProjectBriefForm", () => {
   it("allows the local review datetime to be cleared without parsing during input", async () => {
     const user = userEvent.setup();
     function Harness() {
-      const [draft, setDraft] = useState<ProjectBriefFormDraft>(emptyBrief());
+      const [draft, setDraft] = useState<ProjectBriefFormDraft>(emptyBrief("UTC"));
       return <ProjectBriefForm value={draft} members={[]} onChange={setDraft} />;
     }
     render(<Harness />);

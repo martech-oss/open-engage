@@ -15,7 +15,7 @@ import {
 import { nextContributionDecay, type GradingCriterion } from "@openengage/core/scoring";
 
 import { contactEvents, contactTags, contacts, tags } from "../contacts/schema";
-import { changedExactlyOne } from "../shared/database-utils";
+import { changedExactlyOne, runBatch } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { criterionSelection } from "./configuration-values";
@@ -240,7 +240,7 @@ export class ScoringEngineRepository extends DatabaseRepository {
       }
     }
     if (statements.length === 0) return 0;
-    await orm.batch(statements as [(typeof statements)[number], ...typeof statements]);
+    await runBatch(orm, statements);
     const result = await orm
       .select({ total: sql<number>`coalesce(sum(${scoreEvents.delta}),0)`.mapWith(Number) })
       .from(scoreEvents)

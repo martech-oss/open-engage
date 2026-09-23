@@ -6,7 +6,8 @@ import {
   invalidateCompanyQueries,
   removeCompanyContact,
 } from "@/features/companies/company-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { invalidateSegmentQueries } from "@/features/segments/segment-api";
+import { getErrorMessage } from "@/lib/errors";
 import type { ContactScoreAdjust, ContactUpdate } from "@openengage/core/contacts";
 
 import {
@@ -24,6 +25,12 @@ import {
 
 type DrawerTab = "details" | "activity";
 
+/** Read models outside the contact that a drawer mutation also changes. */
+interface AffectedResources {
+  companyId?: string;
+  segmentId?: string;
+}
+
 export function useContactDrawerController(contactId: string, onChanged: () => Promise<void>) {
   const profileQuery = useQuery(contactProfileQueryOptions(contactId));
   const queryClient = useQueryClient();
@@ -38,20 +45,24 @@ export function useContactDrawerController(contactId: string, onChanged: () => P
       ? ui
       : { contactId, activeTab: "activity" as DrawerTab, error: "", busy: false };
 
-  async function refresh(companyId?: string): Promise<void> {
+  async function refresh({ companyId, segmentId }: AffectedResources): Promise<void> {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: contactProfileQueryOptions(contactId).queryKey }),
       invalidateContactOptions(queryClient),
       ...(companyId ? [invalidateCompanyQueries(queryClient, companyId)] : []),
+      ...(segmentId ? [invalidateSegmentQueries(queryClient, segmentId)] : []),
       onChanged(),
     ]);
   }
 
-  async function mutate(action: () => Promise<unknown>, companyId?: string): Promise<boolean> {
+  async function mutate(
+    action: () => Promise<unknown>,
+    affected: AffectedResources = {},
+  ): Promise<boolean> {
     setUi({ ...currentUi, error: "", busy: true });
     try {
       await action();
-      await refresh(companyId);
+      await refresh(affected);
       setUi({ ...currentUi, error: "", busy: false });
       return true;
     } catch (error) {
@@ -80,8 +91,9 @@ export function useContactDrawerController(contactId: string, onChanged: () => P
     adjustScore: (input: ContactScoreAdjust) => mutate(() => adjustContactScore(contactId, input)),
     assignTag: (id: string) => mutate(() => assignContactTag(contactId, id)),
     removeTag: (id: string) => mutate(() => removeContactTag(contactId, id)),
-    addSegment: (id: string) => mutate(() => addContactToSegment(contactId, id)),
-    removeSegment: (id: string) => mutate(() => removeContactFromSegment(contactId, id)),
+    addSegment: (id: string) => mutate(() => addContactToSegment(contactId, id), { segmentId: id }),
+    removeSegment: (id: string) =>
+      mutate(() => removeContactFromSegment(contactId, id), { segmentId: id }),
     addCompany: (id: string) =>
       mutate(
         () =>
@@ -90,8 +102,9 @@ export function useContactDrawerController(contactId: string, onChanged: () => P
             contactId,
             isPrimary: profile?.companies.length === 0,
           }),
-        id,
+        { companyId: id },
       ),
-    removeCompany: (id: string) => mutate(() => removeCompanyContact(id, contactId), id),
+    removeCompany: (id: string) =>
+      mutate(() => removeCompanyContact(id, contactId), { companyId: id }),
   };
 }

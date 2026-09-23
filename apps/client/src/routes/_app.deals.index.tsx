@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   dealOptionsQueryOptions,
   dealSearchDefaults,
@@ -24,7 +23,6 @@ export const Route = createFileRoute("/_app/deals/")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: DealsRoute,
 });
 

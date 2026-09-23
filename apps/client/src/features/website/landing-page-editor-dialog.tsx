@@ -14,7 +14,7 @@ import {
 import { LandingOptimizationPanel } from "./landing-optimization-panel";
 import { LandingVariablePanel } from "./landing-variable-editor";
 import {
-  type LandingPageRow,
+  type LandingPage,
   type useCreateLandingPage,
   type useUpdateLandingPage,
 } from "./website-api";
@@ -27,7 +27,7 @@ export function LandingPageEditorDialog({
   createMutation,
   updateMutation,
 }: {
-  item: LandingPageRow | null;
+  item: LandingPage | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;

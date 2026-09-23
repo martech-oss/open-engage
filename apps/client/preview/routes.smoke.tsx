@@ -4,6 +4,7 @@ import { cleanup, render, waitFor, screen, fireEvent } from "@testing-library/re
 import { afterEach, describe, expect, it } from "vitest";
 
 import { navigationSections, settingsSection } from "@/layouts/navigation";
+import { routerOptions } from "@/router";
 import { routeTree } from "@/routeTree.gen";
 
 import { missingFixtures, orpc, orpcQuery, previewWriteMessage } from "./mock-orpc";
@@ -51,6 +52,7 @@ describe("real application routes in the UI preview", () => {
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     const router = createRouter({
+      ...routerOptions,
       routeTree,
       history: createMemoryHistory({ initialEntries: [path] }),
       context: { queryClient: client },
@@ -90,6 +92,7 @@ describe("real application routes in the UI preview", () => {
   it("loads the execution history after switching editor tabs", async () => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const router = createRouter({
+      ...routerOptions,
       routeTree,
       history: createMemoryHistory({ initialEntries: ["/automations/automation-0"] }),
       context: { queryClient: client },

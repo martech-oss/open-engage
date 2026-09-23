@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { DealReportsPage } from "@/features/deals/deal-pages/deal-reports-page";
 import {
   createReportSearchDefaults,
@@ -8,7 +7,7 @@ import {
   parseDealReportSearch,
   type DealReportSearch,
 } from "@/features/reports/report-api";
-import { ensureAppBootstrap } from "@/lib/app-bootstrap";
+import { ensureWorkspace } from "@/lib/app-bootstrap";
 
 export const Route = createFileRoute("/_app/deal-reports")({
   validateSearch: (search: Partial<DealReportSearch> & SearchSchemaInput): DealReportSearch =>
@@ -18,11 +17,10 @@ export const Route = createFileRoute("/_app/deal-reports")({
       currency: "",
     }),
   beforeLoad: async ({ context, search }) => {
-    const bootstrap = await ensureAppBootstrap(context.queryClient);
-    if (!bootstrap.workspace) throw new Error("Workspace bootstrap is required");
+    const workspace = await ensureWorkspace(context.queryClient);
     const defaults = createReportSearchDefaults({
       now: context.renderedAt,
-      timeZone: bootstrap.workspace.timezone,
+      timeZone: workspace.timezone,
     });
     return {
       dealReportSearch: parseDealReportSearch(search, defaults),
@@ -32,7 +30,6 @@ export const Route = createFileRoute("/_app/deal-reports")({
     await context.queryClient.ensureQueryData(dealReportQueryOptions(context.dealReportSearch));
     return undefined;
   },
-  ...routeStatusComponents,
   component: DealReportsRoute,
 });
 

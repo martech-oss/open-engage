@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { contactOptionsQueryOptions } from "@/features/contacts/contact-api";
 import {
   scoringCategoriesQueryOptions,
@@ -17,6 +16,5 @@ export const Route = createFileRoute("/_app/scoring/rules")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: ScoringRulesPage,
 });

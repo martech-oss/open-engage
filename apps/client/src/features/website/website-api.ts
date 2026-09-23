@@ -1,5 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 import type {
   CustomRedirect,
@@ -18,14 +17,9 @@ export type {
   SignupForm,
   SignupFormDefinition,
   SiteMessage,
+  SiteTracking,
 };
 
-/** Retained aliases so the page components read the same as before the migration. */
-export type SignupFormRow = SignupForm;
-export type LandingPageRow = LandingPage;
-export type SiteMessageRow = SiteMessage;
-export type CustomRedirectRow = CustomRedirect;
-export type SiteTrackingData = SiteTracking;
 export type TrackingTopPage = SiteTracking["topPages"][number];
 
 export function signupFormsQueryOptions() {
@@ -43,49 +37,34 @@ export function formHandlersQueryOptions() {
   return orpcQuery.website.listFormHandlers.queryOptions();
 }
 export function useCreateFormHandler() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.createFormHandler.mutationOptions(),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: orpcQuery.website.listFormHandlers.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.createFormHandler.mutationOptions(), [
+    orpcQuery.website.listFormHandlers.key(),
+  ]);
 }
 export function useUpdateFormHandler() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.updateFormHandler.mutationOptions(),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: orpcQuery.website.listFormHandlers.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.updateFormHandler.mutationOptions(), [
+    orpcQuery.website.listFormHandlers.key(),
+  ]);
 }
 export function useDeleteFormHandler() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.deleteFormHandler.mutationOptions(),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: orpcQuery.website.listFormHandlers.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.deleteFormHandler.mutationOptions(), [
+    orpcQuery.website.listFormHandlers.key(),
+  ]);
 }
 export function useGenerateLandingPage() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.generatePage.mutationOptions(),
-    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.generatePage.mutationOptions(), [
+    orpcQuery.website.key(),
+  ]);
 }
 export function useRetryLandingGeneration() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.retryPageGeneration.mutationOptions(),
-    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.retryPageGeneration.mutationOptions(), [
+    orpcQuery.website.key(),
+  ]);
 }
 export function usePublishLandingPage() {
-  const client = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.publishPage.mutationOptions(),
-    onSuccess: () => client.invalidateQueries({ queryKey: orpcQuery.website.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.publishPage.mutationOptions(), [
+    orpcQuery.website.key(),
+  ]);
 }
 
 export function siteMessagesQueryOptions() {
@@ -101,113 +80,79 @@ export function siteTrackingQueryOptions() {
 }
 
 export function useCreateSignupForm() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.createForm.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listForms.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.createForm.mutationOptions(), [
+    orpcQuery.website.listForms.key(),
+  ]);
 }
 
 export function useUpdateSignupForm() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.updateForm.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listForms.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.updateForm.mutationOptions(), [
+    orpcQuery.website.listForms.key(),
+  ]);
 }
 
 export function useArchiveSignupForm() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.archiveForm.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listForms.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.archiveForm.mutationOptions(), [
+    orpcQuery.website.listForms.key(),
+  ]);
 }
 
 export function useCreateLandingPage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.createPage.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listPages.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.createPage.mutationOptions(), [
+    orpcQuery.website.listPages.key(),
+  ]);
 }
 
 export function useUpdateLandingPage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.updatePage.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listPages.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.updatePage.mutationOptions(), [
+    orpcQuery.website.listPages.key(),
+  ]);
 }
 
 export function useArchiveLandingPage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.archivePage.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listPages.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.archivePage.mutationOptions(), [
+    orpcQuery.website.listPages.key(),
+  ]);
 }
 
 export function useCreateSiteMessage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.createMessage.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: orpcQuery.website.listMessages.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.createMessage.mutationOptions(), [
+    orpcQuery.website.listMessages.key(),
+  ]);
 }
 
 export function useUpdateSiteMessage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.updateMessage.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: orpcQuery.website.listMessages.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.updateMessage.mutationOptions(), [
+    orpcQuery.website.listMessages.key(),
+  ]);
 }
 
 export function useArchiveSiteMessage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.archiveMessage.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: orpcQuery.website.listMessages.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.website.archiveMessage.mutationOptions(), [
+    orpcQuery.website.listMessages.key(),
+  ]);
 }
 
 export function useUpdateSiteTracking() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.updateTracking.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: orpcQuery.website.getTracking.key() }),
-  });
-}
-
-function invalidateRedirects(queryClient: ReturnType<typeof useQueryClient>) {
-  return () => queryClient.invalidateQueries({ queryKey: orpcQuery.website.listRedirects.key() });
+  return useInvalidatingMutation(orpcQuery.website.updateTracking.mutationOptions(), [
+    orpcQuery.website.getTracking.key(),
+  ]);
 }
 
 export function useCreateCustomRedirect() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.createRedirect.mutationOptions(),
-    onSuccess: invalidateRedirects(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.website.createRedirect.mutationOptions(), [
+    orpcQuery.website.listRedirects.key(),
+  ]);
 }
 
 export function useUpdateCustomRedirect() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.updateRedirect.mutationOptions(),
-    onSuccess: invalidateRedirects(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.website.updateRedirect.mutationOptions(), [
+    orpcQuery.website.listRedirects.key(),
+  ]);
 }
 
 export function useArchiveCustomRedirect() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.website.archiveRedirect.mutationOptions(),
-    onSuccess: invalidateRedirects(queryClient),
-  });
+  return useInvalidatingMutation(orpcQuery.website.archiveRedirect.mutationOptions(), [
+    orpcQuery.website.listRedirects.key(),
+  ]);
 }

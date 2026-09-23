@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, isNull, notExists, or, sql } from "drizzle-orm";
+import { and, desc, eq, exists, isNull, notExists, or, sql } from "drizzle-orm";
 
 import {
   projectProgramDefinitionSchema,
@@ -189,17 +189,5 @@ export class ProjectProgramRepository extends WorkspaceRepository {
         "Definition changed or brief approval is required before publication",
       );
     return (await this.get(projectId))!;
-  }
-  public async versionOptions(projectId: string) {
-    return this.database.orm
-      .select()
-      .from(projectProgramVersions)
-      .where(
-        and(
-          this.inWorkspace(projectProgramVersions),
-          eq(projectProgramVersions.projectId, projectId),
-        ),
-      )
-      .orderBy(asc(projectProgramVersions.version));
   }
 }

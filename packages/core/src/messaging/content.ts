@@ -2,6 +2,7 @@ import * as z from "zod";
 
 const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const templateTokenPattern = /\{\{\s*(contact|workspace|message)\.[A-Za-z0-9_.-]{1,191}\s*\}\}/g;
+const messageVariablePattern = /\{\{\s*message\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g;
 
 function isSafeEmailHref(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -126,4 +127,34 @@ export function defaultEmailDocumentV2(): EmailDocumentV2 {
     theme: {},
     blocks: [{ id: "body", type: "markdown", markdown: "本文を入力してください。" }],
   });
+}
+
+/** Every block in document order, each container followed by the blocks nested in it. */
+export function emailDocumentBlocks(document: EmailDocumentV2): EmailBlockV2[] {
+  return document.blocks.flatMap((block) => [
+    block,
+    ...(block.type === "columns"
+      ? block.columns.flatMap((column) => column.blocks)
+      : block.type === "conditional"
+        ? block.blocks
+        : []),
+  ]);
+}
+
+/** Asset ids of every image block, nested ones included. */
+export function collectEmailAssetIds(document: EmailDocumentV2): Set<string> {
+  const ids = new Set<string>();
+  for (const block of emailDocumentBlocks(document)) {
+    if (block.type === "image") ids.add(block.source.assetId);
+  }
+  return ids;
+}
+
+/** Keys of every {{ message.key }} variable used anywhere in the document. */
+export function collectMessageVariableKeys(document: EmailDocumentV2): Set<string> {
+  const keys = new Set<string>();
+  for (const match of JSON.stringify(document).matchAll(messageVariablePattern)) {
+    if (match[1]) keys.add(match[1]);
+  }
+  return keys;
 }

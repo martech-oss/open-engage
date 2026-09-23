@@ -1,13 +1,13 @@
 import { and, asc, eq, exists, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
-import { automationDefinitionSchema } from "@openengage/core/automations";
 import { jsonRecordSchema } from "@openengage/core/shared";
 
 import { contactEvents, contacts } from "../contacts/schema";
 import { didChange } from "../shared/database-utils";
-import { decodeJson, defineJsonCodec } from "../shared/json-codec";
+import { decodeJson } from "../shared/json-codec";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import { AutomationCompletionRepository } from "./completion-repository";
 import {
   assertAutomationJobTransition,
@@ -15,8 +15,6 @@ import {
   type AutomationJobRow,
 } from "./engine-support";
 import { automationEnrollments, automationJobs, automationVersions } from "./schema";
-
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
 export class AutomationJobRepository extends DatabaseRepository {
   /** Workspaces holding due pending jobs, oldest due first (dispatch fan-out). */
@@ -149,7 +147,7 @@ export class AutomationJobRepository extends DatabaseRepository {
     if (!row) return null;
     return {
       ...row,
-      graph: graphCodec.decode(row.graph),
+      graph: automationGraphCodec.decode(row.graph),
       payload: decodeJson(row.payload, jsonRecordSchema, "automation_jobs.payload"),
       customFields: decodeJson(row.customFields, jsonRecordSchema, "contacts.custom_fields"),
     };

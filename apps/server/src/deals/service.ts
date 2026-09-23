@@ -57,6 +57,15 @@ interface Background {
   waitUntil(promise: Promise<unknown>): void;
 }
 
+/** What a deal write schedules besides itself: background audits and segment reconciliation. */
+export interface DealWriteEffects extends Background {
+  reconcileContacts(contactIds: readonly string[]): Promise<void>;
+}
+
+function linkedContacts(...deals: ({ contactId: string | null } | null | undefined)[]): string[] {
+  return deals.flatMap((deal) => (deal?.contactId ? [deal.contactId] : []));
+}
+
 export async function getDealOptions(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
@@ -134,20 +143,21 @@ export async function createDeal(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: DealCreate,
-  background: Background,
+  effects: DealWriteEffects,
 ): Promise<DealWriteOutcome> {
   const repository = new DealRecordRepository(database, workspace);
   const referenceError = await repository.validateDealReferences(input);
   if (referenceError) return { kind: "invalid_reference", message: referenceError };
 
   const deal = await repository.createDeal(input);
-  background.waitUntil(
+  effects.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.create",
       resourceType: "deal",
       resourceId: deal.id,
     }),
   );
+  await effects.reconcileContacts(linkedContacts(deal));
   return { kind: "ok", deal };
 }
 
@@ -157,7 +167,7 @@ export async function updateDeal(
   workspace: WorkspaceContext,
   id: string,
   input: DealUpdate,
-  background: Background,
+  effects: DealWriteEffects,
 ): Promise<DealWriteOutcome> {
   const repository = new DealRecordRepository(database, workspace);
   const current = await repository.getDeal(id);
@@ -185,7 +195,7 @@ export async function updateDeal(
   const lostAt =
     merged.status === "lost" ? (current.status === "lost" ? current.lostAt : now) : null;
   await repository.updateDeal(current.id, { ...merged, wonAt, lostAt, updatedAt: now });
-  background.waitUntil(
+  effects.waitUntil(
     writeAuditLog(database, workspace, {
       action: current.status === merged.status ? "deal.update" : "deal.status_change",
       resourceType: "deal",
@@ -195,8 +205,10 @@ export async function updateDeal(
         : { metadata: { previousStatus: current.status, status: merged.status } }),
     }),
   );
-  const deal = await repository.getDeal(current.id);
-  return { kind: "ok", deal: ensureLoaded(deal, "Updated deal") };
+  const deal = ensureLoaded(await repository.getDeal(current.id), "Updated deal");
+  // Moving a deal to another contact changes both contacts' deal-based segments.
+  await effects.reconcileContacts(linkedContacts(current, deal));
+  return { kind: "ok", deal };
 }
 
 export async function moveDeal(
@@ -204,7 +216,7 @@ export async function moveDeal(
   workspace: WorkspaceContext,
   id: string,
   stageId: string,
-  background: Background,
+  effects: DealWriteEffects,
 ): Promise<DealMoveOutcome> {
   const repository = new DealRecordRepository(database, workspace);
   const deal = await repository.getDeal(id);
@@ -212,8 +224,8 @@ export async function moveDeal(
   if (!(await repository.stageExistsInPipeline(deal.pipelineId, stageId))) {
     return { kind: "invalid_stage" };
   }
-  const updated = await repository.moveDeal(deal.id, stageId);
-  background.waitUntil(
+  const updated = ensureLoaded(await repository.moveDeal(deal.id, stageId), "Moved deal");
+  effects.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.move",
       resourceType: "deal",
@@ -221,24 +233,27 @@ export async function moveDeal(
       metadata: { previousStageId: deal.stageId, stageId },
     }),
   );
-  return { kind: "ok", deal: ensureLoaded(updated, "Moved deal") };
+  await effects.reconcileContacts(linkedContacts(updated));
+  return { kind: "ok", deal: updated };
 }
 
 export async function archiveDeal(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
-  background: Background,
+  effects: DealWriteEffects,
 ): Promise<boolean> {
   const repository = new DealRecordRepository(database, workspace);
+  const current = await repository.getDeal(id);
   if (!(await repository.archiveDeal(id))) return false;
-  background.waitUntil(
+  effects.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.archive",
       resourceType: "deal",
       resourceId: id,
     }),
   );
+  await effects.reconcileContacts(linkedContacts(current));
   return true;
 }
 

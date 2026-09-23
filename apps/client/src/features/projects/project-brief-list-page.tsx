@@ -15,7 +15,7 @@ import {
   createAiProposalWorkflowKey,
   useAiProposalWorkflow,
 } from "@/hooks/use-ai-proposal-workflow";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters, useWorkspaceTime } from "@/lib/workspace-time";
 
 import {
@@ -42,7 +42,7 @@ import {
 
 export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): ReactNode {
   const { formatDateTime } = useWorkspaceFormatters();
-  const { renderedAt } = useWorkspaceTime();
+  const { renderedAt, timeZone } = useWorkspaceTime();
   const now = new Date(renderedAt).getTime();
   const { data: briefs } = useSuspenseQuery(projectBriefsQueryOptions());
   const { data: options } = useSuspenseQuery(projectBriefOptionsQueryOptions());
@@ -51,7 +51,7 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
   const generate = useGenerateProjectBrief();
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
-  const { draft, setDraft, resetDraft } = useProjectBriefDraft(emptyBrief());
+  const { draft, setDraft, resetDraft } = useProjectBriefDraft(emptyBrief(timeZone));
   const [fieldErrors, setFieldErrors] = useState<ProjectBriefFieldErrors>({});
   const [error, setError] = useState("");
   const [createSession, setCreateSession] = useState(0);
@@ -80,11 +80,14 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
     setError("");
     try {
       const result = await generate.mutateAsync({ mode: "create", prompt });
-      const proposed = formDraftFromInput({
-        ...result.proposal,
-        ownerUserId: before.ownerUserId || options.members[0]?.id || "",
-        approverUserId: before.approverUserId || options.members[1]?.id || "",
-      });
+      const proposed = formDraftFromInput(
+        {
+          ...result.proposal,
+          ownerUserId: before.ownerUserId || options.members[0]?.id || "",
+          approverUserId: before.approverUserId || options.members[1]?.id || "",
+        },
+        timeZone,
+      );
       proposalWorkflow.acceptProposal(token, () => {
         setDraft((current) => mergeAiProposalPreservingEdits(current, before, proposed));
         if (result.capabilityGaps.length) {
@@ -100,7 +103,7 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
 
   function resetCreateState(): void {
     setPrompt("");
-    resetDraft(emptyBrief());
+    resetDraft(emptyBrief(timeZone));
     setFieldErrors({});
     setError("");
   }
@@ -108,7 +111,7 @@ export function ProjectBriefsPage({ search }: { search: ProjectBriefSearch }): R
   async function save(event?: FormEvent<HTMLFormElement>): Promise<void> {
     event?.preventDefault();
     setError("");
-    const validation = validateProjectBriefDraft(draft);
+    const validation = validateProjectBriefDraft(draft, timeZone);
     if (!validation.success) {
       setFieldErrors(validation.errors);
       setError("入力内容を確認してください");

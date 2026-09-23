@@ -2,12 +2,16 @@ import { ZodError } from "zod";
 
 import { VariableResolutionError } from "@openengage/core/projects";
 import { hasWorkspaceRole } from "@openengage/core/shared";
-import { writeAuditLog } from "@openengage/database/platform";
 import { VariableRepository, VariableRepositoryError } from "@openengage/database/projects";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { listVariableUses, previewVariableImpact } from "./variable-service";
+import {
+  deleteVariable,
+  listVariableUses,
+  previewVariableImpact,
+  saveVariable,
+} from "./variable-service";
 interface VariableErrors {
   VARIABLE_INVALID: () => Error;
   VARIABLE_CONFLICT: () => Error;
@@ -39,14 +43,7 @@ export const variableProcedures = {
   variablesSave: authed.projects.variablesSave.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      const value = await new VariableRepository(context.database, context.workspace).save(input);
-      await writeAuditLog(context.database, context.workspace, {
-        action: "project.variable.save",
-        resourceType: "project_variable",
-        resourceId: value.id,
-        metadata: { key: value.key, projectId: value.projectId, revision: value.revision },
-      });
-      return value;
+      return await saveVariable(context.database, context.workspace, input);
     } catch (error) {
       rethrow(error, errors);
     }
@@ -54,12 +51,7 @@ export const variableProcedures = {
   variablesDelete: authed.projects.variablesDelete.handler(async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      await new VariableRepository(context.database, context.workspace).remove(input);
-      await writeAuditLog(context.database, context.workspace, {
-        action: "project.variable.delete",
-        resourceType: "project_variable",
-        metadata: { key: input.key, projectId: input.projectId },
-      });
+      await deleteVariable(context.database, context.workspace, input);
       return ack;
     } catch (error) {
       rethrow(error, errors);

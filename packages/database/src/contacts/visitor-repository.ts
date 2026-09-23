@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, ne, or, lte, sql } from "drizzle-orm";
 
 import { nowIso } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
+import { contactEventProjectionRows, HISTORY_REPLAY_PROJECTIONS } from "./event-repository";
 import { contactEventOutbox, contactEventProjections, contactEvents, contacts } from "./schema";
 import { siteVisitors, visitorBindings } from "./visitor-schema";
 
@@ -153,13 +154,10 @@ export class VisitorRepository extends DatabaseRepository {
         orm
           .insert(contactEventProjections)
           .values(
-            ["scoring", "grade", "campaign"].map((projection) => ({
-              eventId: event.id,
-              workspaceId,
-              projection,
-              status: "pending",
-              createdAt: now,
-            })),
+            contactEventProjectionRows(
+              { id: event.id, workspaceId, createdAt: now },
+              HISTORY_REPLAY_PROJECTIONS,
+            ),
           )
           .onConflictDoUpdate({
             target: [contactEventProjections.eventId, contactEventProjections.projection],

@@ -5,6 +5,7 @@ import {
   capabilityForSequence,
   emailSequenceProposalSchema,
   generateEmailSequenceInputSchema,
+  validateEmailSequenceCatalogReferences,
   validateEmailSequenceProposal,
 } from "./email-sequence.js";
 
@@ -156,6 +157,38 @@ describe("email sequence proposal", () => {
     emailNode.config.templateId = "outside-template";
     expect(validateEmailSequenceProposal(value).map((issue) => issue.code)).toContain(
       "template_reference",
+    );
+  });
+
+  it("reports images and message variables outside the catalogs", () => {
+    const value = emailSequenceProposalSchema.parse(proposal());
+    value.emails[1]!.content.blocks = [
+      { id: "body", type: "markdown", markdown: "{{ message.plan }} をご案内します" },
+      {
+        id: "offer",
+        type: "conditional",
+        field: "plan",
+        equals: "trial",
+        blocks: [
+          {
+            id: "hero",
+            type: "image",
+            source: { kind: "asset", assetId: "asset-1" },
+            alt: "",
+            width: 552,
+            align: "center",
+          },
+        ],
+      },
+    ];
+    const catalog = { publicImages: [{ id: "asset-1" }], variables: [{ key: "plan" }] };
+
+    expect(validateEmailSequenceCatalogReferences(value, catalog)).toBeNull();
+    expect(validateEmailSequenceCatalogReferences(value, { ...catalog, publicImages: [] })).toBe(
+      "Unknown email asset: asset-1",
+    );
+    expect(validateEmailSequenceCatalogReferences(value, { ...catalog, variables: [] })).toBe(
+      "Unknown message variable: plan",
     );
   });
 

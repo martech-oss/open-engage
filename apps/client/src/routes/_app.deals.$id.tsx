@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import { dealDetailQueryOptions, dealOptionsQueryOptions } from "@/features/deals/deal-api";
 import { DealDetailPage } from "@/features/deals/deal-pages";
 
@@ -12,7 +11,6 @@ export const Route = createFileRoute("/_app/deals/$id")({
     ]);
     return undefined;
   },
-  ...routeStatusComponents,
   component: DealDetailRoute,
 });
 

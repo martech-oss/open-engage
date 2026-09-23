@@ -1,5 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 import type { ProjectCloneCursor } from "@openengage/core/projects";
 
@@ -20,25 +19,18 @@ export function projectCloneProgressQueryOptions(id: string, jobId: string) {
       query.state.data && ["queued", "running"].includes(query.state.data.status) ? 2000 : false,
   });
 }
-function useInvalidateClones() {
-  const client = useQueryClient();
-  return () => client.invalidateQueries({ queryKey: orpcQuery.projects.key() });
-}
 export function usePreviewProjectClone() {
-  return useMutation({
-    ...orpcQuery.projects.clonePreview.mutationOptions(),
-    onSuccess: useInvalidateClones(),
-  });
+  return useInvalidatingMutation(orpcQuery.projects.clonePreview.mutationOptions(), [
+    orpcQuery.projects.key(),
+  ]);
 }
 export function useStartProjectClone() {
-  return useMutation({
-    ...orpcQuery.projects.cloneStart.mutationOptions(),
-    onSuccess: useInvalidateClones(),
-  });
+  return useInvalidatingMutation(orpcQuery.projects.cloneStart.mutationOptions(), [
+    orpcQuery.projects.key(),
+  ]);
 }
 export function useRetryProjectClone() {
-  return useMutation({
-    ...orpcQuery.projects.cloneRetry.mutationOptions(),
-    onSuccess: useInvalidateClones(),
-  });
+  return useInvalidatingMutation(orpcQuery.projects.cloneRetry.mutationOptions(), [
+    orpcQuery.projects.key(),
+  ]);
 }

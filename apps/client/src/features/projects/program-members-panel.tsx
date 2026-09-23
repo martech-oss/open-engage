@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ErrorAlert, FormInput, FormTextarea, LoadingButton } from "@/components/app-ui";
 import { AppDialog } from "@/components/app-ui/dialogs";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 import type { ProjectMember, ProjectProgram } from "@openengage/core/projects";
 

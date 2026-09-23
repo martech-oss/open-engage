@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CompanyEnrichmentResult } from "@openengage/core/contacts";
 
@@ -31,8 +31,6 @@ beforeEach(() => {
   enrichment.reset.mockReset();
   enrichment.isPending = false;
 });
-
-afterEach(cleanup);
 
 describe("CompanyEnrichmentSheet request authority", () => {
   it("keeps company B when company A later fails", async () => {

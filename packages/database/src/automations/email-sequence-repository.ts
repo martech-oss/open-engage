@@ -1,7 +1,6 @@
 import { and, eq, exists, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
-  automationDefinitionSchema,
   type ApplyEmailSequenceResult,
   type EmailSequenceProposal,
 } from "@openengage/core/automations";
@@ -12,6 +11,9 @@ import { conditionalAudit, uniqueOperationIso } from "../projects/project-brief-
 import {
   authenticatedProjectActorId,
   approvedProjectLinkPrecondition,
+  approvedProjectLinkStatements,
+  bumpProjectBriefRowVersion,
+  insertApprovedProjectItems,
   ProjectBriefLinkConflictError,
   type ApprovedProjectLink,
 } from "../projects/project-resource-guard";
@@ -20,9 +22,9 @@ import { isConstraintError, nowIso } from "../shared/database-utils";
 import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import { automations, automationVersions } from "./schema";
 
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 const contentCodec = defineJsonCodec(emailDocumentV2Schema, "email_templates.draft_content");
 
 export class EmailSequenceDraftConflictError extends Error {
@@ -89,7 +91,7 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       version: 1,
       status: "draft",
       timezone: proposal.definition.timezone,
-      graph: graphCodec.encode(proposal.definition),
+      graph: automationGraphCodec.encode(proposal.definition),
       createdAt: now,
     } as const;
     try {
@@ -163,16 +165,6 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       1, NULL, NULL, NULL, NULL, NULL, ${now}, ${now}
     FROM json_each(${templateRowsJson}) AS template_row
     WHERE ${exists(precondition)}`;
-    const resources = sequenceResources(proposal);
-    const resourceRowsJson = JSON.stringify(resources);
-    const itemRows = sql`SELECT
-      ${workspaceId},
-      ${link.projectId},
-      json_extract(resource_row.value, '$.resourceType'),
-      json_extract(resource_row.value, '$.resourceId'),
-      ${link.briefRevision}, ${link.addedByUserId}, ${now}
-    FROM json_each(${resourceRowsJson}) AS resource_row
-    WHERE ${exists(precondition)}`;
     const [created] = await orm.batch([
       orm.insert(emailTemplates).select(templateRows),
       orm.insert(automations).select(
@@ -188,47 +180,25 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
           ${proposal.definition.timezone}, ${encodedGraph}, NULL, ${now}, NULL, '{}', NULL
         WHERE ${exists(precondition)}`,
       ),
-      orm.insert(projectItems).select(itemRows),
-      conditionalAudit(
+      ...approvedProjectLinkStatements(
         orm,
         this.context,
-        link.addedByUserId,
+        link,
+        precondition,
         {
           action: "email_sequence.create",
           resourceType: "automation",
           resourceId: proposal.automationId,
-        },
-        precondition,
-        now,
-      ),
-      conditionalAudit(
-        orm,
-        this.context,
-        link.addedByUserId,
-        {
-          action: "project.item.add",
-          resourceType: "project",
-          resourceId: link.projectId,
-          metadata: {
+          items: sequenceResources(proposal),
+          linkMetadata: {
             resourceTypes: ["automation", "email"],
             automationId: proposal.automationId,
             templateIds: proposal.emails.map((email) => email.templateId),
             briefRevision: link.briefRevision,
           },
         },
-        precondition,
         now,
       ),
-      orm
-        .update(projectBriefs)
-        .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
-        .where(
-          and(
-            eq(projectBriefs.workspaceId, workspaceId),
-            eq(projectBriefs.projectId, link.projectId),
-            exists(precondition),
-          ),
-        ),
     ]);
     if (created.meta.changes !== templates.length) throw new ProjectBriefLinkConflictError();
   }
@@ -275,15 +245,6 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
     if (missing.length === 0) return 0;
 
     const now = uniqueOperationIso();
-    const missingRowsJson = JSON.stringify(missing);
-    const itemRows = sql`SELECT
-      ${workspaceId},
-      ${link.projectId},
-      json_extract(resource_row.value, '$.resourceType'),
-      json_extract(resource_row.value, '$.resourceId'),
-      ${link.briefRevision}, ${link.addedByUserId}, ${now}
-    FROM json_each(${missingRowsJson}) AS resource_row
-    WHERE ${exists(precondition)}`;
     const marker = orm
       .select({ id: projectItems.resourceId })
       .from(projectItems)
@@ -327,7 +288,14 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
             exists(precondition),
           ),
         ),
-      orm.insert(projectItems).select(itemRows).onConflictDoNothing(),
+      insertApprovedProjectItems(
+        orm,
+        workspaceId,
+        link,
+        missing,
+        precondition,
+        now,
+      ).onConflictDoNothing(),
       conditionalAudit(
         orm,
         this.context,
@@ -348,17 +316,13 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
           .where(and(exists(precondition), exists(marker))),
         now,
       ),
-      orm
-        .update(projectBriefs)
-        .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
-        .where(
-          and(
-            eq(projectBriefs.workspaceId, workspaceId),
-            eq(projectBriefs.projectId, link.projectId),
-            exists(precondition),
-            exists(marker),
-          ),
-        ),
+      bumpProjectBriefRowVersion(
+        orm,
+        workspaceId,
+        link.projectId,
+        [exists(precondition), exists(marker)],
+        now,
+      ),
     ]);
     const linksAdded = updated.meta.changes + inserted.meta.changes;
     if (linksAdded === 0 && !(await precondition.get())) {
@@ -431,8 +395,8 @@ export class EmailSequenceDraftRepository extends WorkspaceRepository {
       );
     });
     const graphMatches =
-      JSON.stringify(graphCodec.decode(existingAutomation.graph)) ===
-      graphCodec.encode(proposal.definition);
+      JSON.stringify(automationGraphCodec.decode(existingAutomation.graph)) ===
+      automationGraphCodec.encode(proposal.definition);
     if (
       !templatesMatch ||
       !graphMatches ||

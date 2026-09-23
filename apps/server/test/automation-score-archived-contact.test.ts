@@ -23,10 +23,10 @@ import { createAutomationExecutionDependencies } from "../src/runtime/automation
 import {
   expectJobAndEnrollment,
   graph,
-  queueStub,
   runtimeWithJobsQueue,
   seedAutomationJob,
 } from "./automation-recovery-test-support";
+import { queueDouble } from "./queue-double";
 
 const scoreCases = [
   { scope: "global", operation: "add", initialCategoryScore: undefined, score: 27, delta: 7 },
@@ -64,7 +64,11 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
       });
       const db = createDatabase(env.DB);
       const engine = new AutomationJobRepository(db);
-      const contactRepository = new ContactRepository(db, { workspaceId: seeded.workspaceId });
+      const contactRepository = new ContactRepository(db, {
+        workspaceId: seeded.workspaceId,
+        userId: "owner",
+        role: "owner",
+      });
       await db.orm.update(contacts).set({ score: 20 }).where(eq(contacts.id, seeded.contactId));
       if (categoryId) {
         await db.orm.insert(scoringCategories).values({
@@ -143,7 +147,7 @@ describe.each(scoreCases)("archived contact: $scope $operation", (testCase) => {
           definition,
           job!,
           leaseId,
-          createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
+          createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())).nodes,
         );
 
       await execute();

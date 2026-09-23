@@ -12,15 +12,8 @@ import {
   tagUpdateSchema,
 } from "@openengage/core/contacts";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
-import { ackSchema } from "../shared/schemas";
-
-const contactNotFound = {
-  CONTACT_NOT_FOUND: {
-    status: 404,
-    message: "連絡先が見つかりません",
-  },
-} as const;
+import { authedErrors, contactNotFoundError, workspaceErrors } from "../shared/errors";
+import { ackSchema, idInput } from "../shared/schemas";
 
 /** Adding or removing a relation fails with 409 when the pairing is not allowed. */
 function relationErrors(message: string) {
@@ -42,7 +35,7 @@ export const contactResourcesContract = {
     .output(contactOptionsSchema),
   profile: oc
     .route({ method: "GET", path: "/contacts/{contactId}/profile" })
-    .errors({ ...workspaceErrors, ...contactNotFound })
+    .errors({ ...workspaceErrors, ...contactNotFoundError })
     .input(z.object({ contactId: z.string().min(1) }))
     .output(contactProfileSchema),
   createTag: oc
@@ -96,7 +89,7 @@ export const contactResourcesContract = {
       ...authedErrors,
       CONTACT_NOT_ARCHIVED: { status: 404, message: "復元できる連絡先が見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(ackSchema),
   bulkUpdate: oc
     .route({ method: "POST", path: "/contacts/bulk-update" })

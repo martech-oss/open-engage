@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import type { FormField } from "@openengage/core/web";
 
 import { FormFieldBuilder } from "./form-field-builder";
-import type { SignupFormRow } from "./website-api";
+import type { SignupForm } from "./website-api";
 
 const OPTIONAL_FIELDS = [
   ["firstName", "名"],
@@ -35,7 +35,7 @@ export function SignupFormFields({
   turnstileEnabled,
   onTurnstileEnabledChange,
 }: {
-  item: SignupFormRow | null;
+  item: SignupForm | null;
   optionalFields: ReadonlySet<OptionalSignupField>;
   onToggleField: (field: OptionalSignupField, checked: boolean) => void;
   customFields: FormField[];

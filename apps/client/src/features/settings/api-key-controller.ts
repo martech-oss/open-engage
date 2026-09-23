@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import { getErrorMessage } from "@/lib/errors";
+
 import { createWorkspaceApiKey } from "./settings-api";
 
 type CreateApiKey = () => Promise<{ token: string }>;
@@ -17,7 +19,7 @@ export function useApiKeyController(createApiKey: CreateApiKey = createWorkspace
       const created = await createApiKey();
       setToken(created.token);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "APIキーを作成できませんでした");
+      setError(getErrorMessage(cause, "APIキーを作成できませんでした"));
     } finally {
       setBusy(false);
     }

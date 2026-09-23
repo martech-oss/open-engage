@@ -3,8 +3,24 @@ packages:
   - packages/*
 
 catalog:
+  "@cloudflare/vite-plugin": ^1.48.0
+  "@cloudflare/workers-types": ^5.20260728.1
+  "@orpc/client": 1.14.13
+  "@orpc/contract": 1.14.13
+  "@orpc/openapi": 1.14.13
+  "@orpc/openapi-client": 1.14.13
+  "@orpc/server": 1.14.13
+  "@orpc/tanstack-query": 1.14.13
+  "@orpc/zod": 1.14.13
+  "@types/node": ^24.1.0
+  "@types/react": ^19.1.9
+  better-auth: ^1.6.25
+  drizzle-orm: ^0.45.2
+  hono: ^4.12.32
+  react: ^19.1.1
   typescript: ^7.0.2
   vitest: ^4.0.17
+  wrangler: ^4.115.0
   zod: ^4.4.3
 
 onlyBuiltDependencies:
@@ -21,21 +37,3 @@ allowBuilds:
   protobufjs: false
   sharp: true
   workerd: true
-minimumReleaseAgeExclude:
-  - "@cloudflare/workers-types@5.20260728.1"
-  - "@modelcontextprotocol/sdk@1.30.0"
-  - "@cloudflare/vite-plugin@1.48.0"
-  - miniflare@4.20260722.1
-  - wrangler@4.115.0
-  - "@orpc/client@1.14.13"
-  - "@orpc/contract@1.14.13"
-  - "@orpc/interop@1.14.13"
-  - "@orpc/server@1.14.13"
-  - "@orpc/shared@1.14.13"
-  - "@orpc/standard-server-aws-lambda@1.14.13"
-  - "@orpc/standard-server-fastify@1.14.13"
-  - "@orpc/standard-server-fetch@1.14.13"
-  - "@orpc/standard-server-node@1.14.13"
-  - "@orpc/standard-server-peer@1.14.13"
-  - "@orpc/standard-server@1.14.13"
-  - "@orpc/tanstack-query@1.14.13"

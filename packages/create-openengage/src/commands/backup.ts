@@ -6,7 +6,7 @@ import { isCancel, outro, text } from "@clack/prompts";
 import { execa } from "execa";
 import pc from "picocolors";
 
-import { readConfiguredResources } from "../provisioning";
+import { readConfiguredResources, serverWrangler } from "../provisioning";
 import { abort } from "../shared";
 
 export async function runBackupCommand(): Promise<void> {
@@ -21,19 +21,11 @@ export async function runBackupCommand(): Promise<void> {
   await mkdir(resolve(output, ".."), { recursive: true });
   await execa(
     "pnpm",
-    [
-      "--filter",
-      "@openengage/server",
-      "exec",
-      "wrangler",
-      "d1",
-      "export",
-      databaseName,
-      "--remote",
-      "--output",
-      output,
-    ],
-    { cwd: process.cwd(), stdio: "inherit" },
+    serverWrangler("d1", "export", databaseName, "--remote", "--output", output),
+    {
+      cwd: process.cwd(),
+      stdio: "inherit",
+    },
   );
   outro(`D1 backup written to ${pc.cyan(output)}. R2 objects remain versioned in the bucket.`);
 }

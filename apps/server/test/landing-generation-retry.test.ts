@@ -117,7 +117,9 @@ it("recovers durable generation and retry requests when sending to the queue fai
   const send = vi
     .fn<RuntimeEnv["JOBS_QUEUE"]["send"]>()
     .mockRejectedValue(new Error("Queue unavailable"));
-  const sendBatch = vi.fn<RuntimeEnv["JOBS_QUEUE"]["sendBatch"]>().mockResolvedValue(undefined);
+  const sendBatch = vi
+    .fn<RuntimeEnv["JOBS_QUEUE"]["sendBatch"]>()
+    .mockResolvedValue({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } });
   const unavailableQueueEnv = {
     ...env,
     JOBS_QUEUE: { send, sendBatch },

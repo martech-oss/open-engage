@@ -7,7 +7,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 
 import { summarizeSignupForms } from "./resource-model";
-import type { SignupFormRow } from "./website-api";
+import type { SignupForm } from "./website-api";
 import { PublishStatusBadge } from "./website-shared";
 
 export function signupFormColumns({
@@ -17,10 +17,10 @@ export function signupFormColumns({
   publicUrls,
 }: {
   formatDateTime: (value: string) => string;
-  onEdit: (item: SignupFormRow) => void;
-  onArchive: (item: SignupFormRow) => Promise<void>;
-  publicUrls: (item: SignupFormRow) => { page: string; embed: string };
-}): DataTableColumn<SignupFormRow>[] {
+  onEdit: (item: SignupForm) => void;
+  onArchive: (item: SignupForm) => Promise<void>;
+  publicUrls: (item: SignupForm) => { page: string; embed: string };
+}): DataTableColumn<SignupForm>[] {
   return [
     {
       key: "name",
@@ -91,7 +91,7 @@ export function signupFormColumns({
   ];
 }
 
-export function SignupFormsSummary({ items }: { items: SignupFormRow[] }): ReactNode {
+export function SignupFormsSummary({ items }: { items: SignupForm[] }): ReactNode {
   const summary = summarizeSignupForms(items);
   const cards = [
     { label: "フォーム", value: summary.total, description: "現在のフォーム数", icon: Rows3 },
@@ -127,7 +127,7 @@ export function SignupFormsSummary({ items }: { items: SignupFormRow[] }): React
   );
 }
 
-function formStyleLabel(style?: SignupFormRow["definition"]["style"]): string {
+function formStyleLabel(style?: SignupForm["definition"]["style"]): string {
   return (
     {
       inline: "インライン",

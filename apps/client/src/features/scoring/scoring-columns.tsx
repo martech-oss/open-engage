@@ -5,7 +5,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-import type { GradingCriterionRow, ScoringCategoryRow, ScoringRuleRow } from "./scoring-api";
+import type { GradingCriterion, ScoringCategory, ScoringRule } from "./scoring-api";
 import {
   GRADING_FIELD_LABELS,
   GRADING_OPERATOR_LABELS,
@@ -14,9 +14,9 @@ import {
 } from "./scoring-labels";
 
 export function scoringRuleColumns(
-  onEdit: (item: ScoringRuleRow) => void,
-  onArchive: (item: ScoringRuleRow) => Promise<void>,
-): DataTableColumn<ScoringRuleRow>[] {
+  onEdit: (item: ScoringRule) => void,
+  onArchive: (item: ScoringRule) => Promise<void>,
+): DataTableColumn<ScoringRule>[] {
   return [
     {
       key: "name",
@@ -68,9 +68,9 @@ export function scoringRuleColumns(
 }
 
 export function gradingCriterionColumns(
-  onEdit: (item: GradingCriterionRow) => void,
-  onArchive: (item: GradingCriterionRow) => Promise<void>,
-): DataTableColumn<GradingCriterionRow>[] {
+  onEdit: (item: GradingCriterion) => void,
+  onArchive: (item: GradingCriterion) => Promise<void>,
+): DataTableColumn<GradingCriterion>[] {
   return [
     {
       key: "name",
@@ -104,8 +104,8 @@ export function gradingCriterionColumns(
 }
 
 export function scoringCategoryColumns(
-  onArchive: (item: ScoringCategoryRow) => Promise<void>,
-): DataTableColumn<ScoringCategoryRow>[] {
+  onArchive: (item: ScoringCategory) => Promise<void>,
+): DataTableColumn<ScoringCategory>[] {
   return [
     { key: "name", header: "カテゴリ", cell: (item) => item.name },
     {

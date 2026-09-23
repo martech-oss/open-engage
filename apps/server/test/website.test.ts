@@ -93,7 +93,7 @@ describe("Website center", () => {
     expect(listedForms).toEqual([expect.objectContaining({ id: form.id, submissionCount: 1 })]);
 
     const content = {
-      schemaVersion: 1,
+      schemaVersion: 1 as const,
       backgroundColor: "#f4f5f7",
       contentColor: "#ffffff",
       width: 720,
@@ -104,7 +104,7 @@ describe("Website center", () => {
           html: "<h1>Welcome</h1><p>Join us.</p>",
         },
       ],
-    } as const;
+    };
     const page = await client.website.createPage({
       name: "Welcome page",
       slug: "welcome",

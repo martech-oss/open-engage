@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react";
 
 import { authClient } from "@/auth-client";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 
 interface TwoFactorSetup {

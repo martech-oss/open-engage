@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import { formHandlerWriteSchema } from "@openengage/core/web";
 
@@ -13,14 +14,14 @@ import {
   useCreateFormHandler,
   useDeleteFormHandler,
   useUpdateFormHandler,
-  type SignupFormRow,
+  type SignupForm,
 } from "./website-api";
 
 export function FormHandlersPanel({
   forms,
   workspaceSlug,
 }: {
-  forms: SignupFormRow[];
+  forms: SignupForm[];
   workspaceSlug: string;
 }) {
   const query = useQuery(formHandlersQueryOptions()),
@@ -66,7 +67,7 @@ export function FormHandlersPanel({
       setOpened(false);
       setEditing(null);
     } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "保存できませんでした");
+      setError(getErrorMessage(issue, "保存できませんでした"));
     }
   }
   return (

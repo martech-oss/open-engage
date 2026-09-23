@@ -11,6 +11,7 @@ import {
 
 import { PermanentChannelError, TransientChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
+import type { JobsQueue } from "../platform/queue-messages";
 import { parseJsonRecord, stringValue } from "../platform/values";
 import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
 
@@ -131,7 +132,7 @@ export async function processContactImport(
 export async function publishContactImportReconciliation(
   repository: ContactImportReconciliationRepository,
   reconciliation: ContactImportReconciliation,
-  queue: Queue,
+  queue: JobsQueue,
 ): Promise<void> {
   await enqueueSegmentContactReconciliation(
     queue,

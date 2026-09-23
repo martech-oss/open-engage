@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { ErrorAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
 import { operationHealthQueryOptions } from "./operation-health-api";

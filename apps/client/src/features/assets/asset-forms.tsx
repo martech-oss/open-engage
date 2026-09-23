@@ -15,7 +15,8 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes, type Asset, type AssetVisibility } from "@/features/assets/asset-api";
 import { replaceAssetContent, uploadAssetFile } from "@/features/assets/asset-upload";
-import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { useFormSubmission } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import { getFormString } from "@/lib/form-data";
 import { cn } from "@/lib/utils";
 

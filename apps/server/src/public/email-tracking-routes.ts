@@ -5,6 +5,7 @@ import { EmailTrackingEventRepository } from "@openengage/database/messaging";
 
 import type { AppEnvironment } from "../env";
 import { sha256Hex, verifySignedToken } from "../platform/crypto";
+import type { JobsQueue } from "../platform/queue-messages";
 import { recordContactEvent } from "../runtime/contact-event-service";
 
 const transparentGif = Uint8Array.from([
@@ -81,7 +82,7 @@ async function recordEmailEngagement(
     type: "opened" | "clicked";
     providerEventId: string;
     url?: string;
-    queue: Queue;
+    queue: JobsQueue;
   },
 ): Promise<void> {
   const occurredAt = new Date().toISOString();

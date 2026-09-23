@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { DataTable, type DataTableColumn } from "./data-table";
 
@@ -15,8 +15,6 @@ const rows = [
   { id: "b", name: "Beta" },
   { id: "a", name: "Alpha" },
 ];
-
-afterEach(cleanup);
 
 describe("DataTable sorting authority", () => {
   it("keeps local sorting for a complete small list", async () => {

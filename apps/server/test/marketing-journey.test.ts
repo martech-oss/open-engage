@@ -6,13 +6,14 @@ import { AutomationJobRepository } from "@openengage/database/automations";
 import { createDatabase } from "@openengage/database/client";
 
 import { processAutomationJob } from "../src/automations/worker";
-import type { RuntimeEnv } from "../src/env";
 import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
 import { retryPendingPublicFormEvents } from "../src/runtime/contact-event-service";
 import { processVisitorHistory } from "../src/runtime/visitor-history-worker";
 import { reconcileContactSegmentMemberships } from "../src/segments/membership-service";
 import { verifyMeasurementContext } from "../src/web/measurement-service";
+import { withBindings } from "./bindings";
 import { seedMember, seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 
 async function post(path: string, body: unknown) {
   return exports.default.fetch(
@@ -29,8 +30,8 @@ it("connects anonymous LP -> form -> score segment -> handoff -> won deal -> ROI
     { client, workspaceId, slug, userId } = fixture;
   await seedMember(env.DB, fixture);
   const database = createDatabase(env.DB),
-    queue = { send: async () => {}, sendBatch: async () => {} } as unknown as Queue;
-  const runtime = { ...env, JOBS_QUEUE: queue } as unknown as RuntimeEnv;
+    queue = queueDouble();
+  const runtime = withBindings({ JOBS_QUEUE: queue });
   const project = await client.projects.create({ name: "LP journey" });
   const today = new Date().toISOString().slice(0, 10);
   await client.projects.createCost({

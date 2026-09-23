@@ -2,9 +2,9 @@
 import { useInitialData, useModel, useSkill, useTool } from "@flue/runtime";
 import * as v from "valibot";
 
+import { emailSequenceDesignerAgent } from "@openengage/core/agents";
 import {
-  emailSequenceAgentResultSchema,
-  emailSequenceDesignerInitialDataSchema,
+  validateEmailSequenceCatalogReferences,
   validateEmailSequenceProposal,
 } from "@openengage/core/automations";
 
@@ -23,17 +23,18 @@ export function EmailSequenceDesigner() {
   useSkill(automationFlowDesigner);
   useTool(validateEmailSequenceProposalTool);
 
-  const initialData = emailSequenceDesignerInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = emailSequenceDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_email_sequence_proposal",
     description:
       "Submit the final structured email sequence result. This is the only successful way to finish.",
-    schema: emailSequenceAgentResultSchema,
+    schema: emailSequenceDesignerAgent.result,
     schemaErrorLabel: "Sequence schema validation failed",
     validate: (result) => {
       if (result.status !== "ready") return null;
       const issues = validateEmailSequenceProposal(result.proposal);
-      return issues.length > 0 ? `Sequence validation failed: ${JSON.stringify(issues)}` : null;
+      if (issues.length > 0) return `Sequence validation failed: ${JSON.stringify(issues)}`;
+      return validateEmailSequenceCatalogReferences(result.proposal, initialData);
     },
     retryLimitError: "Email sequence proposal validation retry limit exceeded",
     retrySignal: {
@@ -70,4 +71,7 @@ Rules:
 }
 
 EmailSequenceDesigner.initialData = v.unknown();
-EmailSequenceDesigner.durability = { maxAttempts: 3, timeoutMs: 85_000 };
+EmailSequenceDesigner.durability = {
+  maxAttempts: 3,
+  timeoutMs: emailSequenceDesignerAgent.agentTimeoutMs,
+};

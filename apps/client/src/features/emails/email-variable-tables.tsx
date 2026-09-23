@@ -15,11 +15,11 @@ import {
   ItemGroup,
   ItemTitle,
 } from "@/components/ui/item";
-import { type MessageVariableRow, useArchiveEmailVariable } from "@/features/emails/email-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { type MessageVariable, useArchiveEmailVariable } from "@/features/emails/email-api";
+import { getErrorMessage } from "@/lib/errors";
 import { useWorkspaceFormatters } from "@/lib/workspace-time";
 
-export function VariableReference({ variables }: { variables: MessageVariableRow[] }): ReactNode {
+export function VariableReference({ variables }: { variables: MessageVariable[] }): ReactNode {
   const builtInVariables = [
     ["{{ contact.first_name }}", "連絡先の名"],
     ["{{ contact.last_name }}", "連絡先の姓"],
@@ -62,13 +62,13 @@ export function VariableTable({
   loading,
   onEdit,
 }: {
-  items: MessageVariableRow[];
+  items: MessageVariable[];
   loading: boolean;
-  onEdit: (variable: MessageVariableRow) => void;
+  onEdit: (variable: MessageVariable) => void;
 }): ReactNode {
   const { formatDateTime } = useWorkspaceFormatters();
   const archiveVariable = useArchiveEmailVariable();
-  async function archive(variable: MessageVariableRow) {
+  async function archive(variable: MessageVariable) {
     try {
       await archiveVariable.mutateAsync({ id: variable.id });
       toast.success("メッセージ変数をアーカイブしました");
@@ -77,7 +77,7 @@ export function VariableTable({
     }
   }
 
-  const columns: DataTableColumn<MessageVariableRow>[] = [
+  const columns: DataTableColumn<MessageVariable>[] = [
     {
       key: "name",
       header: "名前",

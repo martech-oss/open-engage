@@ -1,4 +1,7 @@
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
+
+import type { Database } from "../client";
 
 export function escapeLike(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
@@ -58,6 +61,16 @@ export function changedExactlyOne(result: D1Result): boolean {
 /** True when a write changed at least one row. */
 export function didChange(result: D1Result): boolean {
   return result.meta.changes > 0;
+}
+
+/** Runs `statements` as one atomic D1 batch; an empty list is a no-op. */
+export async function runBatch<T extends BatchItem<"sqlite">>(
+  orm: Database,
+  statements: readonly T[],
+): Promise<Array<T["_"]["result"]>> {
+  const [first, ...rest] = statements;
+  if (first === undefined) return [];
+  return await orm.batch([first, ...rest]);
 }
 
 /** Re-reads a just-written row and throws if it's missing - a bug, not a user-facing error. */

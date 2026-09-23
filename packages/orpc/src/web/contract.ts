@@ -21,7 +21,7 @@ import {
   siteTrackingWriteSchema,
 } from "@openengage/core/web";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
+import { authedErrors, contactNotFoundError, workspaceErrors } from "../shared/errors";
 import { ackSchema, idInput, notFoundError } from "../shared/schemas";
 import { optimizationContract } from "./optimization-contract";
 
@@ -118,7 +118,7 @@ export const websiteContract = {
     .output(ackSchema),
   issueIdentityToken: oc
     .route({ method: "POST", path: "/website/identity-tokens" })
-    .errors({ ...authedErrors, ...notFoundError("CONTACT_NOT_FOUND", "連絡先が見つかりません") })
+    .errors({ ...authedErrors, ...contactNotFoundError })
     .input(z.object({ contactId: z.string().min(1) }))
     .output(z.object({ token: z.string(), expiresInSeconds: z.number() })),
   listForms: oc

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import type { ContactExportFilter } from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   companies,
   companyContacts,
@@ -15,7 +16,6 @@ import {
   tags,
   uuidv7,
 } from "@openengage/database/testing";
-import type { WorkspaceContext } from "@openengage/orpc";
 
 import {
   getContactExportFile,
@@ -24,7 +24,10 @@ import {
 } from "../src/contacts/import-export-service";
 import { processContactExport } from "../src/contacts/worker";
 import type { RuntimeEnv } from "../src/env";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
+import { withBindings } from "./bindings";
 import { seedWorkspaceContext } from "./factory";
+import { recordingQueue } from "./queue-double";
 
 const runtimeEnv = env as RuntimeEnv;
 
@@ -199,7 +202,7 @@ describe("contact export jobs", () => {
       await database.orm.insert(contacts).values(rows.slice(offset, offset + 5));
     }
     const published: unknown[] = [];
-    const queue = queueStub(published);
+    const queue = recordingQueue(published);
     const { jobId } = await startContactExport(database, queue, workspace);
     published.length = 0;
 
@@ -282,12 +285,7 @@ describe("contact export jobs", () => {
         return Reflect.get(target, property, receiver);
       },
     });
-    const failingRuntime = new Proxy(env, {
-      get(target, property, receiver) {
-        if (property === "ASSETS_BUCKET") return unavailableBucket;
-        return Reflect.get(target, property, receiver);
-      },
-    }) as RuntimeEnv;
+    const failingRuntime = withBindings({ ASSETS_BUCKET: unavailableBucket });
 
     await expect(processContactExport(jobId, failingRuntime)).rejects.toThrow(
       "Contact export attempts exhausted",
@@ -433,21 +431,4 @@ function csvIds(csv: string): string[] {
     .split("\n")
     .slice(1)
     .map((line) => /^"([^"]+)"/.exec(line)?.[1] ?? "");
-}
-
-function runtimeWithJobsQueue(queue: Queue): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
-}
-
-function queueStub(published: unknown[]): Queue {
-  return {
-    send: async (body: unknown) => {
-      published.push(body);
-    },
-  } as unknown as Queue;
 }

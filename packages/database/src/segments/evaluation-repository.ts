@@ -3,7 +3,7 @@ import type { BatchItem } from "drizzle-orm/batch";
 
 import { type CompiledSegment } from "@openengage/core/segments";
 
-import { nowIso } from "../shared/database-utils";
+import { nowIso, runBatch } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { membershipEventStatements } from "./membership-event-statements";
 import { segmentMemberships, segments } from "./schema";
@@ -159,9 +159,7 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
         .where(sql`matched.id = ${contactId} AND matched.status != 'archived'`)
         .limit(1),
     );
-    const results = await this.database.orm.batch(
-      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
-    );
+    const results = await runBatch(this.database.orm, statements);
     return results.map((rows) => rows.length > 0);
   }
 
@@ -182,7 +180,7 @@ export class SegmentEvaluationRepository extends WorkspaceRepository {
     const statements: BatchItem<"sqlite">[] = updates.flatMap((update) =>
       this.dynamicMembershipStatements(update),
     );
-    await this.database.orm.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    await runBatch(this.database.orm, statements);
   }
 
   private currentDynamicDefinition(segmentId: string, filterVersion: number) {

@@ -3,17 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { app } from "../src/app";
 import type { RuntimeEnv } from "../src/env";
+import { withBindings } from "./bindings";
 import { seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 
 afterEach(() => vi.restoreAllMocks());
 
 function bindings(queue: Queue): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as unknown as RuntimeEnv;
+  return withBindings({ JOBS_QUEUE: queue });
 }
 
 function executionContext(waitUntilPromises: Promise<unknown>[]): ExecutionContext {
@@ -24,15 +21,6 @@ function executionContext(waitUntilPromises: Promise<unknown>[]): ExecutionConte
     passThroughOnException() {},
     props: {},
   } as ExecutionContext;
-}
-
-function queueStub(
-  sendBatch: (messages: Array<MessageSendRequest<unknown>>) => Promise<void>,
-): Queue {
-  return {
-    send: async () => undefined,
-    sendBatch: (messages: Iterable<MessageSendRequest<unknown>>) => sendBatch(Array.from(messages)),
-  } as unknown as Queue;
 }
 
 async function createPublicForm(suffix: string) {
@@ -83,10 +71,12 @@ describe("public form contact-event publication", () => {
     const batches: Array<Array<MessageSendRequest<unknown>>> = [];
     const waits: Promise<unknown>[] = [];
     const runtime = bindings(
-      queueStub(async (messages) => {
-        batches.push(messages);
-        publicationStarted();
-        await blocked;
+      queueDouble({
+        sendBatch: async (messages) => {
+          batches.push(messages);
+          publicationStarted();
+          await blocked;
+        },
       }),
     );
     let responseResolved = false;
@@ -122,8 +112,10 @@ describe("public form contact-event publication", () => {
     const waits: Promise<unknown>[] = [];
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const runtime = bindings(
-      queueStub(async () => {
-        throw new Error("queue unavailable");
+      queueDouble({
+        sendBatch: async () => {
+          throw new Error("queue unavailable");
+        },
       }),
     );
 
@@ -141,8 +133,10 @@ describe("public form contact-event publication", () => {
     const batches: Array<Array<MessageSendRequest<unknown>>> = [];
     const waits: Promise<unknown>[] = [];
     const runtime = bindings(
-      queueStub(async (messages) => {
-        batches.push(messages);
+      queueDouble({
+        sendBatch: async (messages) => {
+          batches.push(messages);
+        },
       }),
     );
     const context = executionContext(waits);

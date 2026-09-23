@@ -3,12 +3,15 @@ import {
   resolveVariableRef,
   type VariableImpactInput,
   type VariableUsage,
+  type VariableWrite,
 } from "@openengage/core/projects";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   createDatabase,
   type DatabaseSource,
   type OpenEngageDatabase,
 } from "@openengage/database/client";
+import { writeAuditLog } from "@openengage/database/platform";
 import { VariableRepository, VariableUsageRepository } from "@openengage/database/projects";
 
 /** Publication only. Runtime consumers retain this snapshot with their immutable version. */
@@ -80,5 +83,33 @@ export async function previewVariableImpact(
       error,
       requiresRepublish: usage.published && (before !== after || error !== null),
     };
+  });
+}
+
+export async function saveVariable(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  input: VariableWrite,
+) {
+  const value = await new VariableRepository(database, workspace).save(input);
+  await writeAuditLog(database, workspace, {
+    action: "project.variable.save",
+    resourceType: "project_variable",
+    resourceId: value.id,
+    metadata: { key: value.key, projectId: value.projectId, revision: value.revision },
+  });
+  return value;
+}
+
+export async function deleteVariable(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  input: { projectId: string | null; key: string; expectedRevision: number },
+): Promise<void> {
+  await new VariableRepository(database, workspace).remove(input);
+  await writeAuditLog(database, workspace, {
+    action: "project.variable.delete",
+    resourceType: "project_variable",
+    metadata: { key: input.key, projectId: input.projectId },
   });
 }

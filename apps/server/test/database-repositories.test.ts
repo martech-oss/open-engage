@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   CompanyRepository,
   ContactRepository,
@@ -26,7 +27,6 @@ import {
   uuidv7,
   writeAuditLog,
 } from "@openengage/database/testing";
-import type { WorkspaceContext } from "@openengage/orpc";
 
 import { seedWorkspaceContext } from "./factory";
 

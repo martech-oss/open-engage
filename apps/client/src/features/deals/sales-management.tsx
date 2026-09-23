@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { appBootstrapQueryOptions } from "@/lib/app-bootstrap";
+import { useWorkspaceCapability } from "@/lib/app-bootstrap";
 
 import {
   salesMembersQueryOptions,
@@ -16,7 +16,6 @@ import {
 } from "./sales-api";
 
 export function SalesManagement() {
-  const { data: bootstrap } = useQuery(appBootstrapQueryOptions());
   const { data: members = [] } = useQuery(salesMembersQueryOptions());
   const { data: groups = [] } = useQuery(assignmentGroupsQueryOptions());
   const { data: notifications = [] } = useQuery(notificationsQueryOptions());
@@ -27,7 +26,7 @@ export function SalesManagement() {
     [name, setName] = useState(""),
     [mode, setMode] = useState<"fixed" | "round_robin">("round_robin"),
     [userIds, setUserIds] = useState<string[]>([]);
-  const canManage = bootstrap?.workspace?.capabilities.manageMarketing ?? false;
+  const canManage = useWorkspaceCapability("manageMarketing");
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <section className="space-y-2 rounded-lg border p-4">

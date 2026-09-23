@@ -7,6 +7,8 @@
  * that, not by name similarity.
  */
 
+import { workspaceDate } from "@openengage/core/shared/time";
+
 export interface DateFormatOptions {
   timeZone?: string;
 }
@@ -74,15 +76,7 @@ export function formatShortDate(value: string, _options: DateFormatOptions = {})
 
 /** `2026-07-30` — calendar date in `timeZone` for API report/query range inputs. */
 export function formatIsoDate(value: Date, timeZone = "UTC"): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(value);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((candidate) => candidate.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
+  return workspaceDate(value, timeZone);
 }
 
 const relativeTimeFormatter = new Intl.RelativeTimeFormat("ja", { numeric: "auto" });

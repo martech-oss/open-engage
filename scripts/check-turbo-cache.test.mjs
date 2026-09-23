@@ -61,12 +61,6 @@ async function fixture(t) {
   }
   await exec("git", ["init", "--quiet"], { cwd: root });
   await exec("git", ["add", "."], { cwd: root });
-  // These generated declarations are currently tracked despite the ignore rule.
-  await exec(
-    "git",
-    ["add", "--force", ...packages.slice(0, 3).map((p) => `${p}/worker-configuration.d.ts`)],
-    { cwd: root },
-  );
   return root;
 }
 

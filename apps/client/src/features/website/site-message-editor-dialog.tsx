@@ -13,7 +13,7 @@ import type { SiteMessageWrite } from "@openengage/core/web";
 import { normalizeSiteMessageSchedule } from "./site-message-schedule";
 import { SiteMessageScheduleFields } from "./site-message-schedule-fields";
 import {
-  type SiteMessageRow,
+  type SiteMessage,
   type useCreateSiteMessage,
   type useUpdateSiteMessage,
 } from "./website-api";
@@ -26,7 +26,7 @@ export function SiteMessageEditorDialog({
   createMutation,
   updateMutation,
 }: {
-  item: SiteMessageRow | null;
+  item: SiteMessage | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
@@ -129,7 +129,7 @@ export function SiteMessageEditorDialog({
   );
 }
 
-function SiteMessageDeliveryFields({ item }: { item: SiteMessageRow | null }): ReactNode {
+function SiteMessageDeliveryFields({ item }: { item: SiteMessage | null }): ReactNode {
   return (
     <>
       <FieldGroup className="grid gap-4 sm:grid-cols-2">

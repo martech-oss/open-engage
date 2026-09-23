@@ -11,6 +11,7 @@ import { reportDaysCte } from "../reports/batch-repository";
 import type { ReportDateRange } from "../reports/types";
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
+import { uuidv7 } from "../shared/uuid";
 import { dynamicContents, experimentExposures, landingExperiments } from "./optimization-schema";
 import { landingPages } from "./schema";
 
@@ -126,7 +127,7 @@ export class OptimizationRepository extends WorkspaceRepository {
     variantId: string;
     pageVersionId: string;
   }) {
-    const id = crypto.randomUUID(),
+    const id = uuidv7(),
       now = nowIso();
     await this.database.orm
       .run(sql`INSERT INTO experiment_exposures(id,workspace_id,experiment_id,visitor_id,variant_id,page_version_id,created_at)

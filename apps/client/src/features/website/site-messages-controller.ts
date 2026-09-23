@@ -6,7 +6,7 @@ import { useResourceEditor } from "@/hooks/use-resource-editor";
 import { archiveWebsiteResource } from "./resource-controller-actions";
 import {
   siteMessagesQueryOptions,
-  type SiteMessageRow,
+  type SiteMessage,
   useArchiveSiteMessage,
   useCreateSiteMessage,
   useUpdateSiteMessage,
@@ -14,11 +14,11 @@ import {
 
 export function useSiteMessagesController() {
   const { data: items } = useSuspenseQuery(siteMessagesQueryOptions());
-  const editor = useResourceEditor<SiteMessageRow>();
+  const editor = useResourceEditor<SiteMessage>();
   const archiveMutation = useArchiveSiteMessage();
   const createMutation = useCreateSiteMessage();
   const updateMutation = useUpdateSiteMessage();
-  const archive = (item: SiteMessageRow) =>
+  const archive = (item: SiteMessage) =>
     archiveWebsiteResource({
       archive: () => archiveMutation.mutateAsync({ id: item.id }),
       onSuccess: () => toast.success("サイトメッセージをアーカイブしました"),

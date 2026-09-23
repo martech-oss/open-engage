@@ -6,12 +6,9 @@ import { contacts, createDatabase, uuidv7 } from "@openengage/database/testing";
 
 import { processContactImport } from "../src/contacts/worker";
 import { scheduled } from "../src/runtime/dispatch";
-import {
-  queueStub,
-  readJob,
-  runtimeWithJobsQueue,
-  seedImport,
-} from "./contact-import-recovery-test-support";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
+import { readJob, seedImport } from "./contact-import-recovery-test-support";
+import { queueDouble, recordingQueue } from "./queue-double";
 
 describe("contact import reconciliation recovery", () => {
   it("reconciles only contacts actually inserted and counts identifier conflicts as failures", async () => {
@@ -32,7 +29,12 @@ describe("contact import reconciliation recovery", () => {
     });
     const published: unknown[] = [];
 
-    await processContactImport(fixture.jobId, 0, 1, runtimeWithJobsQueue(queueStub(published)));
+    await processContactImport(
+      fixture.jobId,
+      0,
+      1,
+      runtimeWithJobsQueue(recordingQueue(published)),
+    );
 
     const actual = await env.DB.prepare(
       "SELECT id FROM contacts WHERE workspace_id = ? AND email = 'created@example.com'",
@@ -59,11 +61,13 @@ describe("contact import reconciliation recovery", () => {
     const published: unknown[] = [];
     let fail = true;
     const runtime = runtimeWithJobsQueue(
-      queueStub(published, async () => {
-        if (fail) {
-          fail = false;
-          throw new Error("injected reconciliation outage");
-        }
+      recordingQueue(published, {
+        beforeBatch: async () => {
+          if (fail) {
+            fail = false;
+            throw new Error("injected reconciliation outage");
+          }
+        },
       }),
     );
 
@@ -116,7 +120,7 @@ describe("contact import reconciliation recovery", () => {
           fixture.jobId,
           part,
           totalParts,
-          runtimeWithJobsQueue(queueStub(published)),
+          runtimeWithJobsQueue(recordingQueue(published)),
         ),
       ).rejects.toThrow(/manifest|totalParts/i);
 
@@ -133,7 +137,7 @@ describe("contact import reconciliation recovery", () => {
   it("allows only one parallel message to execute a part", async () => {
     const fixture = await seedImport([{ email: "parallel@example.com" }]);
     const published: unknown[] = [];
-    const runtime = runtimeWithJobsQueue(queueStub(published));
+    const runtime = runtimeWithJobsQueue(recordingQueue(published));
 
     await Promise.all([
       processContactImport(fixture.jobId, 0, 1, runtime),
@@ -153,18 +157,20 @@ describe("contact import reconciliation recovery", () => {
     const fixture = await seedImport([{ email: "completion-gap@example.com" }]);
     const published: unknown[] = [];
     let failAfterPublish = true;
-    const runtime = runtimeWithJobsQueue({
-      send: async (body: unknown) => {
-        published.push(body);
-      },
-      sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-        published.push(...[...messages].map((message) => message.body));
-        if (failAfterPublish) {
-          failAfterPublish = false;
-          throw new Error("injected ambiguous queue acceptance");
-        }
-      },
-    } as unknown as Queue);
+    const runtime = runtimeWithJobsQueue(
+      queueDouble({
+        send: async (body) => {
+          published.push(body);
+        },
+        sendBatch: async (messages) => {
+          published.push(...messages.map((message) => message.body));
+          if (failAfterPublish) {
+            failAfterPublish = false;
+            throw new Error("injected ambiguous queue acceptance");
+          }
+        },
+      }),
+    );
 
     await expect(processContactImport(fixture.jobId, 0, 1, runtime)).rejects.toThrow(
       "injected ambiguous queue acceptance",

@@ -4,6 +4,7 @@ import { PublicCustomRedirectRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
+import type { JobsQueue } from "../platform/queue-messages";
 import { recordContactEvent } from "../runtime/contact-event-service";
 import { VisitorIdentityService } from "../web/visitor-identity-service";
 
@@ -43,7 +44,7 @@ async function recordRedirectClick(
     redirect: { id: string; workspaceId: string; destinationUrl: string };
     visitorId?: string;
     contactId?: string | null;
-    queue: Queue;
+    queue: JobsQueue;
   },
 ): Promise<void> {
   const repository = new PublicCustomRedirectRepository(database);

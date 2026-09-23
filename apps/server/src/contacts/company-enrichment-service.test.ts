@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { AiGenerationError } from "../agents/generation-error";
 import type { RuntimeEnv } from "../env";
-import {
-  type CompanyEnrichmentError,
-  enrichCompany,
-  isCompanyEnrichmentEnabled,
-} from "./company-enrichment-service";
+import { enrichCompany, isCompanyEnrichmentEnabled } from "./company-enrichment-service";
 
 describe("company enrichment capability", () => {
   it.each([
@@ -21,6 +18,6 @@ describe("company enrichment capability", () => {
     const env = { COMPANY_ENRICHMENT_ENABLED: "false" } as RuntimeEnv;
     await expect(
       enrichCompany(env, { source: "domain", domain: "example.com" }),
-    ).rejects.toMatchObject({ kind: "unavailable" } satisfies Partial<CompanyEnrichmentError>);
+    ).rejects.toMatchObject({ kind: "unavailable" } satisfies Partial<AiGenerationError>);
   });
 });

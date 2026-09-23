@@ -1,5 +1,6 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpcQuery } from "@/lib/orpc";
 export function variablesQueryOptions(projectId: string | null = null) {
   return orpcQuery.projects.variablesList.queryOptions({ input: { projectId } });
@@ -12,25 +13,17 @@ export function variableUsesQueryOptions(projectId: string | null = null, key?: 
 export function variableProjectsQueryOptions() {
   return orpcQuery.projects.list.queryOptions();
 }
-function useVariableInvalidator() {
-  const client = useQueryClient();
-  return () =>
-    Promise.all([
-      client.invalidateQueries({ queryKey: orpcQuery.projects.variablesList.key() }),
-      client.invalidateQueries({ queryKey: orpcQuery.projects.variablesUses.key() }),
-    ]);
-}
 export function useSaveVariable() {
-  return useMutation({
-    ...orpcQuery.projects.variablesSave.mutationOptions(),
-    onSuccess: useVariableInvalidator(),
-  });
+  return useInvalidatingMutation(orpcQuery.projects.variablesSave.mutationOptions(), [
+    orpcQuery.projects.variablesList.key(),
+    orpcQuery.projects.variablesUses.key(),
+  ]);
 }
 export function useDeleteVariable() {
-  return useMutation({
-    ...orpcQuery.projects.variablesDelete.mutationOptions(),
-    onSuccess: useVariableInvalidator(),
-  });
+  return useInvalidatingMutation(orpcQuery.projects.variablesDelete.mutationOptions(), [
+    orpcQuery.projects.variablesList.key(),
+    orpcQuery.projects.variablesUses.key(),
+  ]);
 }
 export function usePreviewVariableImpact() {
   return useMutation(orpcQuery.projects.variablesImpact.mutationOptions());

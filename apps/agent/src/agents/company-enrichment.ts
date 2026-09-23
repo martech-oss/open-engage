@@ -3,11 +3,8 @@ import { useInitialData, useModel, useTool } from "@flue/runtime";
 import { env } from "cloudflare:workers";
 import * as v from "valibot";
 
-import {
-  companyEnrichmentAgentInitialDataSchema,
-  companyEnrichmentResultSchema,
-  validateCompanyEnrichmentResult,
-} from "@openengage/core/contacts";
+import { companyEnrichmentAgent } from "@openengage/core/agents";
+import { validateCompanyEnrichmentResult } from "@openengage/core/contacts";
 
 import { createCompanyEnrichmentTools } from "../tools/company-enrichment";
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
@@ -16,7 +13,7 @@ const MODEL = "cloudflare/anthropic/claude-haiku-4.5";
 
 export function CompanyEnrichment() {
   useModel(MODEL);
-  const initialData = companyEnrichmentAgentInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = companyEnrichmentAgent.initialData.parse(useInitialData<unknown>());
   const [resolveOfficialSite, inspectWebsite, searchMissingFacts] = createCompanyEnrichmentTools({
     AI: env.AI,
     BROWSER: env.BROWSER,
@@ -29,7 +26,7 @@ export function CompanyEnrichment() {
     toolName: "submit_company_enrichment",
     description:
       "Submit the final source-backed company enrichment result. This is the only successful finish and never writes company data.",
-    schema: companyEnrichmentResultSchema,
+    schema: companyEnrichmentAgent.result,
     schemaErrorLabel: "Company enrichment schema validation failed",
     validate: validateCompanyEnrichmentResult,
     retryLimitError: "Company enrichment validation retry limit exceeded",
@@ -63,4 +60,7 @@ Rules:
 }
 
 CompanyEnrichment.initialData = v.unknown();
-CompanyEnrichment.durability = { maxAttempts: 2, timeoutMs: 85_000 };
+CompanyEnrichment.durability = {
+  maxAttempts: 2,
+  timeoutMs: companyEnrichmentAgent.agentTimeoutMs,
+};

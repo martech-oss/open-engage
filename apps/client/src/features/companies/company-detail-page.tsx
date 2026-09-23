@@ -116,7 +116,7 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
         onOpenChange={controller.setAddContactOpen}
         title="連絡先を追加"
         description={`${company.name}へ既存の連絡先を関連付けます。`}
-        contacts={controller.availableContacts}
+        excludeContactIds={controller.assignedContactIds}
         onSubmit={controller.assign}
       />
       <CompanyEnrichmentSheet

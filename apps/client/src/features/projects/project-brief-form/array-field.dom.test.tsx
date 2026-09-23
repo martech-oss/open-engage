@@ -1,12 +1,10 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ArrayField } from "./array-field";
-
-afterEach(cleanup);
 
 describe("ArrayField", () => {
   it("edits one item at a time and exposes add/reorder/remove controls", async () => {

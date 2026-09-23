@@ -7,12 +7,8 @@ import { contacts, createDatabase } from "@openengage/database/testing";
 
 import { executeNode } from "../src/automations/node-execution";
 import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
-import {
-  graph,
-  seedAutomationJob,
-  queueStub,
-  runtimeWithJobsQueue,
-} from "./automation-recovery-test-support";
+import { graph, seedAutomationJob, runtimeWithJobsQueue } from "./automation-recovery-test-support";
+import { queueDouble } from "./queue-double";
 it("stores a rich condition result and keeps the same branch after contact changes and retry", async () => {
   const node = {
     id: "condition",
@@ -45,7 +41,7 @@ it("stores a rich condition result and keeps the same branch after contact chang
       definition,
       job!,
       "lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())).nodes,
     ),
   ).toMatchObject({ branch: "yes" });
   await db.orm.update(contacts).set({ score: 0 }).where(eq(contacts.id, seeded.contactId));
@@ -56,7 +52,7 @@ it("stores a rich condition result and keeps the same branch after contact chang
       definition,
       retry!,
       "lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())).nodes,
     ),
   ).toMatchObject({ branch: "yes" });
 });
@@ -83,7 +79,7 @@ it("advances an already elapsed delay instead of waiting again", async () => {
       definition,
       { ...job!, payload: { waiting: true } },
       "lease",
-      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueStub())).nodes,
+      createAutomationExecutionDependencies(runtimeWithJobsQueue(queueDouble())).nodes,
     ),
   ).toEqual({ branch: "next" });
 });

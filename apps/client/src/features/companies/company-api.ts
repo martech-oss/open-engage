@@ -1,17 +1,10 @@
-import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { CompanyContactDto, CompanySummary } from "@openengage/core/contacts";
 
 export type { CompanyContactDto, CompanySummary };
-
-/** A contact offered when attaching one to a company. */
-export interface ContactOption {
-  id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-}
 
 export interface CompanySearch {
   q: string;
@@ -37,13 +30,6 @@ export function companyQueryOptions(companyId: string) {
 
 export function companyEnrichmentCapabilityQueryOptions() {
   return orpcQuery.companies.enrichmentCapability.queryOptions();
-}
-
-/** Active contacts offered when assigning one to a company. */
-export function companyContactOptionsQueryOptions() {
-  return orpcQuery.contacts.list.queryOptions({
-    input: { limit: 100, status: "active", sort: "name", direction: "asc" },
-  });
 }
 
 export function assignCompanyContact(input: {
@@ -75,19 +61,16 @@ export function invalidateCompanyQueries(
 }
 
 export function useCreateCompany() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.create.mutationOptions(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() }),
-  });
+  return useInvalidatingMutation(orpcQuery.companies.create.mutationOptions(), [
+    orpcQuery.companies.list.key(),
+  ]);
 }
 
 export function useUpdateCompany() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.update.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.companies.update.mutationOptions(),
+    (queryClient, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  );
 }
 
 export function useEnrichCompany() {
@@ -95,17 +78,15 @@ export function useEnrichCompany() {
 }
 
 export function useAssignCompanyContact() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.assignContact.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.companies.assignContact.mutationOptions(),
+    (queryClient, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  );
 }
 
 export function useRemoveCompanyContact() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.companies.removeContact.mutationOptions(),
-    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.companies.removeContact.mutationOptions(),
+    (queryClient, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  );
 }

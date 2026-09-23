@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ProjectsPage } from "./projects-page";
@@ -35,7 +35,6 @@ vi.mock("./program-api", () => ({
 }));
 vi.mock("./project-brief-list-page", () => ({ ProjectBriefsPage: () => null }));
 afterEach(() => {
-  cleanup();
   state.canCreate = false;
   state.navigate.mockClear();
 });

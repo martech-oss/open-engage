@@ -1,17 +1,21 @@
 import { hasWorkspaceRole } from "@openengage/core/shared";
-import { writeAuditLog } from "@openengage/database/platform";
 import {
   ProgramMemberImportRepository,
   ProjectRepository,
-  FormProgramRepository,
   ProjectMemberRepository,
-  ProjectProgramRepository,
   ProgramError,
 } from "@openengage/database/projects";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { getProgramDetail, importProgramMembers, mutateProjectMember } from "./program-service";
+import {
+  bindProgramForm,
+  getProgramDetail,
+  importProgramMembers,
+  mutateProjectMember,
+  publishProgram,
+  saveProgram,
+} from "./program-service";
 
 interface ProgramErrors {
   PROGRAM_NOT_FOUND: () => Error;
@@ -47,34 +51,18 @@ export const programProcedures = {
   programSave: authed.projects.programSave.handler(({ context, input, errors }) =>
     execute(errors, async () => {
       requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-      const result = await new ProjectProgramRepository(context.database, context.workspace).save(
-        context.workspace,
-        input.id,
-        input,
-      );
-      await writeAuditLog(context.database, context.workspace, {
-        action: "project.program.save",
-        resourceType: "project",
-        resourceId: input.id,
-        metadata: { rowVersion: result.rowVersion },
-      });
-      return result;
+      return saveProgram(context.database, context.workspace, input.id, input);
     }),
   ),
   programPublish: authed.projects.programPublish.handler(({ context, input, errors }) =>
     execute(errors, async () => {
       requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-      const result = await new ProjectProgramRepository(
+      return publishProgram(
         context.database,
         context.workspace,
-      ).publish(context.workspace, input.id, input.expectedRowVersion);
-      await writeAuditLog(context.database, context.workspace, {
-        action: "project.program.publish",
-        resourceType: "project",
-        resourceId: input.id,
-        metadata: { version: result.publishedVersion },
-      });
-      return result;
+        input.id,
+        input.expectedRowVersion,
+      );
     }),
   ),
   memberList: authed.projects.memberList.handler(({ context, input, errors }) =>
@@ -126,41 +114,10 @@ export const programProcedures = {
   programBindForm: authed.projects.programBindForm.handler(({ context, input, errors }) =>
     execute(errors, async () => {
       requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-      const programs = new ProjectProgramRepository(context.database, context.workspace);
-      const requireBindingPermission = async (projectId: string, includeArchived: boolean) => {
-        const project = await programs.project(projectId, { includeArchived });
-        const brief = await programs.brief(projectId);
-        const canOwn =
-          !brief ||
-          brief.ownerUserId === context.workspace.userId ||
-          hasWorkspaceRole(context.workspace.role, "admin");
-        if (!canOwn || (brief && brief.status !== "approved" && !project.archivedAt))
-          throw new ProgramError(
-            "forbidden",
-            "Approval is required before changing a published form binding",
-          );
-        return project;
-      };
-      // Archived Projects may release bindings, but cannot receive new ones.
-      await requireBindingPermission(input.id, input.binding === null);
-      if (input.binding && input.binding.projectId !== input.id)
-        throw new ProgramError("invalid", "Form binding must use this explicit Project");
-      const repository = new FormProgramRepository(context.database, context.workspace);
-      const previous = await repository.getIntent(input.formId);
-      if (previous && previous.projectId !== input.id) {
-        const priorProject = await requireBindingPermission(previous.projectId, true);
-        if (!priorProject.archivedAt)
-          throw new ProgramError(
-            "conflict",
-            "Unbind this shared form from its existing Project first",
-          );
-      }
-      await repository.set(input.formId, input.binding);
-      await writeAuditLog(context.database, context.workspace, {
-        action: "project.program.bind_form",
-        resourceType: "project",
-        resourceId: input.id,
-        metadata: { formId: input.formId, binding: input.binding },
+      await bindProgramForm(context.database, context.workspace, {
+        projectId: input.id,
+        formId: input.formId,
+        binding: input.binding,
       });
       return ack;
     }),

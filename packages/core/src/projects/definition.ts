@@ -152,7 +152,5 @@ export const projectBriefGeneratedDraftSchema = projectBriefDraftBaseSchema.omit
   approverUserId: true,
 });
 
-/** @deprecated Use projectBriefDraftInputSchema. */
-export const projectBriefMutationSchema = projectBriefDraftInputSchema;
 /** @deprecated Use ProjectBriefDraftInput. */
 export type ProjectBriefMutation = ProjectBriefDraftInput;

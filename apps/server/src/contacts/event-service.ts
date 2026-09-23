@@ -1,10 +1,13 @@
 import { type OpenEngageDatabase } from "@openengage/database/client";
 import {
   ContactEventRepository,
+  HISTORY_REPLAY_PROJECTIONS,
   type ContactEventProjection,
   type ContactEventRecord,
 } from "@openengage/database/contacts";
 import { uuidv7 } from "@openengage/database/shared";
+
+import type { JobsQueue } from "../platform/queue-messages";
 
 export interface ContactEventInput {
   id?: string;
@@ -16,7 +19,7 @@ export interface ContactEventInput {
   resourceId?: string | null;
   properties?: Record<string, unknown>;
   occurredAt?: string;
-  queue?: Queue;
+  queue?: JobsQueue;
 }
 
 export type ProcessableContactEvent = ContactEventRecord & { contactId: string };
@@ -28,7 +31,7 @@ export type ContactEventProjectionRunner = (context: {
   database: OpenEngageDatabase;
   event: ProcessableContactEvent;
   projection: ContactEventProjection;
-  queue: Queue | undefined;
+  queue: JobsQueue | undefined;
 }) => Promise<ContactEventProjectionResult>;
 
 export class ContactEventProcessor {
@@ -59,7 +62,7 @@ export class ContactEventProcessor {
   }
 
   public async retryDue(
-    queue: Queue,
+    queue: JobsQueue,
     limit = 50,
   ): Promise<Array<{ eventId: string; error: unknown }>> {
     const repository = new ContactEventRepository(this.database);
@@ -77,7 +80,7 @@ export class ContactEventProcessor {
 
   public async process(
     eventId: string,
-    queue?: Queue,
+    queue?: JobsQueue,
   ): Promise<{ eventId: string; enrollmentCount: number }> {
     const repository = new ContactEventRepository(this.database);
     const startedAt = new Date();
@@ -104,10 +107,7 @@ export class ContactEventProcessor {
 
       let enrollmentCount = 0;
       for (const projection of await repository.pendingProjections(event.id)) {
-        if (
-          event.replayMode === "history" &&
-          !["scoring", "grade", "campaign"].includes(projection)
-        ) {
+        if (event.replayMode === "history" && !HISTORY_REPLAY_PROJECTIONS.includes(projection)) {
           await repository.finishProjection(
             event.id,
             leaseId,

@@ -1,10 +1,14 @@
 import * as z from "zod";
 
 import {
+  collectEmailAssetIds,
+  collectMessageVariableKeys,
   emailBrandProfileSchema,
   emailDocumentV2Schema,
   emailHrefSchema,
   emailPurposeSchema,
+  messageVariableCatalogSchema,
+  publicImageCatalogSchema,
 } from "../messaging/index.js";
 import {
   approvedMarketingBriefContextSchema,
@@ -325,6 +329,24 @@ export function validateEmailSequenceProposal(
   return issues;
 }
 
+/** Catalog image and variable checks shared by the sequence Agent retry loop and Server. */
+export function validateEmailSequenceCatalogReferences(
+  proposal: Pick<EmailSequenceProposal, "emails">,
+  catalog: { publicImages: readonly { id: string }[]; variables: readonly { key: string }[] },
+): string | null {
+  const assetIds = new Set(catalog.publicImages.map((image) => image.id));
+  const variableKeys = new Set(catalog.variables.map((variable) => variable.key));
+  for (const email of proposal.emails) {
+    for (const assetId of collectEmailAssetIds(email.content)) {
+      if (!assetIds.has(assetId)) return `Unknown email asset: ${assetId}`;
+    }
+    for (const key of collectMessageVariableKeys(email.content)) {
+      if (!variableKeys.has(key)) return `Unknown message variable: ${key}`;
+    }
+  }
+  return null;
+}
+
 export const emailSequenceDesignerInitialDataSchema = z
   .object({
     request: generateEmailSequenceInputSchema,
@@ -332,26 +354,8 @@ export const emailSequenceDesignerInitialDataSchema = z
     capabilities: marketingCapabilitySnapshotSchema,
     catalog: automationGenerationCatalogSchema,
     brand: emailBrandProfileSchema,
-    variables: z
-      .array(
-        z.object({
-          key: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          description: z.string().max(500),
-        }),
-      )
-      .max(1_000),
-    publicImages: z
-      .array(
-        z.object({
-          id: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          altText: z.string().max(500),
-          width: z.number().int().positive().nullable(),
-          height: z.number().int().positive().nullable(),
-        }),
-      )
-      .max(1_000),
+    variables: messageVariableCatalogSchema,
+    publicImages: publicImageCatalogSchema,
     reserved: z.object({
       proposalId: z.string().min(1),
       automationId: z.string().min(1),

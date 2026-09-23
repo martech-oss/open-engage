@@ -6,13 +6,13 @@ import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { GradingCriterionRow, ScoringRuleRow } from "./scoring-api";
+import type { GradingCriterion, ScoringRule } from "./scoring-api";
 import {
   useGradingCriterionEditorController,
-  useScoringGradingController,
   useScoringRuleEditorController,
-  useScoringRulesController,
-} from "./scoring-controllers";
+} from "./scoring-editor-controllers";
+import { useScoringGradingController } from "./scoring-grading-controller";
+import { useScoringRulesController } from "./scoring-rules-controller";
 
 const doubles = vi.hoisted(() => {
   const mutation = () => ({ mutateAsync: vi.fn<(input: unknown) => Promise<unknown>>() });
@@ -258,7 +258,7 @@ function queryWrapper(
   );
 }
 
-function rule(overrides: Partial<ScoringRuleRow> = {}): ScoringRuleRow {
+function rule(overrides: Partial<ScoringRule> = {}): ScoringRule {
   return {
     id: "rule-1",
     name: "Rule",
@@ -279,7 +279,7 @@ function rule(overrides: Partial<ScoringRuleRow> = {}): ScoringRuleRow {
   };
 }
 
-function criterion(overrides: Partial<GradingCriterionRow> = {}): GradingCriterionRow {
+function criterion(overrides: Partial<GradingCriterion> = {}): GradingCriterion {
   return {
     id: "criterion-1",
     name: "Criterion",

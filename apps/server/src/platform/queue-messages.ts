@@ -11,6 +11,7 @@ export const deliveryQueueMessageSchema = z.object({
   kind: z.literal("delivery"),
   deliveryId: z.string(),
 });
+export type DeliveryQueueMessage = z.infer<typeof deliveryQueueMessageSchema>;
 
 export const contactImportQueueMessageSchema = z.object({
   kind: z.literal("contact_import"),
@@ -24,6 +25,7 @@ export const programMemberImportQueueMessageSchema = z.object({
   workspaceId: z.string().min(1),
   jobId: z.string().min(1),
 });
+export type ProgramMemberImportQueueMessage = z.infer<typeof programMemberImportQueueMessageSchema>;
 
 export const contactExportQueueMessageSchema = z.object({
   kind: z.literal("contact_export"),
@@ -97,3 +99,6 @@ export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
+
+/** The jobs queue as its producers see it: only messages the jobs consumer accepts. */
+export type JobsQueue = Queue<JobsQueueMessage>;

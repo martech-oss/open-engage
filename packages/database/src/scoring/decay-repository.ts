@@ -9,6 +9,7 @@ import {
   contactEventOutbox,
   contactEventProjections,
 } from "../contacts/schema";
+import { runBatch } from "../shared/database-utils";
 import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { contactCategoryScores, scoreContributions, scoreEvents } from "./schema";
@@ -122,9 +123,7 @@ export class ScoringDecayRepository extends DatabaseRepository {
         .where(and(eq(scoreContributions.id, row.id), won)),
     ];
 
-    const [inserted] = await orm.batch(
-      statements as [(typeof statements)[number], ...typeof statements],
-    );
-    return inserted.meta.changes === 1 ? eventId : null;
+    const [inserted] = await runBatch(orm, statements);
+    return inserted?.meta.changes === 1 ? eventId : null;
   }
 }

@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ContactOptions } from "@/features/contacts/contact-api";
 import { ContactSales } from "@/features/deals/contact-sales";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { ContactProfile } from "@openengage/core/contacts";
 
 import { ContactAvatar, contactName, ContactStatusBadge } from "./contact-bits";

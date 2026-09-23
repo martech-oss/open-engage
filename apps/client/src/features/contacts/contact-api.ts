@@ -1,10 +1,6 @@
-import {
-  type QueryClient,
-  keepPreviousData,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { type QueryClient, keepPreviousData } from "@tanstack/react-query";
 
+import { useInvalidatingMutation } from "@/hooks/use-invalidating-mutation";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
   ContactBulkAction,
@@ -138,6 +134,23 @@ export function contactsQueryOptions(search: ContactSearch, cursor?: string) {
   });
 }
 
+/** Page size for "add an existing contact" pickers; the search narrows beyond it. */
+export const CONTACT_PICKER_LIMIT = 50;
+
+/** Active contacts matching `query`, searched on the server so no contact is out of reach. */
+export function contactPickerQueryOptions(query: string) {
+  return orpcQuery.contacts.list.queryOptions({
+    input: {
+      ...(query ? { query } : {}),
+      limit: CONTACT_PICKER_LIMIT,
+      status: "active",
+      sort: "name",
+      direction: "asc",
+    },
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function contactOptionsQueryOptions() {
   return orpcQuery.contacts.options.queryOptions();
 }
@@ -153,11 +166,10 @@ export function invalidateContactOptions(queryClient: QueryClient): Promise<void
 }
 
 export function useCreateContact() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...orpcQuery.contacts.create.mutationOptions(),
-    onSuccess: (_contact, variables) => invalidateCreatedContactQueries(queryClient, variables),
-  });
+  return useInvalidatingMutation(
+    orpcQuery.contacts.create.mutationOptions(),
+    (queryClient, variables) => invalidateCreatedContactQueries(queryClient, variables),
+  );
 }
 
 /** Refreshes every read model affected by the single atomic create command. */

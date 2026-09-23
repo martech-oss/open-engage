@@ -2,7 +2,7 @@ import * as z from "zod";
 
 import { marketingCapabilitySnapshotSchema } from "../projects/schema.js";
 import { emailBrandProfileSchema } from "./brand.js";
-import { emailDocumentV2Schema } from "./content.js";
+import { emailDocumentBlocks, emailDocumentV2Schema } from "./content.js";
 
 export const emailPurposeSchema = z.enum(["transactional", "marketing"]);
 export type EmailPurpose = z.infer<typeof emailPurposeSchema>;
@@ -46,31 +46,58 @@ export const emailGenerationResultSchema = z.object({
 });
 export type EmailGenerationResult = z.infer<typeof emailGenerationResultSchema>;
 
+/** Block, image and insertion checks shared by the Email Designer retry loop and Server. */
+export function validateEmailGenerationResult(
+  result: EmailGenerationResult,
+  catalog: { publicImages: readonly { id: string }[] },
+): string | null {
+  const assetIds = new Set(catalog.publicImages.map((image) => image.id));
+  const blockIds = new Set<string>();
+  for (const block of emailDocumentBlocks(result.proposal.content)) {
+    if (blockIds.has(block.id)) return `Duplicate block id: ${block.id}`;
+    blockIds.add(block.id);
+    if (block.type === "image" && !assetIds.has(block.source.assetId)) {
+      return `Unknown image asset: ${block.source.assetId}`;
+    }
+  }
+  const insertionPoints = new Set(result.proposal.content.blocks.map((block) => block.id));
+  const invalidRequest = result.imageRequests.find(
+    (request) => request.afterBlockId !== null && !insertionPoints.has(request.afterBlockId),
+  );
+  return invalidRequest ? `Unknown image insertion block: ${invalidRequest.afterBlockId}` : null;
+}
+
+/** Message variables a generation Agent may reference as {{ message.key }}. */
+export const messageVariableCatalogSchema = z
+  .array(
+    z.object({
+      key: z.string().min(1).max(191),
+      name: z.string().min(1).max(191),
+      description: z.string().max(500),
+    }),
+  )
+  .max(1_000);
+
+/** Public image assets a generation Agent may place by id. */
+export const publicImageCatalogSchema = z
+  .array(
+    z.object({
+      id: z.string().min(1).max(191),
+      name: z.string().min(1).max(191),
+      altText: z.string().max(500),
+      width: z.number().int().positive().nullable(),
+      height: z.number().int().positive().nullable(),
+    }),
+  )
+  .max(1_000);
+
 export const emailGenerationAgentInitialDataSchema = z
   .object({
     request: generateEmailInputSchema,
     capabilities: marketingCapabilitySnapshotSchema,
     brand: emailBrandProfileSchema,
-    variables: z
-      .array(
-        z.object({
-          key: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          description: z.string().max(500),
-        }),
-      )
-      .max(1_000),
-    publicImages: z
-      .array(
-        z.object({
-          id: z.string().min(1).max(191),
-          name: z.string().min(1).max(191),
-          altText: z.string().max(500),
-          width: z.number().int().positive().nullable(),
-          height: z.number().int().positive().nullable(),
-        }),
-      )
-      .max(1_000),
+    variables: messageVariableCatalogSchema,
+    publicImages: publicImageCatalogSchema,
   })
   .strict();
 export type EmailGenerationAgentInitialData = z.infer<typeof emailGenerationAgentInitialDataSchema>;

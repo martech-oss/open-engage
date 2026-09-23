@@ -9,7 +9,12 @@ import { type OpenEngageDatabase } from "@openengage/database/client";
 import { ConsentRepository } from "@openengage/database/consent";
 import { MessagingRepository } from "@openengage/database/messaging";
 import { SegmentQueryRepository } from "@openengage/database/segments";
-import { isConstraintError } from "@openengage/database/shared";
+import { isUniqueConstraintError } from "@openengage/database/shared";
+
+const VARIABLE_KEY_UNIQUE_COLUMNS = [
+  "message_variables.workspace_id",
+  "message_variables.key",
+] as const;
 
 export function listMessageVariables(
   database: OpenEngageDatabase,
@@ -31,7 +36,7 @@ export async function createMessageVariable(
   try {
     return await new MessagingRepository(database, workspace).createMessageVariable(input);
   } catch (error) {
-    if (!isConstraintError(error)) throw error;
+    if (!isUniqueConstraintError(error, VARIABLE_KEY_UNIQUE_COLUMNS)) throw error;
     throw new VariableConflictError();
   }
 }
@@ -45,7 +50,7 @@ export async function updateMessageVariable(
   try {
     return await new MessagingRepository(database, workspace).updateMessageVariable(id, input);
   } catch (error) {
-    if (!isConstraintError(error)) throw error;
+    if (!isUniqueConstraintError(error, VARIABLE_KEY_UNIQUE_COLUMNS)) throw error;
     throw new VariableConflictError();
   }
 }

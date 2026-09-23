@@ -1,3 +1,8 @@
+import {
+  type AgentInitialData,
+  type AgentResult,
+  landingPageDesignerAgent,
+} from "@openengage/core/agents";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { landingGenerationResultSchema } from "@openengage/core/web";
 import { createDatabase, type OpenEngageDatabase } from "@openengage/database/client";
@@ -68,8 +73,8 @@ export async function processLandingGeneration(
   jobId: string,
   env: RuntimeEnv,
   requestProposal?: (
-    initialData: unknown,
-  ) => Promise<ReturnType<typeof landingGenerationResultSchema.parse>>,
+    initialData: AgentInitialData<typeof landingPageDesignerAgent>,
+  ) => Promise<AgentResult<typeof landingPageDesignerAgent>>,
 ): Promise<void> {
   const database = createDatabase(env.DB),
     jobs = new LandingGenerationRepository(database);
@@ -104,7 +109,7 @@ export async function processLandingGeneration(
       workspace.workspaceId,
       base.document.variableProjectId ?? null,
     );
-    const initialData = {
+    const initialData: AgentInitialData<typeof landingPageDesignerAgent> = {
       variables: variables.values.map(({ key, type, value }) => ({ key, type, value })),
       variableProjectId: base.document.variableProjectId ?? null,
       brand,
@@ -129,11 +134,9 @@ export async function processLandingGeneration(
         ? requestProposal(initialData)
         : requestAgentProposal({
             env,
-            agent: "landing-page-designer",
+            agent: landingPageDesignerAgent,
             prompt: job.prompt,
             initialData,
-            schema: landingGenerationResultSchema,
-            timeoutMs: 60_000,
           })),
     );
     for (const request of proposal.imageRequests) {

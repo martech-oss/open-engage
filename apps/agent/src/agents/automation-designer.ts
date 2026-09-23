@@ -2,11 +2,8 @@
 import { useInitialData, useModel, useSkill, useTool } from "@flue/runtime";
 import * as v from "valibot";
 
-import {
-  automationDesignerInitialDataSchema,
-  automationGenerationAgentResultSchema,
-  validateAutomation,
-} from "@openengage/core/automations";
+import { automationDesignerAgent } from "@openengage/core/agents";
+import { validateAutomation } from "@openengage/core/automations";
 
 import automationFlowDesigner from "../skills/automation-flow-designer/SKILL.md";
 import { validateAutomationDefinitionTool } from "../tools/schema-validation";
@@ -19,12 +16,12 @@ export function AutomationDesigner() {
   useSkill(automationFlowDesigner);
   useTool(validateAutomationDefinitionTool);
 
-  const initialData = automationDesignerInitialDataSchema.parse(useInitialData<unknown>());
+  const initialData = automationDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_automation_proposal",
     description:
       "Submit the final structured automation proposal. This is the only successful way to finish.",
-    schema: automationGenerationAgentResultSchema,
+    schema: automationDesignerAgent.result,
     schemaErrorLabel: "Proposal schema validation failed",
     validate: (proposal) => {
       if (proposal.status !== "ready") return null;
@@ -69,4 +66,7 @@ Rules:
 }
 
 AutomationDesigner.initialData = v.unknown();
-AutomationDesigner.durability = { maxAttempts: 3, timeoutMs: 55_000 };
+AutomationDesigner.durability = {
+  maxAttempts: 3,
+  timeoutMs: automationDesignerAgent.agentTimeoutMs,
+};

@@ -1,12 +1,13 @@
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import { ScoringDecayRepository } from "@openengage/database/scoring";
 
+import type { JobsQueue } from "../platform/queue-messages";
 import { processPendingPublicFormEvent } from "../runtime/contact-event-service";
 
 /** Bounded per invocation; due rows are the durable worklist for queue continuation and cron recovery. */
 export async function runScoringDecay(
   database: OpenEngageDatabase,
-  queue?: Queue,
+  queue?: JobsQueue,
   now = new Date(),
   limit = 20,
 ): Promise<void> {

@@ -12,8 +12,9 @@ import {
 import { enrollContactManually } from "../src/automations/enrollment";
 import { processAutomationJob } from "../src/automations/worker";
 import { createAutomationExecutionDependencies } from "../src/runtime/automation-execution";
-import { queueStub, runtimeWithJobsQueue } from "./automation-recovery-test-support";
+import { runtimeWithJobsQueue } from "./automation-recovery-test-support";
 import { seedWorkspaceClient } from "./factory";
+import { queueDouble } from "./queue-double";
 it("awaits one pinned child, wakes parent once, and cascades explicit cancellation", async () => {
   const { client, workspaceId } = await seedWorkspaceClient(env.DB);
   const child = await client.automations.create({
@@ -53,7 +54,7 @@ it("awaits one pinned child, wakes parent once, and cascades explicit cancellati
   expect(enrolled.kind).toBe("enrolled");
   if (enrolled.kind !== "enrolled") return;
   const engine = new repositories.AutomationJobRepository(db),
-    runtime = runtimeWithJobsQueue(queueStub());
+    runtime = runtimeWithJobsQueue(queueDouble());
   for (let round = 0; round < 2; round++)
     for (const job of await engine.claimDueJobs(new Date().toISOString(), "2099-01-01T00:00:00Z"))
       await processAutomationJob(
@@ -145,7 +146,7 @@ it.each(["await", "async"] as const)(
     if (enrolled.kind !== "enrolled") throw new Error("Expected enrollment");
     const engine = new repositories.AutomationJobRepository(db),
       calls = new repositories.AutomationCallRepository(db),
-      runtime = runtimeWithJobsQueue(queueStub());
+      runtime = runtimeWithJobsQueue(queueDouble());
     for (let round = 0; round < 6; round++) {
       await calls.recover(new Date().toISOString());
       for (const job of await engine.claimDueJobs(new Date().toISOString(), "2099-01-01T00:00:00Z"))

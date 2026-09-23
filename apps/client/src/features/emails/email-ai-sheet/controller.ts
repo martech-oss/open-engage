@@ -4,7 +4,7 @@ import {
   createAiProposalWorkflowKey,
   useAiProposalWorkflow,
 } from "@/hooks/use-ai-proposal-workflow";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type {
   EmailGenerationResult,
   EmailImageRequest,

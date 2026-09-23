@@ -1,6 +1,5 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
-import { routeStatusComponents } from "@/components/route-status";
 import {
   parseTaskSearch,
   taskSearchDefaults,
@@ -20,7 +19,6 @@ export const Route = createFileRoute("/_app/tasks")({
     await context.queryClient.ensureQueryData(tasksQueryOptions(deps));
     return undefined;
   },
-  ...routeStatusComponents,
   component: TasksRoute,
 });
 

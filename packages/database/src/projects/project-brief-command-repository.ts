@@ -1,6 +1,6 @@
 import { and, eq, exists, isNull, ne, sql } from "drizzle-orm";
 
-import type { ProjectBriefMutation } from "@openengage/core/projects";
+import type { ProjectBriefDraftInput } from "@openengage/core/projects";
 import type { WorkspaceContext } from "@openengage/core/shared";
 
 import { auditLogs } from "../platform/schema";
@@ -29,7 +29,7 @@ export interface ExpectedBriefVersion {
 export class ProjectBriefCommandRepository extends WorkspaceRepository<WorkspaceContext> {
   private readonly guards = new ProjectBriefCommandGuards(this.database, this.context);
   public async createBrief(
-    input: ProjectBriefMutation,
+    input: ProjectBriefDraftInput,
   ): Promise<
     { kind: "done"; id: string } | { kind: "invalid_member" } | { kind: "forbidden_actor" }
   > {
@@ -83,7 +83,7 @@ export class ProjectBriefCommandRepository extends WorkspaceRepository<Workspace
 
   public async updateBrief(
     projectId: string,
-    input: ProjectBriefMutation & ExpectedBriefVersion,
+    input: ProjectBriefDraftInput & ExpectedBriefVersion,
   ): Promise<ProjectBriefCommandOutcome> {
     if (!(await this.guards.assignedMembersAreEligible(input.ownerUserId, input.approverUserId))) {
       return { kind: "invalid_member" };

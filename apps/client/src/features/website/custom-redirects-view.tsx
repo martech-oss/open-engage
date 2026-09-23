@@ -7,7 +7,7 @@ import type { DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 
 import { summarizeCustomRedirects } from "./resource-model";
-import type { CustomRedirectRow } from "./website-api";
+import type { CustomRedirect } from "./website-api";
 
 export function customRedirectColumns({
   formatDateTime,
@@ -16,10 +16,10 @@ export function customRedirectColumns({
   publicUrl,
 }: {
   formatDateTime: (value: string) => string;
-  onEdit: (item: CustomRedirectRow) => void;
-  onArchive: (item: CustomRedirectRow) => Promise<void>;
-  publicUrl: (item: CustomRedirectRow) => string;
-}): DataTableColumn<CustomRedirectRow>[] {
+  onEdit: (item: CustomRedirect) => void;
+  onArchive: (item: CustomRedirect) => Promise<void>;
+  publicUrl: (item: CustomRedirect) => string;
+}): DataTableColumn<CustomRedirect>[] {
   return [
     {
       key: "status",
@@ -82,7 +82,7 @@ export function customRedirectColumns({
   ];
 }
 
-export function CustomRedirectsSummary({ items }: { items: CustomRedirectRow[] }): ReactNode {
+export function CustomRedirectsSummary({ items }: { items: CustomRedirect[] }): ReactNode {
   const summary = summarizeCustomRedirects(items);
   const cards = [
     {

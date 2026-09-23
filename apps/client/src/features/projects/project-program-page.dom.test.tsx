@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ProjectProgramPage } from "./project-program-page";
@@ -41,7 +41,6 @@ vi.mock("./clone-panel", () => ({
   ),
 }));
 afterEach(() => {
-  cleanup();
   state.published = true;
 });
 it("opens published projects on outcomes and groups configuration under settings", () => {

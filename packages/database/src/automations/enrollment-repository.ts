@@ -1,15 +1,12 @@
 import { and, eq, isNull, ne, notExists, or, sql } from "drizzle-orm";
 
-import {
-  automationDefinitionSchema,
-  type AutomationDefinition,
-} from "@openengage/core/automations";
+import { type AutomationDefinition } from "@openengage/core/automations";
 
 import { contacts } from "../contacts/schema";
 import { isConstraintError, nowIso } from "../shared/database-utils";
-import { defineJsonCodec } from "../shared/json-codec";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
+import { automationGraphCodec } from "./codecs";
 import {
   automationRunTargets,
   automationEnrollments,
@@ -18,8 +15,6 @@ import {
   automationTriggers,
   automationVersions,
 } from "./schema";
-
-const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
 export class AutomationEnrollmentRepository extends WorkspaceRepository {
   /** Published triggers of active automations listening for this event. */
@@ -91,7 +86,7 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
     return row
       ? {
           ...row,
-          graph: graphCodec.decode(row.graph),
+          graph: automationGraphCodec.decode(row.graph),
         }
       : null;
   }
@@ -132,7 +127,9 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
       )
       .get();
     if (!version) return null;
-    const source = graphCodec.decode(version.graph).nodes.find((node) => node.type === "source");
+    const source = automationGraphCodec
+      .decode(version.graph)
+      .nodes.find((node) => node.type === "source");
     if (!source || source.id !== input.sourceNodeId) return null;
     const reentry = input.reentry ?? source.config.reentry;
     const cooldown = input.cooldownMinutes ?? source.config.cooldownMinutes;
@@ -176,7 +173,9 @@ export class AutomationEnrollmentRepository extends WorkspaceRepository {
               parentJobId: sql<string | null>`NULL`.as("parent_job_id"),
               projectId: sql<
                 string | null
-              >`${graphCodec.decode(version.graph).variableProjectId ?? null}`.as("project_id"),
+              >`${automationGraphCodec.decode(version.graph).variableProjectId ?? null}`.as(
+                "project_id",
+              ),
               executionSnapshot: sql<string | null>`NULL`.as("execution_snapshot"),
             })
             .from(contacts)

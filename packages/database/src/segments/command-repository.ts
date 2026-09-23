@@ -2,14 +2,13 @@ import { and, eq, exists, sql } from "drizzle-orm";
 
 import { type SegmentFilter } from "@openengage/core/segments";
 
-import { conditionalAudit } from "../projects/project-brief-persistence";
 import {
   approvedProjectLinkPrecondition,
+  approvedProjectLinkStatements,
   authenticatedProjectActorId,
   ProjectBriefLinkConflictError,
   type ApprovedProjectLink,
 } from "../projects/project-resource-guard";
-import { projectBriefs, projectItems } from "../projects/schema";
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
@@ -63,47 +62,14 @@ export class SegmentCommandRepository extends WorkspaceRepository {
             NULL, ${now}, ${now}
           WHERE ${exists(precondition)}`,
         ),
-        this.database.orm.insert(projectItems).select(
-          sql`SELECT
-            ${this.context.workspaceId}, ${link.projectId}, 'segment', ${id},
-            ${link.briefRevision}, ${link.addedByUserId}, ${now}
-          WHERE ${exists(precondition)}`,
-        ),
-        conditionalAudit(
+        ...approvedProjectLinkStatements(
           this.database.orm,
           this.context,
-          link.addedByUserId,
+          link,
+          precondition,
           { action: "segment.create", resourceType: "segment", resourceId: id },
-          precondition,
           now,
         ),
-        conditionalAudit(
-          this.database.orm,
-          this.context,
-          link.addedByUserId,
-          {
-            action: "project.item.add",
-            resourceType: "project",
-            resourceId: link.projectId,
-            metadata: {
-              resourceType: "segment",
-              resourceId: id,
-              briefRevision: link.briefRevision,
-            },
-          },
-          precondition,
-          now,
-        ),
-        this.database.orm
-          .update(projectBriefs)
-          .set({ rowVersion: sql`${projectBriefs.rowVersion} + 1`, updatedAt: now })
-          .where(
-            and(
-              eq(projectBriefs.workspaceId, this.context.workspaceId),
-              eq(projectBriefs.projectId, link.projectId),
-              exists(precondition),
-            ),
-          ),
       ]);
       if (created.meta.changes !== 1) throw new ProjectBriefLinkConflictError();
     } else {

@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 
 import { WorkspaceTimeProvider } from "@/lib/workspace-time";
 import type { VariableRef } from "@openengage/core/projects";
 
 import { VariableSetting } from "./automation-node-settings/variable-setting";
-afterEach(cleanup);
 it("edits absolute dates in Workspace time and stores an unambiguous UTC instant", () => {
   const change = vi.fn<(value: string | VariableRef) => void>();
   render(

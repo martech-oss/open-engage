@@ -4,8 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
-import { useDebouncedSearch } from "@/hooks/use-debounced-search";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { useUrlSearchDraft } from "@/hooks/use-url-search-draft";
+import { getErrorMessage } from "@/lib/errors";
 import type { WorkspaceCapabilities } from "@openengage/core/workspaces";
 
 import {
@@ -39,7 +39,6 @@ export function useAssetsPageController(
   ]);
   const { cursor, hasPreviousPage, goToNextPage, goToPreviousPage } =
     useCursorPagination(paginationKey);
-  const [queryText, setQueryText] = useState(initialSearch.q);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [replacing, setReplacing] = useState<Asset | null>(null);
@@ -52,10 +51,9 @@ export function useAssetsPageController(
   const restoreAsset = useRestoreAsset();
   const deleteAsset = useDeleteAsset();
 
-  useDebouncedSearch({
-    value: queryText,
+  const [queryText, setQueryText] = useUrlSearchDraft({
+    value: initialSearch.q,
     onCommit: (value) => {
-      if (value === initialSearch.q) return;
       void navigate({
         to: "/website/assets",
         search: { ...initialSearch, q: value },

@@ -3,7 +3,8 @@ import type { OpenEngageDatabase } from "@openengage/database/client";
 import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { enqueueSegmentContactReconciliation } from "../segments/reconciliation-queue";
+import type { JobsQueue } from "../platform/queue-messages";
+import { requeueContactSegments } from "../segments/reconciliation-queue";
 import {
   addContactTag,
   adjustContactScore,
@@ -23,7 +24,7 @@ export interface ContactResourceRouterDependencies {
     database: OpenEngageDatabase;
     workspace: WorkspaceContext;
     relation: { contactId: string; resourceId: string };
-    queue: Queue;
+    queue: JobsQueue;
   }): Promise<boolean>;
 }
 
@@ -71,11 +72,7 @@ export const addTagProcedure = authed.contacts.assignTag.handler(
     if (!(await addContactTag(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.contactId],
-    );
+    await requeueContactSegments(context, [input.contactId]);
     return ack;
   },
 );
@@ -86,11 +83,7 @@ export const removeTagProcedure = authed.contacts.removeTag.handler(
     if (!(await removeContactTag(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.contactId],
-    );
+    await requeueContactSegments(context, [input.contactId]);
     return ack;
   },
 );
@@ -117,11 +110,7 @@ export const removeSegmentProcedure = authed.contacts.removeFromSegment.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     await removeContactSegment(context.database, context.workspace, input);
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.contactId],
-    );
+    await requeueContactSegments(context, [input.contactId]);
     return ack;
   },
 );
@@ -137,11 +126,7 @@ export const adjustScoreProcedure = authed.contacts.adjustScore.handler(
       adjustment,
     );
     if (!contact) throw errors.SCORE_NOT_ADJUSTABLE();
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [contactId],
-    );
+    await requeueContactSegments(context, [contactId]);
     return contact;
   },
 );
@@ -152,11 +137,7 @@ export const restoreContactProcedure = authed.contacts.restore.handler(
     if (!(await restoreContact(context.database, context.workspace, input.id))) {
       throw errors.CONTACT_NOT_ARCHIVED();
     }
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      [input.id],
-    );
+    await requeueContactSegments(context, [input.id]);
     return ack;
   },
 );
@@ -167,11 +148,7 @@ export const bulkActionProcedure = authed.contacts.bulkUpdate.handler(
     const outcome = await applyContactBulkAction(context.database, context.workspace, input);
     if (outcome.kind === "archive_forbidden") throw errors.ARCHIVE_FORBIDDEN();
     if (outcome.kind === "resource_required") throw errors.RESOURCE_REQUIRED();
-    await enqueueSegmentContactReconciliation(
-      context.env.JOBS_QUEUE,
-      context.workspace.workspaceId,
-      input.contactIds,
-    );
+    await requeueContactSegments(context, input.contactIds);
     return { updated: outcome.updated };
   },
 );

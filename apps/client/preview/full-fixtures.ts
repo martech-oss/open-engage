@@ -64,7 +64,7 @@ export function additionalFixture(
   path: string,
   input: any,
   base: (path: string, input: any) => any,
-) {
+): any {
   const empty = new URLSearchParams(location.search).get("state") === "empty";
   const catalog = segmentGenerationCatalogSchema.parse({
     tags: [],
@@ -179,7 +179,7 @@ export function additionalFixture(
       summary: { complaints: 0, unsubscribeRate: 0, ...data.summary },
     });
   }
-  if (path.startsWith("reports.")) return emptyReport(path.split(".")[1], input);
+  if (path.startsWith("reports.")) return emptyReport(path.slice("reports.".length), input);
   if (path === "automations.getDraft") {
     const flow = base("automations.list", {}).find(
       (flow: any) => flow.id === input.id || ["welcome", "event"].includes(input.id),

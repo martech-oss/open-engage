@@ -1,14 +1,15 @@
+import { type AgentInitialData, emailSequenceDesignerAgent } from "@openengage/core/agents";
 import {
   AUTOMATION_RESOURCE_KINDS,
   type AutomationGenerationCatalog,
   type AutomationResourceKind,
   capabilityForSequence,
-  emailSequenceAgentResultSchema,
   type EmailSequenceContinuation,
   type EmailSequenceGenerationResult,
   type EmailSequenceInputRequest,
   type EmailSequenceProposal,
   type GenerateEmailSequenceInput,
+  validateEmailSequenceCatalogReferences,
   validateEmailSequenceProposal,
 } from "@openengage/core/automations";
 import type { ApprovedMarketingBriefContext } from "@openengage/core/projects";
@@ -21,21 +22,20 @@ import { type OpenEngageDatabase } from "@openengage/database/client";
 import { EmailDesignRepository, MessagingRepository } from "@openengage/database/messaging";
 import { uuidv7 } from "@openengage/database/shared";
 
+import { AiGenerationError } from "../agents/generation-error";
 import { loadMarketingAgentContext } from "../agents/marketing-context";
-import { AgentProposalError, requestAgentProposal } from "../agents/proposal-client";
+import { requestAgentProposal } from "../agents/proposal-client";
 import type { RuntimeEnv } from "../env";
-import { collectEmailAssetIds } from "../messaging/email-template-service";
 import {
   loadAutomationResourceContext,
   optionsForResourceKind,
   validateAutomationResources,
 } from "./resource-validation";
 
-const GENERATION_TIMEOUT_MS = 90_000;
 const MAX_PROPOSAL_BYTES = 512 * 1_024;
-const MESSAGE_VARIABLE_PATTERN = /\{\{\s*message\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g;
 
-export type EmailSequenceFailure = "failed" | "timeout" | "unavailable" | "conflict";
+/** Why a sequence proposal cannot be applied: it fails validation, or the drafts changed underneath it. */
+export type EmailSequenceFailure = "invalid" | "conflict";
 
 export class EmailSequenceError extends Error {
   public constructor(
@@ -48,6 +48,23 @@ export class EmailSequenceError extends Error {
 }
 
 export async function generateEmailSequence(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
+  env: RuntimeEnv,
+  input: GenerateEmailSequenceInput,
+  trustedBrief?: ApprovedMarketingBriefContext,
+): Promise<EmailSequenceGenerationResult> {
+  try {
+    return await designEmailSequence(database, workspace, env, input, trustedBrief);
+  } catch (error) {
+    // A proposal the Agent returned that fails validation is a failed generation.
+    if (error instanceof EmailSequenceError)
+      throw new AiGenerationError("failed", { cause: error });
+    throw error;
+  }
+}
+
+async function designEmailSequence(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   env: RuntimeEnv,
@@ -171,47 +188,20 @@ async function validateReadyProposal(
   if (resourceIssues.length > 0) {
     fail(resourceIssues.map((issue) => issue.message).join("; "));
   }
-  const allowedAssets = new Set(context.publicImages.map((image) => image.id));
-  const allowedVariables = new Set(context.variables.map((variable) => variable.key));
-  for (const email of proposal.emails) {
-    for (const assetId of collectEmailAssetIds(email.content)) {
-      if (!allowedAssets.has(assetId)) fail(`Unknown email asset: ${assetId}`);
-    }
-    const serialized = JSON.stringify(email.content);
-    for (const match of serialized.matchAll(MESSAGE_VARIABLE_PATTERN)) {
-      const key = match[1];
-      if (key && !allowedVariables.has(key)) fail(`Unknown message variable: ${key}`);
-    }
-  }
+  const catalogIssue = validateEmailSequenceCatalogReferences(proposal, context);
+  if (catalogIssue) fail(catalogIssue);
 }
 
 async function requestSequenceProposal(
   env: RuntimeEnv,
-  initialData: {
-    request: GenerateEmailSequenceInput;
-    trustedBrief?: ApprovedMarketingBriefContext;
-    catalog: AutomationGenerationCatalog;
-    brand: SequenceContext["brand"];
-    variables: SequenceContext["variables"];
-    publicImages: SequenceContext["publicImages"];
-    reserved: ReturnType<typeof reservedIds>;
-  },
+  initialData: AgentInitialData<typeof emailSequenceDesignerAgent>,
 ) {
-  try {
-    return await requestAgentProposal({
-      env,
-      agent: "email-sequence-designer",
-      prompt: initialData.request.prompt,
-      initialData,
-      schema: emailSequenceAgentResultSchema,
-      timeoutMs: GENERATION_TIMEOUT_MS,
-    });
-  } catch (error) {
-    if (error instanceof AgentProposalError) {
-      throw new EmailSequenceError(error.kind, { cause: error });
-    }
-    throw error;
-  }
+  return requestAgentProposal({
+    env,
+    agent: emailSequenceDesignerAgent,
+    prompt: initialData.request.prompt,
+    initialData,
+  });
 }
 
 function unresolvedContinuation(
@@ -266,5 +256,5 @@ function isResourceKind(value: string): value is AutomationResourceKind {
 }
 
 function fail(message: string): never {
-  throw new EmailSequenceError("failed", { cause: new Error(message) });
+  throw new EmailSequenceError("invalid", { cause: new Error(message) });
 }

@@ -28,6 +28,19 @@ export const sessionErrors = {
   ORIGIN_MISMATCH: workspaceErrors.ORIGIN_MISMATCH,
 } as const;
 
+export const contactNotFoundError = {
+  CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
+} as const;
+
+/** AI generation failures. `failedMessage` names what the model could not produce. */
+export function aiGenerationErrors(failedMessage: string) {
+  return {
+    AI_GENERATION_FAILED: { status: 502, message: failedMessage },
+    AI_GENERATION_UNAVAILABLE: { status: 503, message: "AI生成を現在利用できません" },
+    AI_GENERATION_TIMEOUT: { status: 504, message: "AI生成がタイムアウトしました" },
+  } as const;
+}
+
 export const briefContextErrors = {
   BRIEF_NOT_FOUND: { status: 404, message: "施策ブリーフが見つかりません" },
   BRIEF_NOT_APPROVED: { status: 409, message: "承認済みの施策ブリーフが必要です" },

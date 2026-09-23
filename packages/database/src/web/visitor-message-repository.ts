@@ -1,42 +1,11 @@
-import { and, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 
-import { contactEvents, contacts } from "../contacts/schema";
 import { changedExactlyOne } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { siteMessages } from "./schema";
 import { persistSiteMessageEvent, type SiteMessageEventInput } from "./site-message-event-writer";
 
 export class VisitorMessageRepository extends WorkspaceRepository {
-  /** Used by the tracking beacon to attach a page view to a known contact. */
-  public async findActiveContactIdByEmail(email: string): Promise<string | null> {
-    const row = await this.database.orm
-      .select({ id: contacts.id })
-      .from(contacts)
-      .where(
-        and(this.inWorkspace(contacts), eq(contacts.email, email), ne(contacts.status, "archived")),
-      )
-      .get();
-    return row?.id ?? null;
-  }
-
-  /** The most recently identified contact behind a tracking visitor id, if any. */
-  public async findVisitorContactId(visitorId: string): Promise<string | null> {
-    const row = await this.database.orm
-      .select({ contactId: contactEvents.contactId })
-      .from(contactEvents)
-      .where(
-        and(
-          this.inWorkspace(contactEvents),
-          eq(contactEvents.visitorId, visitorId),
-          isNotNull(contactEvents.contactId),
-        ),
-      )
-      .orderBy(desc(contactEvents.occurredAt))
-      .limit(1)
-      .get();
-    return row?.contactId ?? null;
-  }
-
   public async listActiveSiteMessagesForVisitor(
     now: string,
     identified = false,

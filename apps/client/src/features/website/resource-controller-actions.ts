@@ -1,3 +1,5 @@
+import { getErrorMessage } from "@/lib/errors";
+
 export async function archiveWebsiteResource({
   archive,
   onSuccess,
@@ -11,6 +13,6 @@ export async function archiveWebsiteResource({
     await archive();
     onSuccess();
   } catch (error) {
-    onError(error instanceof Error ? error.message : "操作に失敗しました");
+    onError(getErrorMessage(error, "操作に失敗しました"));
   }
 }

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 
 import type { EmailsReport } from "../report-api";
 import { EmailsReportView } from "./emails-report-view";
@@ -10,7 +10,6 @@ vi.mock("../report-widgets", () => ({
   ReportTableCard: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   sourceTypeLabel: () => "配信元",
 }));
-afterEach(cleanup);
 function report(sends: number): EmailsReport {
   return {
     category: "emails",

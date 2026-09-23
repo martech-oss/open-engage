@@ -42,6 +42,7 @@ export class AutomationPublicationRepository extends WorkspaceRepository {
       .get();
     if (!row) return null;
     const version = row.version;
+    // Not automationGraphCodec: publication reports this ZodError as invalid_graph.
     const graph = automationDefinitionSchema.parse(JSON.parse(version.graph));
     return {
       automationId: id,

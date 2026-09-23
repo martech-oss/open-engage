@@ -27,6 +27,20 @@ import {
   landingPageVersions,
 } from "./schema";
 
+function decodeLandingVersion(row: typeof landingPageVersions.$inferSelect, document: string) {
+  return {
+    ...row,
+    document: landingPageDocumentSchema.parse(JSON.parse(document)),
+    publishedDocument: row.publishedDocument
+      ? landingPageDocumentSchema.parse(JSON.parse(row.publishedDocument))
+      : null,
+    variableSnapshot: row.variableSnapshot
+      ? variableSnapshotSchema.parse(JSON.parse(row.variableSnapshot))
+      : null,
+    formBindings: landingFormBindingSchema.array().parse(JSON.parse(row.formBindings)),
+  };
+}
+
 export class LandingDesignRepository extends WorkspaceRepository {
   async page(id: string) {
     return this.database.orm
@@ -53,19 +67,7 @@ export class LandingDesignRepository extends WorkspaceRepository {
         ),
       )
       .get();
-    return row?.document
-      ? {
-          ...row,
-          document: landingPageDocumentSchema.parse(JSON.parse(row.document)),
-          publishedDocument: row.publishedDocument
-            ? landingPageDocumentSchema.parse(JSON.parse(row.publishedDocument))
-            : null,
-          variableSnapshot: row.variableSnapshot
-            ? variableSnapshotSchema.parse(JSON.parse(row.variableSnapshot))
-            : null,
-          formBindings: landingFormBindingSchema.array().parse(JSON.parse(row.formBindings)),
-        }
-      : null;
+    return row?.document ? decodeLandingVersion(row, row.document) : null;
   }
   async versions(pageId: string) {
     const rows = await this.database.orm
@@ -76,17 +78,7 @@ export class LandingDesignRepository extends WorkspaceRepository {
       .limit(100);
     return rows
       .filter((row) => row.document)
-      .map((row) => ({
-        ...row,
-        document: landingPageDocumentSchema.parse(JSON.parse(row.document!)),
-        publishedDocument: row.publishedDocument
-          ? landingPageDocumentSchema.parse(JSON.parse(row.publishedDocument))
-          : null,
-        variableSnapshot: row.variableSnapshot
-          ? variableSnapshotSchema.parse(JSON.parse(row.variableSnapshot))
-          : null,
-        formBindings: landingFormBindingSchema.array().parse(JSON.parse(row.formBindings)),
-      }));
+      .map((row) => decodeLandingVersion(row, row.document!));
   }
   async validProject(id: string) {
     return Boolean(

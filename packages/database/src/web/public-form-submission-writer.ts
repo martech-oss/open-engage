@@ -3,13 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 import type { ProgramBinding } from "@openengage/core/projects";
 
 import type { OpenEngageDatabase } from "../client";
-import { contactEventProjectionRows } from "../contacts/event-repository";
-import {
-  contactEventOutbox,
-  contactEventProjections,
-  contactEvents,
-  contacts,
-} from "../contacts/schema";
+import { contactEventStatements } from "../contacts/event-repository";
+import { contacts } from "../contacts/schema";
 import { VisitorRepository } from "../contacts/visitor-repository";
 import { siteVisitors } from "../contacts/visitor-schema";
 import { ProjectMemberRepository } from "../projects/program-member-repository";
@@ -122,7 +117,7 @@ export async function persistPublicFormSubmissionBatch(
     ipHash: input.ipHash,
     createdAt: input.occurredAt,
   });
-  const formSubmittedEvent = orm.insert(contactEvents).values({
+  const formSubmitted = contactEventStatements(orm, {
     id: input.formSubmittedEventId,
     workspaceId: input.workspaceId,
     contactId,
@@ -130,32 +125,17 @@ export async function persistPublicFormSubmissionBatch(
     type: "form_submitted",
     resourceType: "form",
     resourceId: input.formId,
-    properties: JSON.stringify({ ...input.context, formId: input.formId }),
+    properties: { ...input.context, formId: input.formId },
     occurredAt: input.occurredAt,
     createdAt: input.occurredAt,
   });
-  const formSubmittedWork = orm.insert(contactEventOutbox).values({
-    eventId: input.formSubmittedEventId,
-    workspaceId: input.workspaceId,
-    status: "pending",
-    createdAt: input.occurredAt,
-  });
-  const formSubmittedProjections = orm.insert(contactEventProjections).values(
-    contactEventProjectionRows({
-      id: input.formSubmittedEventId,
-      workspaceId: input.workspaceId,
-      createdAt: input.occurredAt,
-    }),
-  );
 
   if (existingContactId) {
     await orm.batch([
       contactMutation,
       ...identityStatements,
       submission,
-      formSubmittedEvent,
-      formSubmittedWork,
-      formSubmittedProjections,
+      ...formSubmitted,
       ...(programWork?.statements ?? []),
     ]);
     return { contactId, visitorId: input.visitorId ?? null };
@@ -164,33 +144,18 @@ export async function persistPublicFormSubmissionBatch(
     contactMutation,
     ...identityStatements,
     submission,
-    orm.insert(contactEvents).values({
+    ...contactEventStatements(orm, {
       id: input.contactCreatedEventId,
       workspaceId: input.workspaceId,
       contactId,
       type: "contact_created",
       resourceType: "contact",
       resourceId: contactId,
-      properties: "{}",
+      properties: {},
       occurredAt: input.occurredAt,
       createdAt: input.occurredAt,
     }),
-    orm.insert(contactEventOutbox).values({
-      eventId: input.contactCreatedEventId,
-      workspaceId: input.workspaceId,
-      status: "pending",
-      createdAt: input.occurredAt,
-    }),
-    orm.insert(contactEventProjections).values(
-      contactEventProjectionRows({
-        id: input.contactCreatedEventId,
-        workspaceId: input.workspaceId,
-        createdAt: input.occurredAt,
-      }),
-    ),
-    formSubmittedEvent,
-    formSubmittedWork,
-    formSubmittedProjections,
+    ...formSubmitted,
     ...(programWork?.statements ?? []),
   ]);
   return { contactId, visitorId: input.visitorId ?? null };

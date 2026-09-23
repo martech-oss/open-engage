@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { ErrorAlert, FormInput, FormTextarea, LoadingButton } from "@/components/app-ui";
 import { contactSearchDefaults, contactsQueryOptions } from "@/features/contacts/contact-api";
-import { getErrorMessage } from "@/hooks/use-form-submission";
+import { getErrorMessage } from "@/lib/errors";
 import type { ProjectProgram } from "@openengage/core/projects";
 
 import {

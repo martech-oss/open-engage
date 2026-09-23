@@ -111,7 +111,7 @@ describe("oRPC batch handler", () => {
 
   it("rejects a POST mutation smuggled inside an outer GET batch", async () => {
     const { token } = await seedWorkspace(env.DB, { name: "Strict GET Workspace" });
-    let mutationRequest: Request | undefined;
+    let mutationRequest: Pick<Request, "method" | "url" | "headers" | "json"> | undefined;
     const captureLink = new RPCLink({
       url: "http://localhost:8787/api/rpc",
       fetch: async (request) => {

@@ -12,9 +12,9 @@
   "dependencies": {
     "@openengage/core": "workspace:*",
     "@openengage/orpc": "workspace:*",
-    "@orpc/client": "1.14.13",
-    "@orpc/contract": "1.14.13",
-    "@orpc/openapi-client": "1.14.13"
+    "@orpc/client": "catalog:",
+    "@orpc/contract": "catalog:",
+    "@orpc/openapi-client": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:",

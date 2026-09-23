@@ -1,5 +1,5 @@
 import { createExecutionContext, createScheduledController } from "cloudflare:test";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MaintenanceRepository } from "@openengage/database/testing";
@@ -7,18 +7,9 @@ import { MaintenanceRepository } from "@openengage/database/testing";
 import { runDailyMaintenance } from "../src/platform/maintenance-worker";
 import { scheduled } from "../src/runtime/dispatch";
 import { seedWorkspaceClient } from "./factory";
+import { publicPost } from "./public-requests";
 
 afterEach(() => vi.restoreAllMocks());
-
-function publicCall(path: string, body: Record<string, unknown>): Promise<Response> {
-  return exports.default.fetch(
-    new Request(`http://localhost:8787${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
-}
 
 async function createPublicForm(slugSuffix: string) {
   const fixture = await seedWorkspaceClient(env.DB);
@@ -96,7 +87,7 @@ describe("public form atomic idempotency", () => {
     vi.spyOn(MaintenanceRepository.prototype, "purgeExpiredIdempotencyKeys").mockResolvedValue();
     vi.spyOn(MaintenanceRepository.prototype, "reconcileContactScores").mockResolvedValue(0);
     const form = await createPublicForm("processed-retention");
-    const response = await publicCall(form.path, {
+    const response = await publicPost(form.path, {
       email: "retention@example.com",
       idempotencyKey: crypto.randomUUID(),
     });
@@ -135,14 +126,14 @@ describe("public form atomic idempotency", () => {
   it("catches a duplicate key with different payload mutating the existing contact", async () => {
     const form = await createPublicForm("duplicate");
     const idempotencyKey = crypto.randomUUID();
-    const first = await publicCall(form.path, {
+    const first = await publicPost(form.path, {
       email: "duplicate@example.com",
       firstName: "Original",
       idempotencyKey,
     });
     expect(await first.json()).toEqual({ data: { accepted: true, message: "Accepted" } });
 
-    const identicalReplay = await publicCall(form.path, {
+    const identicalReplay = await publicPost(form.path, {
       email: "duplicate@example.com",
       firstName: "Original",
       idempotencyKey,
@@ -150,7 +141,7 @@ describe("public form atomic idempotency", () => {
     expect(identicalReplay.status).toBe(202);
     expect(await identicalReplay.json()).toEqual({ data: { accepted: true, duplicate: true } });
 
-    const duplicate = await publicCall(form.path, {
+    const duplicate = await publicPost(form.path, {
       email: "duplicate@example.com",
       firstName: "Mutated",
       idempotencyKey,
@@ -175,12 +166,12 @@ describe("public form atomic idempotency", () => {
   it("catches a same-email race losing one distinct accepted submission", async () => {
     const form = await createPublicForm("email-race");
     const [first, second] = await Promise.all([
-      publicCall(form.path, {
+      publicPost(form.path, {
         email: "race@example.com",
         firstName: "First",
         idempotencyKey: crypto.randomUUID(),
       }),
-      publicCall(form.path, {
+      publicPost(form.path, {
         email: "race@example.com",
         firstName: "Second",
         idempotencyKey: crypto.randomUUID(),
@@ -218,7 +209,7 @@ describe("public form atomic idempotency", () => {
       tagId: null,
       enabled: true,
     });
-    const submitted = await publicCall(form.path, {
+    const submitted = await publicPost(form.path, {
       email: "scanner@example.com",
       firstName: "Scanner",
       idempotencyKey: crypto.randomUUID(),
@@ -276,7 +267,7 @@ describe("public form atomic idempotency", () => {
        BEGIN SELECT RAISE(FAIL, 'injected public form score failure'); END`,
     ).run();
 
-    const response = await publicCall(form.path, {
+    const response = await publicPost(form.path, {
       email: "pending@example.com",
       firstName: "Pending",
       idempotencyKey: crypto.randomUUID(),
@@ -323,7 +314,7 @@ describe("public form atomic idempotency", () => {
     const form = await createPublicForm("operational-error");
     await env.DB.prepare("DROP TABLE form_submissions").run();
 
-    const response = await publicCall(form.path, {
+    const response = await publicPost(form.path, {
       email: "operational@example.com",
       firstName: "Must roll back",
       idempotencyKey: crypto.randomUUID(),

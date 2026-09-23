@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 
 import { createDatabase, DataJobRepository, uuidv7 } from "@openengage/database/testing";
 
-import type { RuntimeEnv } from "../src/env";
 import { seedWorkspace } from "./factory";
 
 export async function seedImport(rows: Array<Record<string, string>>, totalParts = 1) {
@@ -20,31 +19,6 @@ export async function seedImport(rows: Array<Record<string, string>>, totalParts
     cursor: { totalParts },
   });
   return { workspaceId, jobId };
-}
-
-export function queueStub(
-  published: unknown[],
-  beforePublish: () => Promise<void> = async () => {},
-): Queue {
-  return {
-    send: async (body: unknown) => {
-      published.push(body);
-    },
-    sendBatch: async (messages: Iterable<MessageSendRequest<unknown>>) => {
-      await beforePublish();
-      published.push(...[...messages].map((message) => message.body));
-    },
-  } as unknown as Queue;
-}
-
-export function runtimeWithJobsQueue(queue: Queue, database: D1Database = env.DB): RuntimeEnv {
-  return new Proxy(env, {
-    get(target, property, receiver) {
-      if (property === "JOBS_QUEUE") return queue;
-      if (property === "DB") return database;
-      return Reflect.get(target, property, receiver);
-    },
-  }) as RuntimeEnv;
 }
 
 export function pauseNextDatabaseBatch(source: D1Database): {

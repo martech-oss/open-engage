@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -35,7 +38,7 @@ describe("three Worker provisioning", () => {
       transactionalFromName: "Acme Engage",
       turnstileSiteKey: "0x4AAAA-test-site-key",
       server:
-        '{"name": "openengage-server", "service": "openengage-agent", "database_name": "openengage-db", "database_id": "00000000-0000-0000-0000-000000000000", "APP_URL": "http://localhost:5173", "bucket": "openengage-assets", "queues": [{"queue": "openengage-program-member-import"}, {"queue": "openengage-jobs"}, {"queue": "openengage-delivery"}, {"queue": "openengage-dead-letter"}, {"queue": "openengage-email-events"}], "send_email": [{"name": "EMAIL", "allowed_sender_addresses": ["notifications@example.com"]}], "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com", "TRANSACTIONAL_FROM_NAME": "OpenEngage", "TURNSTILE_SITE_KEY": ""}',
+        '{"name": "openengage-server", "service": "openengage-agent", "database_name": "openengage-db", "database_id": "00000000-0000-0000-0000-000000000000", "APP_URL": "http://localhost:5173", "bucket_name": "openengage-assets", "queues": [{"queue": "openengage-program-member-import"}, {"queue": "openengage-jobs"}, {"queue": "openengage-delivery"}, {"queue": "openengage-dead-letter"}, {"queue": "openengage-email-events"}], "send_email": [{"name": "EMAIL", "allowed_sender_addresses": ["notifications@example.com"]}], "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com", "TRANSACTIONAL_FROM_NAME": "OpenEngage", "TURNSTILE_SITE_KEY": ""}',
       agent:
         '{"name": "openengage-agent", "env": {"bootstrap": {"name": "openengage-agent"}}, "service": "openengage-server"}',
       client: '{"name": "openengage", "service": "openengage-server"}',
@@ -57,6 +60,8 @@ describe("three Worker provisioning", () => {
     expect(result.client).toBe('{"name": "acme-engage", "service": "acme-engage-server"}');
     expect(readConfiguredResources(result.server)).toEqual({
       database: "acme-engage-db",
+      bucket: "acme-engage-assets",
+      queues: Object.values(cloudflareResourceNames("acme-engage").queues),
       fromEmail: "notifications@mail.acme.example",
       sendingDomain: "mail.acme.example",
       emailEventsQueue: "acme-engage-email-events",
@@ -65,6 +70,21 @@ describe("three Worker provisioning", () => {
     expect(cloudflareResourceNames("acme-engage").queues.emailEvents).toBe(
       "acme-engage-email-events",
     );
+  });
+
+  it("lets doctor verify every resource create provisions for the template config", async () => {
+    const template = await readFile(
+      fileURLToPath(new URL("../../../apps/server/wrangler.jsonc", import.meta.url)),
+      "utf8",
+    );
+    const expected = cloudflareResourceNames("openengage");
+
+    const configured = readConfiguredResources(template);
+
+    expect(configured.database).toBe(expected.database);
+    expect(configured.bucket).toBe(expected.bucket);
+    expect(configured.queues).toEqual(expect.arrayContaining(Object.values(expected.queues)));
+    expect(configured.queues).toHaveLength(Object.values(expected.queues).length);
   });
 
   it("deploys bootstrap before the normal server-agent-client sequence", () => {

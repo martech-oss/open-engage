@@ -241,7 +241,7 @@ async function seedReplyTarget(input: { workspaceId?: string; contactEmail: stri
     channel: "email",
     purpose: "transactional",
     provider: "cloudflare",
-    recipient: contact.email,
+    recipient: input.contactEmail,
     idempotencyKey: `signed-inbound:${deliveryId}`,
     payload: "{}",
   });

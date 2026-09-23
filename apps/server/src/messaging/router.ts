@@ -4,9 +4,10 @@ import {
 } from "@openengage/database/messaging";
 import { ack } from "@openengage/orpc";
 
+import { aiGenerationProcedureErrors, rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
-import { EmailGenerationError, generateEmail } from "./email-generation-service";
-import { EmailImageGenerationError, generateEmailImage } from "./email-image-generation-service";
+import { generateEmail } from "./email-generation-service";
+import { generateEmailImage } from "./email-image-generation-service";
 import {
   createEmailTemplate,
   EmailTemplateServiceError,
@@ -34,15 +35,7 @@ export const generateTemplateProcedure = authed.emails.generateTemplate.handler(
     try {
       return await generateEmail(context.database, context.workspace, context.env, input);
     } catch (error) {
-      if (!(error instanceof EmailGenerationError)) throw error;
-      switch (error.kind) {
-        case "failed":
-          throw errors.AI_GENERATION_FAILED();
-        case "timeout":
-          throw errors.AI_GENERATION_TIMEOUT();
-        case "unavailable":
-          throw errors.AI_GENERATION_UNAVAILABLE();
-      }
+      rethrowAiGenerationError(error, aiGenerationProcedureErrors(errors));
     }
   },
 );
@@ -59,15 +52,11 @@ export const generateImageProcedure = authed.emails.generateImage.handler(
         context.executionContext,
       );
     } catch (error) {
-      if (!(error instanceof EmailImageGenerationError)) throw error;
-      switch (error.kind) {
-        case "failed":
-          throw errors.IMAGE_GENERATION_FAILED();
-        case "timeout":
-          throw errors.IMAGE_GENERATION_TIMEOUT();
-        case "unavailable":
-          throw errors.IMAGE_GENERATION_UNAVAILABLE();
-      }
+      rethrowAiGenerationError(error, {
+        failed: () => errors.IMAGE_GENERATION_FAILED(),
+        timeout: () => errors.IMAGE_GENERATION_TIMEOUT(),
+        unavailable: () => errors.IMAGE_GENERATION_UNAVAILABLE(),
+      });
     }
   },
 );

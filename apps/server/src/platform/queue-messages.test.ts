@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { jobsQueueMessageSchema } from "./queues";
+import { jobsQueueMessageSchema } from "./queue-messages";
 
 describe("jobs queue messages", () => {
   it.each([

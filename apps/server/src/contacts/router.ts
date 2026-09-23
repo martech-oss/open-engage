@@ -3,6 +3,7 @@ import type { OpenEngageDatabase } from "@openengage/database/client";
 import { ack, CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
+import type { JobsQueue } from "../platform/queue-messages";
 import type { ContactCommandService } from "./command-service";
 import {
   getContactExportFile,
@@ -17,14 +18,14 @@ export interface ContactRouterDependencies {
   createCommandService(input: {
     database: OpenEngageDatabase;
     workspace: WorkspaceContext;
-    queue: Queue;
+    queue: JobsQueue;
     defer(promise: Promise<unknown>): void;
   }): ContactCommandService;
   recordContactApiEvent(input: {
     database: OpenEngageDatabase;
     workspaceId: string;
     event: ContactApiEventInput;
-    queue: Queue;
+    queue: JobsQueue;
   }): Promise<ContactEventOutcome>;
 }
 

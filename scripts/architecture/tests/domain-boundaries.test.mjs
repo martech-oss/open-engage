@@ -1,6 +1,14 @@
 import { runScenarios } from "./helpers.mjs";
 
 await runScenarios("architecture: domain-boundaries", [
+  {
+    name: "rejects raw prepared SQL anywhere in the server, including TSX templates",
+    files: {
+      "apps/server/src/auth/email-templates/example.tsx":
+        'export const query = (db: D1Database) => db.prepare("SELECT 1");\n',
+    },
+    want: "raw \\.prepare\\( call",
+  },
   ...["worker", "node-execution", "action-execution", "execution-dependencies"].map((module) => ({
     name: `rejects automation ${module} dependencies on runtime composition`,
     files: {

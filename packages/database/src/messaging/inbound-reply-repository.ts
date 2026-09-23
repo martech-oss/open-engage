@@ -1,7 +1,6 @@
 import { and, eq, exists, sql } from "drizzle-orm";
 
-import { contactEventProjectionRows } from "../contacts/event-repository";
-import { contactEventOutbox, contactEventProjections, contactEvents } from "../contacts/schema";
+import { contactEventStatements } from "../contacts/event-repository";
 import { DatabaseRepository } from "../shared/repository-base";
 import { deliveries, deliveryEvents, inboundEmails } from "./schema";
 
@@ -49,7 +48,7 @@ export class MessagingInboundReplyRepository extends DatabaseRepository {
     providerEventId: string;
     deliveryEventMetadata: string;
     contactEventId: string;
-    contactEventProperties: string;
+    contactEventProperties: Record<string, unknown>;
     receivedAt: string;
   }): Promise<void> {
     const orm = this.database.orm;
@@ -68,11 +67,6 @@ export class MessagingInboundReplyRepository extends DatabaseRepository {
       )
       .limit(1);
     const ownsClaim = exists(winningClaim);
-    const projectionRows = contactEventProjectionRows({
-      id: input.contactEventId,
-      workspaceId: input.workspaceId,
-      createdAt: input.receivedAt,
-    });
     await orm.batch([
       orm
         .insert(deliveryEvents)
@@ -96,26 +90,20 @@ export class MessagingInboundReplyRepository extends DatabaseRepository {
           ${input.inbound.attachmentManifest}, ${input.receivedAt}
         WHERE ${ownsClaim}`,
       ),
-      orm.insert(contactEvents).select(
-        sql`SELECT
-          ${input.contactEventId}, ${input.workspaceId}, ${input.contactId}, NULL,
-          'live', 'email_replied', 'delivery', ${input.deliveryId}, ${input.contactEventProperties},
-          ${input.receivedAt}, NULL, ${input.receivedAt}
-        WHERE ${ownsClaim}`,
-      ),
-      orm.insert(contactEventOutbox).select(
-        sql`SELECT
-          ${input.contactEventId}, ${input.workspaceId}, 'pending', 0, NULL,
-          NULL, NULL, NULL, ${input.receivedAt}, NULL
-        WHERE ${ownsClaim}`,
-      ),
-      ...projectionRows.map((row) =>
-        orm.insert(contactEventProjections).select(
-          sql`SELECT
-            ${row.eventId}, ${row.workspaceId}, ${row.projection}, ${row.status},
-            ${row.createdAt}, ${null}
-          WHERE ${ownsClaim}`,
-        ),
+      ...contactEventStatements(
+        orm,
+        {
+          id: input.contactEventId,
+          workspaceId: input.workspaceId,
+          contactId: input.contactId,
+          type: "email_replied",
+          resourceType: "delivery",
+          resourceId: input.deliveryId,
+          properties: input.contactEventProperties,
+          occurredAt: input.receivedAt,
+          createdAt: input.receivedAt,
+        },
+        { when: ownsClaim },
       ),
     ]);
   }

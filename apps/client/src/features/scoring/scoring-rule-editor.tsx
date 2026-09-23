@@ -6,19 +6,19 @@ import { FieldGroup } from "@/components/ui/field";
 import type { ContactOptions } from "@/features/contacts/contact-api";
 import { SCORING_EVENT_TYPES, SCORING_MATCH_TYPES } from "@openengage/core/scoring";
 
-import type { ScoringCategoryRow, ScoringRuleRow } from "./scoring-api";
+import type { ScoringCategory, ScoringRule } from "./scoring-api";
 import { matchValueLabel, SCORING_EVENT_LABELS, SCORING_MATCH_LABELS } from "./scoring-labels";
 
 export type ScoringRuleEditorViewProps = {
-  item: ScoringRuleRow | null;
+  item: ScoringRule | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   busy: boolean;
   error: string;
-  matchType: ScoringRuleRow["matchType"];
-  onMatchTypeChange: (matchType: ScoringRuleRow["matchType"]) => void;
-  categories: ScoringCategoryRow[];
+  matchType: ScoringRule["matchType"];
+  onMatchTypeChange: (matchType: ScoringRule["matchType"]) => void;
+  categories: ScoringCategory[];
   tags: ContactOptions["tags"];
 };
 
@@ -70,7 +70,7 @@ export function ScoringRuleEditorView({
           name="matchType"
           defaultValue={item?.matchType ?? "any"}
           onChange={(event) =>
-            onMatchTypeChange(event.currentTarget.value as ScoringRuleRow["matchType"])
+            onMatchTypeChange(event.currentTarget.value as ScoringRule["matchType"])
           }
         >
           {SCORING_MATCH_TYPES.map((type) => (
