@@ -35,10 +35,10 @@
   },
   "dependencies": {
     "@openengage/core": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260728.1",
+    "@cloudflare/workers-types": "catalog:",
     "drizzle-kit": "^0.31.10",
     "typescript": "catalog:",
     "vitest": "catalog:"
