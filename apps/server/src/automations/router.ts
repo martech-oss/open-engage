@@ -2,7 +2,7 @@ import { ack } from "@openengage/orpc";
 
 import { aiGenerationProcedureErrors, rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
-import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
+import { requireApprovedBrief, throwBriefFailure } from "../projects/brief-resolution";
 import { getAutomationAnalytics } from "./analytics-service";
 import { createAutomationCommandService } from "./command-service";
 import { generateEmailSequence } from "./email-sequence-service";
@@ -26,13 +26,10 @@ export const createAutomationProcedure = authed.automations.create.handler(
       case "ok":
         return outcome.automation;
       case "brief_not_found":
-        throw errors.BRIEF_NOT_FOUND();
       case "brief_not_approved":
-        throw errors.BRIEF_NOT_APPROVED();
       case "brief_revision_conflict":
-        throw errors.BRIEF_REVISION_CONFLICT();
       case "forbidden":
-        throw errors.FORBIDDEN();
+        return throwBriefFailure(errors, outcome);
     }
   },
 );
@@ -41,7 +38,7 @@ export const generateAutomationProcedure = authed.automations.generate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      const trustedBrief = await resolveApprovedProjectBriefContext(
+      const trustedBrief = await requireApprovedBrief(
         context.database,
         context.workspace,
         input,
@@ -64,7 +61,7 @@ export const generateEmailSequenceProcedure = authed.automations.generateSequenc
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      const trustedBrief = await resolveApprovedProjectBriefContext(
+      const trustedBrief = await requireApprovedBrief(
         context.database,
         context.workspace,
         input,
@@ -99,13 +96,10 @@ export const applyEmailSequenceProcedure = authed.automations.applySequence.hand
       case "invalid_sequence":
         throw errors.INVALID_SEQUENCE();
       case "brief_not_found":
-        throw errors.BRIEF_NOT_FOUND();
       case "brief_not_approved":
-        throw errors.BRIEF_NOT_APPROVED();
       case "brief_revision_conflict":
-        throw errors.BRIEF_REVISION_CONFLICT();
       case "forbidden":
-        throw errors.FORBIDDEN();
+        return throwBriefFailure(errors, outcome);
     }
   },
 );

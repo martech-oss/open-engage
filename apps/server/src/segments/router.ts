@@ -2,7 +2,7 @@ import { ack } from "@openengage/orpc";
 
 import { aiGenerationProcedureErrors, rethrowAiGenerationError } from "../agents/generation-error";
 import { authed, requireRole } from "../orpc/base";
-import { resolveApprovedProjectBriefContext } from "../projects/project-brief-context";
+import { requireApprovedBrief, throwBriefFailure } from "../projects/brief-resolution";
 import { createSegmentCommandService } from "./command-service";
 import { generateSegment } from "./generation-service";
 import { getSegment, listSegments, previewSegment } from "./list-service";
@@ -43,13 +43,10 @@ export const createSegmentProcedure = authed.segments.create.handler(
       case "segment_conflict":
         throw errors.SEGMENT_CONFLICT({ cause: outcome.cause });
       case "brief_not_found":
-        throw errors.BRIEF_NOT_FOUND();
       case "brief_not_approved":
-        throw errors.BRIEF_NOT_APPROVED();
       case "brief_revision_conflict":
-        throw errors.BRIEF_REVISION_CONFLICT();
       case "forbidden":
-        throw errors.FORBIDDEN();
+        return throwBriefFailure(errors, outcome);
     }
   },
 );
@@ -87,7 +84,7 @@ export const generateSegmentProcedure = authed.segments.generate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
-      const trustedBrief = await resolveApprovedProjectBriefContext(
+      const trustedBrief = await requireApprovedBrief(
         context.database,
         context.workspace,
         input,
