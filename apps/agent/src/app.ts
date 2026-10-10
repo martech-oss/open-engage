@@ -1,5 +1,5 @@
-import { createAgentRouter } from "@flue/runtime/routing";
 import { setProvider } from "@flue/runtime";
+import { createAgentRouter } from "@flue/runtime/routing";
 import { env } from "cloudflare:workers";
 import { Hono } from "hono";
 

@@ -1,9 +1,14 @@
-import { cloudflareBindingProvider, type CloudflareAIBinding } from "@flue/runtime/cloudflare/workers-ai";
+import {
+  cloudflareBindingProvider,
+  type CloudflareAIBinding,
+} from "@flue/runtime/cloudflare/workers-ai";
 
 const LUNA_ID = "openai/gpt-6-luna";
 
 /** Add the new model until the Flue/Pi gateway catalog includes it. */
-export function createAgentModelProvider(binding: CloudflareAIBinding) {
+export function createAgentModelProvider(
+  binding: CloudflareAIBinding,
+): ReturnType<typeof cloudflareBindingProvider> {
   const provider = cloudflareBindingProvider({ binding });
   if (provider.getModels().some((model) => model.id === LUNA_ID)) return provider;
 

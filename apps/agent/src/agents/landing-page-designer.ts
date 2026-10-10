@@ -1,10 +1,10 @@
 "use agent";
 import { useInitialData, useModel } from "@flue/runtime";
-import { AGENT_MODEL } from "./model";
 import * as v from "valibot";
 
 import { landingPageDesignerAgent } from "@openengage/core/agents";
 
+import { AGENT_MODEL } from "./model";
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
 
 export function LandingPageDesigner() {

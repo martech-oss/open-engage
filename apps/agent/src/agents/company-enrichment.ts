@@ -7,8 +7,8 @@ import { companyEnrichmentAgent } from "@openengage/core/agents";
 import { validateCompanyEnrichmentResult } from "@openengage/core/contacts";
 
 import { createCompanyEnrichmentTools } from "../tools/company-enrichment";
-import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
 import { AGENT_MODEL } from "./model";
+import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
 
 export function CompanyEnrichment() {
   useModel(AGENT_MODEL);
