@@ -4,10 +4,11 @@ import * as v from "valibot";
 
 import { landingPageDesignerAgent } from "@openengage/core/agents";
 
+import { AGENT_MODEL } from "./model";
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
 
 export function LandingPageDesigner() {
-  useModel("anthropic/claude-haiku-4-5");
+  useModel(AGENT_MODEL);
   const context = landingPageDesignerAgent.initialData.parse(useInitialData<unknown>());
   useStructuredProposalSubmission({
     toolName: "submit_landing_page",

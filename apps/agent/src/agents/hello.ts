@@ -12,14 +12,13 @@ import {
   validateAutomationDefinitionTool,
   validateSegmentFilterTool,
 } from "../tools/schema-validation";
+import { AGENT_MODEL } from "./model";
 
 // Every exported capitalized function in a 'use agent' module is an agent,
 // and the function's name is its durable identity. The return value is the
 // agent's system prompt.
 export function Hello() {
-  // Cloudflare's built-in models need no API key — swap in e.g.
-  // useModel('cloudflare/@cf/moonshotai/kimi-k2.6') to go keyless.
-  useModel("anthropic/claude-haiku-4-5");
+  useModel(AGENT_MODEL);
   useSandbox(bash(() => new Bash({ fs: new InMemoryFs() })));
   useSkill(marketingAutomation);
   useSkill(customerJourneyMap);

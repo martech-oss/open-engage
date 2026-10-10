@@ -17,6 +17,7 @@ import {
   uuidv7,
 } from "@openengage/database/testing";
 
+import { parseCsv } from "../src/contacts/csv";
 import {
   getContactExportFile,
   getDataJob,
@@ -66,6 +67,50 @@ describe("contact export jobs", () => {
     expect(csv).toContain('"\'=2+2"');
     expect(csv).toContain('"all-archived","archived@example.com"');
     expect(csv).not.toContain("all-hidden");
+  });
+
+  it("neutralizes persisted whitespace and control-prefixed formulas without changing stored values", async () => {
+    const workspace = await seedWorkspaceContext(env.DB, "export-formula-prefixes");
+    const database = createDatabase(env.DB);
+    const values = {
+      firstName: "\t=1+1",
+      lastName: "\r+2+2",
+      phone: "\n-3+3",
+      externalId: " \ufeff\u001f@SUM(1,2)",
+      stage: "\u007f\u0085=2+2",
+    };
+    await database.orm.insert(contacts).values(
+      contactRow(workspace.workspaceId, "formula-prefixes", {
+        ...values,
+        email: "formula-prefixes@example.com",
+      }),
+    );
+    const { jobId } = await startContactExport(database, env.JOBS_QUEUE, workspace);
+
+    await processContactExport(jobId, runtimeEnv);
+
+    const rows = parseCsv(await completedCsv(workspace, jobId));
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.slice(2, 7)).toEqual([
+      "'\t=1+1",
+      "'\r+2+2",
+      "'\n-3+3",
+      "' \ufeff\u001f@SUM(1,2)",
+      "'\u007f\u0085=2+2",
+    ]);
+    await expect(
+      database.orm
+        .select({
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          phone: contacts.phone,
+          externalId: contacts.externalId,
+          stage: contacts.stage,
+        })
+        .from(contacts)
+        .where(eq(contacts.id, "formula-prefixes"))
+        .get(),
+    ).resolves.toEqual(values);
   });
 
   it("applies every export filter alone and in combination without crossing workspaces", async () => {

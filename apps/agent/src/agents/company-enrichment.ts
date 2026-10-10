@@ -7,12 +7,11 @@ import { companyEnrichmentAgent } from "@openengage/core/agents";
 import { validateCompanyEnrichmentResult } from "@openengage/core/contacts";
 
 import { createCompanyEnrichmentTools } from "../tools/company-enrichment";
+import { AGENT_MODEL } from "./model";
 import { serializeTrustedContext, useStructuredProposalSubmission } from "./structured-proposal";
 
-const MODEL = "cloudflare/anthropic/claude-haiku-4.5";
-
 export function CompanyEnrichment() {
-  useModel(MODEL);
+  useModel(AGENT_MODEL);
   const initialData = companyEnrichmentAgent.initialData.parse(useInitialData<unknown>());
   const [resolveOfficialSite, inspectWebsite, searchMissingFacts] = createCompanyEnrichmentTools({
     AI: env.AI,

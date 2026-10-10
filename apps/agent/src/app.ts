@@ -1,4 +1,6 @@
+import { setProvider } from "@flue/runtime";
 import { createAgentRouter } from "@flue/runtime/routing";
+import { env } from "cloudflare:workers";
 import { Hono } from "hono";
 
 import {
@@ -18,7 +20,12 @@ import { EmailSequenceDesigner } from "./agents/email-sequence-designer.ts";
 import { Hello } from "./agents/hello.ts";
 import { LandingPageDesigner } from "./agents/landing-page-designer.ts";
 import { MarketingAutomationDesigner } from "./agents/marketing-automation-designer.ts";
+import { setAgentModel } from "./agents/model.ts";
 import { SegmentDesigner } from "./agents/segment-designer.ts";
+import { createAgentModelProvider } from "./model-provider.ts";
+
+setProvider(createAgentModelProvider(env.AI));
+setAgentModel("cloudflare/openai/gpt-6-luna");
 
 const app = new Hono();
 

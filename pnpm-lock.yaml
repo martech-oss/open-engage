@@ -381,6 +381,9 @@ importers:
       execa:
         specifier: ^9.6.0
         version: 9.6.1
+      json5:
+        specifier: ^2.2.3
+        version: 2.2.3
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
