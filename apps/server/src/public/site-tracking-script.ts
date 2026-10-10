@@ -119,9 +119,15 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
       body.style.cssText = "margin:8px 0 0;color:#4b5563";
       container.append(close, title);
       if (message.body) container.append(body);
-      if (message.cta_url && message.cta_label) {
+      // Check stored destinations too, including messages saved before write validation.
+      let ctaUrl;
+      try {
+        const url = new URL(message.cta_url);
+        if (url.protocol === "http:" || url.protocol === "https:") ctaUrl = url.href;
+      } catch {}
+      if (ctaUrl && message.cta_label) {
         const link = document.createElement("a");
-        link.href = message.cta_url;
+        link.href = ctaUrl;
         link.textContent = message.cta_label;
         link.rel = "noopener noreferrer";
         link.style.cssText =

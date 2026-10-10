@@ -323,6 +323,8 @@ export function csvCell(value: unknown): string {
       : typeof value === "string"
         ? value
         : JSON.stringify(value);
-  if (/^[=+\-@]/.test(rendered)) rendered = `'${rendered}`;
+  // Spreadsheets can skip leading whitespace and controls before recognizing a formula.
+  // oxlint-disable-next-line eslint/no-control-regex
+  if (/^[\s\u0000-\u001f\u007f-\u009f]*[=+\-@]/.test(rendered)) rendered = `'${rendered}`;
   return `"${rendered.replaceAll('"', '""')}"`;
 }

@@ -156,7 +156,16 @@ export const siteMessageWriteSchema = z.object({
   headline: z.string().trim().min(1).max(191),
   body: z.string().trim().max(2_000),
   ctaLabel: z.string().trim().max(120),
-  ctaUrl: z.url().nullable(),
+  ctaUrl: z
+    .url()
+    .refine(
+      (value) => {
+        const protocol = URL.parse(value)?.protocol;
+        return protocol === "http:" || protocol === "https:";
+      },
+      { message: "http(s) のURLを入力してください" },
+    )
+    .nullable(),
   pagePattern: z.string().trim().min(1).max(500),
   startsAt: z.iso.datetime().nullable(),
   endsAt: z.iso.datetime().nullable(),

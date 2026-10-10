@@ -8,6 +8,7 @@ import pc from "picocolors";
 import { type CommandCheck, commandRunner } from "../command-runner";
 import {
   emailSendingEventTypes,
+  parseServerWorkerConfig,
   readConfiguredResources,
   requiredSecretNames,
   serverWrangler,
@@ -18,12 +19,21 @@ const placeholderDatabaseId = "00000000-0000-0000-0000-000000000000";
 export async function runDoctorCommand(): Promise<void> {
   const projectDirectory = process.cwd();
   const config = await readFile(resolve(projectDirectory, "apps/server/wrangler.jsonc"), "utf8");
+  const hasDevelopmentAuth =
+    parseServerWorkerConfig(config).vars?.["ENVIRONMENT"] === "development";
   const resources = readConfiguredResources(config);
   const run = (name: string, args: string[]) =>
     commandRunner.check(name, "pnpm", args, projectDirectory);
   const outputIncludes = (name: string, args: string[], expected: readonly string[]) =>
     commandRunner.outputIncludes(name, "pnpm", args, projectDirectory, expected);
   const checks: CommandCheck[] = [
+    {
+      name: "Production authentication",
+      ok: !hasDevelopmentAuth,
+      detail: hasDevelopmentAuth
+        ? "ENVIRONMENT=development disables authentication protections; set production in apps/server/wrangler.jsonc"
+        : "configured",
+    },
     await run("Cloudflare login", serverWrangler("whoami")),
     await run("Worker bindings", ["cf:types"]),
     await run(

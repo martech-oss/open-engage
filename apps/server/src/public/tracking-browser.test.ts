@@ -1,139 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { siteTrackingScript } from "./templates";
-
-function browser(
-  options: {
-    consent?: boolean;
-    loadingDocument?: boolean;
-    blockedStorage?: boolean;
-    session?: Map<string, string>;
-    visitorToken?: string;
-  } = {},
-) {
-  const storage = new Map<string, string>();
-  if (options.visitorToken) storage.set("openengage_visitor_acme", options.visitorToken);
-  const pending: Array<(value: unknown) => void> = [];
-  const requests: Array<{ url: URL; init: RequestInit | undefined }> = [];
-  const messages: Array<(value: unknown) => void> = [];
-  const session = options.session ?? new Map<string, string>();
-  const storageAccess: string[] = [];
-  const identityStorageAccess: string[] = [];
-  class Element {
-    children: Element[] = [];
-    style = { cssText: "" };
-    textContent = "";
-    href = "";
-    removed = false;
-    listeners = new Map<string, () => void>();
-    constructor(public tag: string) {}
-    append(...children: Element[]) {
-      this.children.push(...children);
-    }
-    setAttribute() {}
-    addEventListener(name: string, listener: () => void) {
-      this.listeners.set(name, listener);
-    }
-    remove() {
-      this.removed = true;
-    }
-  }
-  const body = new Element("body");
-  const anchors = [{ href: "https://app.example/r/acme/link" }];
-  const documentListeners = new Map<string, () => void>();
-  const document = {
-    body: options.loadingDocument ? null : body,
-    createElement: (tag: string) => new Element(tag),
-    title: "Page",
-    referrer: "",
-    querySelectorAll: () => anchors,
-    addEventListener: (name: string, listener: () => void) => documentListeners.set(name, listener),
-  };
-  const window: Record<string, any> = {
-    openengageSettings: { consent: options.consent },
-    location: { href: "https://example.com" },
-    dispatchEvent: () => {},
-  };
-  const localStorage = {
-    getItem: (key: string) => {
-      identityStorageAccess.push("read");
-      if (options.blockedStorage) throw new Error("denied");
-      return storage.get(key);
-    },
-    setItem: (key: string, value: string) => {
-      if (options.blockedStorage) throw new Error("denied");
-      return storage.set(key, value);
-    },
-    removeItem: (key: string) => storage.delete(key),
-  };
-  const sessionStorage = {
-    getItem(key: string) {
-      storageAccess.push("read");
-      if (options.blockedStorage) throw new Error("denied");
-      return session.get(key);
-    },
-    setItem(key: string, value: string) {
-      storageAccess.push("write");
-      if (options.blockedStorage) throw new Error("denied");
-      session.set(key, value);
-    },
-  };
-  const fetch = (input: string | URL, init?: RequestInit) => {
-    const url = new URL(input);
-    requests.push({ url, init });
-    if (url.pathname.endsWith("/events"))
-      return Promise.resolve({ json: async () => ({ data: { accepted: true } }) });
-    return new Promise((resolve) =>
-      (url.pathname === "/messages" ? messages : pending).push(resolve),
-    );
-  };
-  const CustomEvent = class {
-    constructor(
-      public type: string,
-      public detail: unknown,
-    ) {}
-  };
-  // Execute only our generated tracking runtime against controlled browser fakes.
-  // oxlint-disable-next-line typescript/no-implied-eval
-  new Function(
-    "window",
-    "document",
-    "localStorage",
-    "sessionStorage",
-    "fetch",
-    "CustomEvent",
-    siteTrackingScript("https://app.example/api/public/track/acme", "https://app.example/messages"),
-  )(window, document, localStorage, sessionStorage, fetch, CustomEvent);
-  const flush = async () => {
-    for (let i = 0; i < 10; i++) await Promise.resolve();
-  };
-  const respond = async (token: string, identified = true) => {
-    pending.shift()?.({ json: async () => ({ data: { visitorToken: token, identified } }) });
-    await flush();
-  };
-  const respondMessage = async (data: unknown) => {
-    messages.shift()?.({ json: async () => ({ data }) });
-    await flush();
-  };
-  return {
-    ready: async () => {
-      document.body = body;
-      documentListeners.get("DOMContentLoaded")?.();
-      await flush();
-    },
-    window,
-    storage,
-    anchors,
-    flush,
-    respond,
-    respondMessage,
-    requests,
-    body,
-    storageAccess,
-    identityStorageAccess,
-    session,
-  };
-}
+import { browser, publicMessage } from "./tracking-browser-test-support";
 
 describe("browser identity changes", () => {
   it.each(["page", "session"])(
@@ -378,17 +245,46 @@ describe("browser identity changes", () => {
   });
 });
 
-const publicMessage = {
-  id: "public",
-  headline: "Welcome",
-  body: "Ask us",
-  cta_url: "https://example.com/contact",
-  cta_label: "Contact",
-  audience: "all",
-  frequency: "session",
-};
-
 describe("browser public CTA", () => {
+  it.each([
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    "\tjava\nscript:alert(1)",
+    "java%73cript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///etc/passwd",
+    "ftp://example.com/file",
+    "mailto:contact@example.com",
+    "//example.com/contact",
+    "/contact",
+    "#contact",
+    "not a URL",
+  ])("omits unsafe legacy CTA links while retaining message text: %s", async (ctaUrl) => {
+    const b = browser();
+    await b.flush();
+    await b.respondMessage([{ ...publicMessage, cta_url: ctaUrl }]);
+    expect(b.body.children).toHaveLength(1);
+    const children = b.body.children[0]!.children;
+    expect(children.some((element) => element.tag === "a")).toBe(false);
+    expect(children.find((element) => element.tag === "strong")?.textContent).toBe("Welcome");
+    expect(children.find((element) => element.tag === "p")?.textContent).toBe("Ask us");
+  });
+
+  it.each(["http://example.com/contact", "HTTPS://EXAMPLE.COM/contact"])(
+    "retains safe CTA navigation and click measurement: %s",
+    async (ctaUrl) => {
+      const b = browser({ consent: true, visitorToken: "saved-token" });
+      await b.flush();
+      await b.respondMessage([{ ...publicMessage, cta_url: ctaUrl, identified: true }]);
+      const link = b.body.children[0]!.children.find((element) => element.tag === "a")!;
+      expect(link.href).toBe(new URL(ctaUrl).href);
+      link.listeners.get("click")!();
+      expect(b.requests.filter((request) => request.url.pathname.endsWith("/events"))).toHaveLength(
+        2,
+      );
+    },
+  );
+
   it("waits for the host body when an async head embed receives CTA before DOM ready", async () => {
     const b = browser({ loadingDocument: true });
     await b.flush();

@@ -1,3 +1,5 @@
+import JSON5 from "json5";
+
 export interface WorkerConfigInput {
   projectName: string;
   appUrl: string;
@@ -8,6 +10,29 @@ export interface WorkerConfigInput {
   server: string;
   agent: string;
   client: string;
+}
+
+interface ServerWorkerConfig {
+  [key: string]: unknown;
+  vars?: Record<string, unknown>;
+}
+
+export function parseServerWorkerConfig(config: string): ServerWorkerConfig {
+  const parsed = JSON5.parse<unknown>(config);
+  if (!isConfigObject(parsed)) throw new Error("Server Worker config must be an object");
+  const vars = parsed["vars"];
+  if (vars !== undefined) {
+    if (!isConfigObject(vars)) throw new Error("Server Worker config vars must be an object");
+    const environment = vars["ENVIRONMENT"];
+    if (environment !== undefined && typeof environment !== "string") {
+      throw new Error("Server Worker config vars.ENVIRONMENT must be a string");
+    }
+  }
+  return parsed as ServerWorkerConfig;
+}
+
+function isConfigObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // Secrets the server refuses to start without. `create` generates them and
@@ -80,8 +105,8 @@ export function rewriteWorkerConfigs(input: WorkerConfigInput): {
 } {
   const { projectName } = input;
   const resources = cloudflareResourceNames(projectName);
-  return {
-    server: input.server
+  const server = parseServerWorkerConfig(
+    input.server
       .replaceAll('"name": "openengage-server"', `"name": "${projectName}-server"`)
       .replaceAll('"service": "openengage-agent"', `"service": "${projectName}-agent"`)
       .replaceAll('"database_name": "openengage-db"', `"database_name": "${resources.database}"`)
@@ -102,6 +127,10 @@ export function rewriteWorkerConfigs(input: WorkerConfigInput): {
         `"TURNSTILE_SITE_KEY": ${JSON.stringify(input.turnstileSiteKey)}`,
       )
       .replaceAll('"APP_URL": "http://localhost:5173"', `"APP_URL": "${input.appUrl}"`),
+  );
+  server.vars = { ...server.vars, ENVIRONMENT: "production" };
+  return {
+    server: `${JSON.stringify(server, null, 2)}\n`,
     agent: input.agent
       .replaceAll('"name": "openengage-agent"', `"name": "${projectName}-agent"`)
       .replaceAll('"service": "openengage-server"', `"service": "${projectName}-server"`),

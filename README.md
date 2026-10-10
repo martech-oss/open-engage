@@ -243,6 +243,8 @@ pnpm cf:types   # Workerの型（worker-configuration.d.ts）を生成
 cp .dev.vars.example apps/server/.dev.vars
 ```
 
+`.dev.vars`の`ENVIRONMENT=development`はローカル実行専用の設定です。セットアップCLIが生成する`apps/server/wrangler.jsonc`の`ENVIRONMENT`は`production`のままにしてください。
+
 少なくとも次の値を設定します。
 
 ```dotenv
