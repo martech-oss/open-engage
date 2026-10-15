@@ -7,7 +7,7 @@ import { sanitizeFilename } from "../platform/values";
  * blocked content type somehow reached the bucket, while `img-src data:` keeps
  * ordinary `<img>` embedding working.
  */
-const ASSET_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox";
+export const ASSET_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox";
 
 export interface AssetObjectMeta {
   name: string;

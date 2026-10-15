@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import type { Asset } from "@openengage/core/assets";
-import { assets, createDatabase, uuidv7 } from "@openengage/database/testing";
+import { assets, createDatabase, generatedEmailImages, uuidv7 } from "@openengage/database/testing";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -99,6 +99,50 @@ describe("Asset streaming and delivery routes", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(await decodeBody(raw)).toBe("second");
+  });
+
+  it("previews a generated email image only while it is still a sandboxed raster image", async () => {
+    const { token, workspaceId } = await seedWorkspaceClient(env.DB);
+    const authorization = `Bearer ${token}`;
+    const created = (await (
+      await upload(token, "\x89PNG generated", { name: "hero.png", contentType: "image/png" })
+    ).json()) as Asset;
+    const now = new Date().toISOString();
+    await createDatabase(env.DB)
+      .orm.insert(generatedEmailImages)
+      .values({
+        assetId: created.id,
+        workspaceId,
+        requestId: uuidv7(),
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        createdAt: now,
+      });
+
+    const preview = await call(`/api/email-images/${created.id}/preview`, {
+      headers: { authorization },
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get("content-type")).toBe("image/png");
+    expect(preview.headers.get("content-security-policy")).toContain("sandbox");
+    expect(preview.headers.get("x-content-type-options")).toBe("nosniff");
+    await decodeBody(preview);
+
+    // An XML type passes the upload blocklist yet would render as a document.
+    const markup = '<html xmlns="http://www.w3.org/1999/xhtml"><script>steal()</script></html>';
+    const replaced = await call(`/api/assets/${created.id}/content?name=feed.xml`, {
+      method: "PUT",
+      headers: {
+        authorization,
+        "content-type": "application/rss+xml",
+        "content-length": String(new TextEncoder().encode(markup).byteLength),
+      },
+      body: markup,
+    });
+    expect(replaced.status).toBe(200);
+    const stale = await call(`/api/email-images/${created.id}/preview`, {
+      headers: { authorization },
+    });
+    expect(stale.status).toBe(404);
   });
 
   it("rejects malformed, oversized, executable and cross-site uploads", async () => {

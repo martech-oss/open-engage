@@ -98,6 +98,31 @@ export async function sanitizeLandingHtml(
   );
 }
 
+const BLOCKED_CSS_FUNCTIONS = new Set([
+  "expression",
+  "url",
+  "src",
+  "image",
+  "image-set",
+  "-webkit-image-set",
+]);
+
+/**
+ * css-tree keeps identifiers as written, but a browser resolves escapes first:
+ * `\75 rl(` is `url(`. Names are compared in the form the browser sees.
+ */
+function cssName(name: string): string {
+  return name
+    .replace(/\\([0-9a-f]{1,6})[ \t\n\r\f]?|\\([^\n\r\f0-9a-f])/gi, (_match, hex, literal) => {
+      if (literal !== undefined) return literal;
+      const codePoint = Number.parseInt(hex, 16);
+      return codePoint === 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ? "\ufffd"
+        : String.fromCodePoint(codePoint);
+    })
+    .toLowerCase();
+}
+
 export async function sanitizeLandingDocument(
   input: LandingPageDocument,
 ): Promise<LandingPageDocument> {
@@ -115,19 +140,14 @@ export async function sanitizeLandingDocument(
       throw new Error("CSS URLs and unparsed CSS are not allowed");
     if (
       node.type === "Atrule" &&
-      !["media", "supports", "keyframes", "layer", "container"].includes(node.name.toLowerCase())
+      !["media", "supports", "keyframes", "layer", "container"].includes(cssName(node.name))
     )
       throw new Error("CSS at-rule is not allowed");
-    if (
-      node.type === "Function" &&
-      ["expression", "url", "image", "image-set", "-webkit-image-set"].includes(
-        node.name.toLowerCase(),
-      )
-    )
+    if (node.type === "Function" && BLOCKED_CSS_FUNCTIONS.has(cssName(node.name)))
       throw new Error("CSS function is not allowed");
     if (
       node.type === "Declaration" &&
-      ["behavior", "-moz-binding"].includes(node.property.toLowerCase())
+      ["behavior", "-moz-binding"].includes(cssName(node.property))
     )
       throw new Error("CSS property is not allowed");
   });

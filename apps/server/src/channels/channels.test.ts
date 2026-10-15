@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { hmacHex } from "../platform/signatures";
-import { OutboundWebhookAdapter, assertSafeWebhookUrl } from "./index";
+import { OutboundWebhookAdapter, TransientChannelError, assertSafeWebhookUrl } from "./index";
 
 describe("channel policy", () => {
   it("blocks private webhook targets", () => {
@@ -11,6 +11,57 @@ describe("channel policy", () => {
     expect(
       () => new OutboundWebhookAdapter({ url: "https://hooks.example.com/a", secret: "x" }),
     ).not.toThrow();
+  });
+
+  it("gives up on a slow receiver as a retryable failure", async () => {
+    let signal: AbortSignal | null | undefined;
+    const adapter = new OutboundWebhookAdapter({
+      url: "https://hooks.example.com/slow",
+      secret: "webhook-secret",
+      timeoutMs: 20,
+      fetcher: (_url, init) => {
+        signal = init?.signal;
+        // Never answers on its own; only the abort signal ends the request.
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        });
+      },
+    });
+    await expect(
+      adapter.send({
+        kind: "webhook",
+        idempotencyKey: "delivery-key",
+        workspaceId: "workspace-id",
+        deliveryId: "delivery-id",
+        payload: {},
+      }),
+    ).rejects.toBeInstanceOf(TransientChannelError);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("releases the receiver's response body after reading the status", async () => {
+    let cancelled = false;
+    const adapter = new OutboundWebhookAdapter({
+      url: "https://hooks.example.com/messages",
+      secret: "webhook-secret",
+      fetcher: async () =>
+        new Response(
+          new ReadableStream({
+            cancel: () => {
+              cancelled = true;
+            },
+          }),
+          { status: 202 },
+        ),
+    });
+    await adapter.send({
+      kind: "webhook",
+      idempotencyKey: "delivery-key",
+      workspaceId: "workspace-id",
+      deliveryId: "delivery-id",
+      payload: {},
+    });
+    expect(cancelled).toBe(true);
   });
 
   it("signs and sends outbound webhook messages", async () => {

@@ -6,6 +6,7 @@ import { registerPublicCustomRedirectRoutes } from "./custom-redirect-routes";
 import { registerEmailTrackingRoutes } from "./email-tracking-routes";
 import { registerPublicFormHandlerRoutes } from "./form-handler-routes";
 import { registerPublicFormRoutes } from "./form-routes";
+import { publicBodyLimit } from "./http";
 import { registerPublicLandingRoutes } from "./landing-routes";
 import { registerPublicPreferenceRoutes } from "./preference-routes";
 import { registerPublicSiteMessageRoutes } from "./site-message-routes";
@@ -17,6 +18,8 @@ import { registerPublicTrackingRoutes } from "./tracking-routes";
  * messages, public assets, and unsubscribe / preference pages.
  */
 export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
+  for (const path of ["/f/*", "/fh/*", "/api/public/*", "/u/*", "/preference/*"])
+    publicApp.use(path, publicBodyLimit);
   registerPublicAssetRoutes(publicApp);
   registerPublicLandingRoutes(publicApp);
   registerPublicFormRoutes(publicApp);
