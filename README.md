@@ -402,6 +402,11 @@ Server → Agentは`AGENT_APP`の一方向Bindingのみで、AgentからServer�
 を先に実行してから`pnpm deploy`する2段階の初回セットアップを行いますが、これは現在の構成では
 `pnpm deploy`単体と等価です(bootstrap環境固有のBinding差分がないため)。
 
+Serverのデプロイは、`apps/server/wrangler.jsonc`の`vars.ENVIRONMENT`が`development`のまま、または
+`vars.APP_URL`がlocalhost等のローカルアドレスのままの場合に中止されます。メール確認・認証レート制限・
+Secure Cookieを緩める開発用設定は、`ENVIRONMENT=development`かつ`APP_URL`がloopbackのhttp URLの
+ローカル実行時にだけ有効になります。
+
 ## 初回セットアップ
 
 1. 管理画面でアカウントを登録する

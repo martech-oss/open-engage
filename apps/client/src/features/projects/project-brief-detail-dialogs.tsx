@@ -151,10 +151,13 @@ export function EditProjectBriefDialog({
 
 export function ReviewProjectBriefDialog({
   kind,
+  stale = false,
   onOpenChange,
   onSubmit,
 }: {
   kind: "approve" | "reject" | "withdraw";
+  /** The brief changed after the dialog opened, so the decision would cover unseen content. */
+  stale?: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (comment: string) => Promise<void>;
 }): ReactNode {
@@ -166,7 +169,7 @@ export function ReviewProjectBriefDialog({
     kind === "approve" ? "施策を承認" : kind === "reject" ? "施策を差戻し" : "承認申請を取り消す";
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (required && !comment.trim()) return;
+    if (stale || (required && !comment.trim())) return;
     setBusy(true);
     setError("");
     try {
@@ -198,8 +201,14 @@ export function ReviewProjectBriefDialog({
             onChange={(event) => setComment(event.target.value)}
           />
         </Field>
+        {/* Our own successful submit also bumps the revision before the dialog closes. */}
+        {stale && !busy ? (
+          <ErrorAlert>
+            ダイアログを開いた後に施策ブリーフが更新されました。閉じて最新の内容を確認してから、もう一度操作してください。
+          </ErrorAlert>
+        ) : null}
         {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton type="submit" busy={busy} disabled={required && !comment.trim()}>
+        <LoadingButton type="submit" busy={busy} disabled={stale || (required && !comment.trim())}>
           {kind === "approve" ? "承認" : kind === "reject" ? "差戻し" : "申請を取り消す"}
         </LoadingButton>
       </form>

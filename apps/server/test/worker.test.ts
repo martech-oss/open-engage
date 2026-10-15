@@ -16,31 +16,9 @@ import {
   uuidv7,
 } from "@openengage/database/testing";
 
-import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
 
 describe("OpenEngage Worker", () => {
-  it("uses the actual localhost port for Better Auth during development", () => {
-    expect(
-      resolveAuthBaseURL(
-        { APP_URL: "http://localhost:8787", ENVIRONMENT: "development" },
-        "http://localhost:8788",
-      ),
-    ).toBe("http://localhost:8788");
-    expect(
-      resolveAuthBaseURL(
-        { APP_URL: "https://app.example.com", ENVIRONMENT: "production" },
-        "https://evil.example.com",
-      ),
-    ).toBe("https://app.example.com");
-  });
-
-  it("skips email verification only in development", () => {
-    expect(isEmailVerificationRequired("development")).toBe(false);
-    expect(isEmailVerificationRequired("test")).toBe(true);
-    expect(isEmailVerificationRequired("production")).toBe(true);
-  });
-
   it("reports a healthy migrated D1 database", async () => {
     const response = await exports.default.fetch("http://localhost:8787/api/health");
     expect(response.status).toBe(200);

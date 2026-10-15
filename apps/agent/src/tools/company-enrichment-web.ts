@@ -111,18 +111,28 @@ function isBlockedIpv4(octets: number[]): boolean {
   );
 }
 
+/**
+ * Reads at most `maxBytes`. An abort cancels the pending read, so a stalled
+ * body cannot outlive the caller's deadline.
+ */
 export async function readTextLimited(
   body: ReadableStream<Uint8Array> | null,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!body) return "";
   const reader = body.getReader();
   const decoder = new TextDecoder();
+  const abort = () => void reader.cancel(signal?.reason).catch(() => undefined);
+  signal?.addEventListener("abort", abort, { once: true });
   let total = 0;
   let result = "";
   try {
+    signal?.throwIfAborted();
     while (true) {
       const chunk = await reader.read();
+      // A cancelled reader reports done; the abort reason is the real outcome.
+      signal?.throwIfAborted();
       if (chunk.done) break;
       total += chunk.value.byteLength;
       if (total > maxBytes) throw new Error("HTML response exceeded the byte limit");
@@ -130,6 +140,7 @@ export async function readTextLimited(
     }
     return result + decoder.decode();
   } finally {
+    signal?.removeEventListener("abort", abort);
     await reader.cancel().catch(() => undefined);
   }
 }

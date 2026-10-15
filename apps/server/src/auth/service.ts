@@ -14,7 +14,8 @@ import { renderSystemEmail, type SystemEmailInput } from "./email-templates";
 export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
   const database = createDatabase(env.DB).orm;
   const baseURL = resolveAuthBaseURL(env, requestOrigin);
-  const requireEmailVerification = isEmailVerificationRequired(env.ENVIRONMENT);
+  const localDevelopment = isLocalDevelopment(env);
+  const requireEmailVerification = isEmailVerificationRequired(env);
   return betterAuth({
     appName: env.APP_NAME,
     baseURL,
@@ -26,12 +27,12 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
     }),
     trustedOrigins: [...new Set([env.APP_URL, baseURL])],
     advanced: {
-      useSecureCookies: env.ENVIRONMENT !== "development",
+      useSecureCookies: !localDevelopment,
       cookiePrefix: "openengage",
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: "lax",
-        secure: env.ENVIRONMENT !== "development",
+        secure: !localDevelopment,
       },
     },
     emailAndPassword: {
@@ -89,7 +90,7 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
       }),
     ],
     rateLimit: {
-      enabled: env.ENVIRONMENT !== "development",
+      enabled: !localDevelopment,
       window: 60,
       max: 100,
       customRules: {
@@ -101,28 +102,37 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
   });
 }
 
-export function isEmailVerificationRequired(environment: string): boolean {
-  return environment !== "development";
+export function isEmailVerificationRequired(
+  env: Pick<RuntimeEnv, "APP_URL" | "ENVIRONMENT">,
+): boolean {
+  return !isLocalDevelopment(env);
+}
+
+/**
+ * Development relaxes email verification, auth rate limits and secure
+ * cookies. A deployed Worker that still carries `ENVIRONMENT: "development"`
+ * serves a public APP_URL, so the relaxations stay tied to a loopback one.
+ */
+export function isLocalDevelopment(env: Pick<RuntimeEnv, "APP_URL" | "ENVIRONMENT">): boolean {
+  return env.ENVIRONMENT === "development" && isLoopbackHttpUrl(env.APP_URL);
+}
+
+function isLoopbackHttpUrl(value: string): boolean {
+  const url = URL.parse(value);
+  const hostname = url?.hostname.toLowerCase();
+  return (
+    url?.protocol === "http:" &&
+    (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]")
+  );
 }
 
 export function resolveAuthBaseURL(
   env: Pick<RuntimeEnv, "APP_URL" | "ENVIRONMENT">,
   requestOrigin?: string,
 ): string {
-  if (env.ENVIRONMENT !== "development" || !requestOrigin) return env.APP_URL;
-  try {
-    const origin = new URL(requestOrigin);
-    const hostname = origin.hostname.toLowerCase();
-    if (
-      origin.protocol === "http:" &&
-      (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]")
-    ) {
-      return origin.origin;
-    }
-  } catch {
-    // Fall back to the configured URL when the request origin is malformed.
-  }
-  return env.APP_URL;
+  if (!isLocalDevelopment(env) || !requestOrigin) return env.APP_URL;
+  // Fall back to the configured URL when the request origin is malformed or remote.
+  return isLoopbackHttpUrl(requestOrigin) ? new URL(requestOrigin).origin : env.APP_URL;
 }
 
 async function sendAuthEmail(
