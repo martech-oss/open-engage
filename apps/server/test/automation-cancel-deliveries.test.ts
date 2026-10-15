@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 
 import { AutomationExecutionRepository } from "@openengage/database/automations";
-import { createDatabase, deliveries, uuidv7 } from "@openengage/database/testing";
+import {
+  automationEnrollments,
+  createDatabase,
+  deliveries,
+  DeliveryRecoveryRepository,
+  uuidv7,
+} from "@openengage/database/testing";
 
 import { enrollContactManually } from "../src/automations/enrollment";
 import { processDelivery } from "../src/messaging/delivery-worker";
@@ -105,5 +111,47 @@ it("does not send a message re-queued after its enrollment was cancelled", async
   await expect(readStatus(fixture.db, requeued)).resolves.toEqual({
     status: "cancelled",
     lastError: "automation_cancelled",
+  });
+});
+
+it("stops a mid-send message from being retried after cancellation, even for a finished run", async () => {
+  const fixture = await enrolledContact();
+  // A terminal send action has already completed the enrollment.
+  await fixture.db.orm
+    .update(automationEnrollments)
+    .set({ status: "completed" })
+    .where(eq(automationEnrollments.id, fixture.enrollmentId));
+  const recovery = new DeliveryRecoveryRepository(fixture.db);
+  const failing = await recovery.claimDelivery(await seedQueuedWebhook(fixture.db, fixture));
+  const succeeding = await recovery.claimDelivery(await seedQueuedWebhook(fixture.db, fixture));
+  if (!failing || !succeeding) throw new Error("Expected both deliveries to be claimed");
+
+  await new AutomationExecutionRepository(fixture.db, {
+    workspaceId: fixture.workspaceId,
+  }).cancelEnrollment(fixture.enrollmentId);
+
+  // The in-flight attempt fails transiently: it must not go back to the queue.
+  await expect(
+    recovery.recordFailure(failing.id, failing.leaseId, {
+      status: "queued",
+      nextAttemptAt: null,
+      lastError: "HTTP 503",
+    }),
+  ).resolves.toBe(false);
+  await expect(readStatus(fixture.db, failing.id)).resolves.toEqual({
+    status: "cancelled",
+    lastError: "automation_cancelled",
+  });
+  // A provider that already accepted the other one is still recorded as sent.
+  await expect(
+    recovery.markAccepted({
+      deliveryId: succeeding.id,
+      leaseId: succeeding.leaseId,
+      providerMessageId: "provider-1",
+      acceptedAt: new Date().toISOString(),
+    }),
+  ).resolves.toBe(true);
+  await expect(readStatus(fixture.db, succeeding.id)).resolves.toMatchObject({
+    status: "accepted",
   });
 });

@@ -39,7 +39,8 @@ export class AutomationExecutionRepository extends WorkspaceRepository {
           ),
         ),
       // Messages already handed to the delivery queue belong to the cancelled
-      // run too; one mid-send is caught by the worker's own enrollment check.
+      // run too, including one mid-send: it keeps its lease, so a send that
+      // still succeeds is recorded as accepted, but a failure cannot requeue it.
       orm
         .update(deliveries)
         .set({
@@ -52,7 +53,7 @@ export class AutomationExecutionRepository extends WorkspaceRepository {
           and(
             this.inWorkspace(deliveries),
             sql`${deliveries.enrollmentId} IN (${tree})`,
-            eq(deliveries.status, "queued"),
+            inArray(deliveries.status, ["queued", "sending"]),
           ),
         ),
     ];

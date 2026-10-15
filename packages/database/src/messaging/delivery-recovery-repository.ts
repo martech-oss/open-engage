@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { channelMessageSchema, type ChannelMessage } from "@openengage/core/messaging";
 
@@ -159,7 +159,11 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
     return changedExactlyOne(result);
   }
 
-  /** Accepted state and its event commit together, and only for this lease. */
+  /**
+   * Accepted state and its event commit together, and only for this lease. A
+   * delivery cancelled mid-send keeps its lease, so a provider that still
+   * accepted it is recorded truthfully.
+   */
   public async markAccepted(input: {
     deliveryId: string;
     leaseId: string;
@@ -167,7 +171,11 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
     acceptedAt: string;
   }): Promise<boolean> {
     const now = nowIso();
-    const exactLease = exactDeliveryLease(input.deliveryId, input.leaseId);
+    const exactLease = and(
+      eq(deliveries.id, input.deliveryId),
+      eq(deliveries.leaseId, input.leaseId),
+      inArray(deliveries.status, ["sending", "cancelled"]),
+    );
     const orm = this.database.orm;
     const [, result] = await orm.batch([
       orm
