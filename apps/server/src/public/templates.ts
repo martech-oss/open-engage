@@ -1,4 +1,8 @@
-import { resolveFormFields, signupFormDefinitionSchema } from "@openengage/core/web";
+import {
+  formFieldValueMaxLength,
+  resolveFormFields,
+  signupFormDefinitionSchema,
+} from "@openengage/core/web";
 
 import { escapeHtml } from "../rendering/html";
 
@@ -247,8 +251,9 @@ function toRenderableField(raw: Record<string, unknown>): RenderableField | null
 function renderControl(field: RenderableField): string {
   const name = escapeHtml(field.kind === "custom" ? `custom:${field.key}` : field.key);
   const required = field.required ? " required" : "";
+  const maxLength = ` maxlength="${formFieldValueMaxLength(field.type)}"`;
   if (field.type === "textarea") {
-    return `<label>${escapeHtml(field.label)}<textarea name="${name}" rows="4"${required}></textarea></label>`;
+    return `<label>${escapeHtml(field.label)}<textarea name="${name}" rows="4"${maxLength}${required}></textarea></label>`;
   }
   if (field.type === "select") {
     const options = [
@@ -259,7 +264,7 @@ function renderControl(field: RenderableField): string {
     ].join("");
     return `<label>${escapeHtml(field.label)}<select name="${name}"${required}>${options}</select></label>`;
   }
-  return `<label>${escapeHtml(field.label)}<input name="${name}" type="${escapeHtml(field.type)}"${required}></label>`;
+  return `<label>${escapeHtml(field.label)}<input name="${name}" type="${escapeHtml(field.type)}"${maxLength}${required}></label>`;
 }
 
 export function formEmbedScript(

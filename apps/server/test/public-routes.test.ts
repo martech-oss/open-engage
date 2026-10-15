@@ -1,9 +1,12 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 
-import { PUBLIC_BODY_MAX_BYTES } from "../src/public/http";
+import { FORM_FIELDS_MAX, FORM_TEXTAREA_VALUE_MAX_LENGTH } from "@openengage/core/web";
+
+import { PUBLIC_BODY_MAX_BYTES, PUBLIC_FORM_BODY_MAX_BYTES } from "../src/public/http";
 import { registerPublicRoutes } from "../src/public/routes";
+import { seedWorkspaceClient } from "./factory";
 
 /**
  * The public surface is unauthenticated and embedded in customer sites, so a
@@ -47,11 +50,11 @@ describe("public routes", () => {
   });
 
   it.each([
-    "/api/public/track/missing-workspace",
-    "/f/missing-workspace/missing-form",
-    "/fh/missing-workspace/missing-handler",
-  ])("refuses an oversized body on %s before parsing it", async (path) => {
-    const oversized = JSON.stringify({ padding: "x".repeat(PUBLIC_BODY_MAX_BYTES) });
+    ["/api/public/track/missing-workspace", PUBLIC_BODY_MAX_BYTES],
+    ["/f/missing-workspace/missing-form", PUBLIC_FORM_BODY_MAX_BYTES],
+    ["/fh/missing-workspace/missing-handler", PUBLIC_FORM_BODY_MAX_BYTES],
+  ])("refuses an oversized body on %s before parsing it", async (path, limit) => {
+    const oversized = JSON.stringify({ padding: "x".repeat(limit) });
     const declared = await exports.default.fetch(
       new Request(`http://localhost:8787${path}`, {
         method: "POST",
@@ -91,5 +94,44 @@ describe("public routes", () => {
       }),
     );
     expect(response.status).toBe(202);
+  });
+
+  it("fits the largest valid form submission and rejects over-length answers in validation", async () => {
+    const { client, slug } = await seedWorkspaceClient(env.DB);
+    const fields = Array.from({ length: FORM_FIELDS_MAX - 1 }, (_, index) => ({
+      key: `answer_${index}`,
+      kind: "custom" as const,
+      type: "textarea" as const,
+    }));
+    await client.website.createForm({
+      name: "Long inquiry",
+      slug: "long-inquiry",
+      status: "published",
+      definition: { fields: [{ key: "email", type: "email", required: true }, ...fields] },
+      allowedDomains: [],
+      turnstileEnabled: false,
+      successMessage: "Thanks",
+    });
+    const submit = (answer: string) =>
+      exports.default.fetch(
+        new Request(`http://localhost:8787/f/${slug}/long-inquiry`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "long@example.com",
+            idempotencyKey: crypto.randomUUID(),
+            ...Object.fromEntries(fields.map((field) => [`custom:${field.key}`, answer])),
+          }),
+        }),
+      );
+    // Every field at its limit, in 3-byte characters: well over the beacon ceiling.
+    const accepted = await submit("問".repeat(FORM_TEXTAREA_VALUE_MAX_LENGTH));
+    expect(accepted.status).toBe(202);
+
+    const tooLong = await submit("問".repeat(FORM_TEXTAREA_VALUE_MAX_LENGTH + 1));
+    expect(tooLong.status).toBe(422);
+    await expect(tooLong.json()).resolves.toMatchObject({
+      error: { code: "invalid_form_fields" },
+    });
   });
 });

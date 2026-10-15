@@ -17,6 +17,15 @@ export const FORM_FIELD_INPUT_TYPES = [
 export const formFieldInputTypeSchema = z.enum(FORM_FIELD_INPUT_TYPES);
 export type FormFieldInputType = z.infer<typeof formFieldInputTypeSchema>;
 
+export const FORM_FIELDS_MAX = 50;
+/** Longest answer a public form accepts per field; textareas hold free-form inquiries. */
+export const FORM_TEXTAREA_VALUE_MAX_LENGTH = 4_000;
+const FORM_FIELD_VALUE_MAX_LENGTH = 1_000;
+
+export function formFieldValueMaxLength(type: string): number {
+  return type === "textarea" ? FORM_TEXTAREA_VALUE_MAX_LENGTH : FORM_FIELD_VALUE_MAX_LENGTH;
+}
+
 export const formConditionSchema = z
   .object({
     field: z.string().min(1).max(191),
@@ -57,7 +66,7 @@ export type FormField = z.infer<typeof formFieldSchema>;
 export const signupFormDefinitionSchema = z
   .object({
     style: z.enum(["inline", "floating-bar", "floating-box", "modal"]).optional(),
-    fields: z.array(formFieldSchema).max(50).optional(),
+    fields: z.array(formFieldSchema).max(FORM_FIELDS_MAX).optional(),
     /** Cap on how many progressive fields one visit may ask for. */
     progressiveMaxFields: z.number().int().min(1).max(10).default(3),
   })

@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import { formFieldValueMaxLength } from "@openengage/core/web";
+
 import { selectPublicFormFields } from "./templates";
 
 const SYSTEM_FIELDS = new Set([
@@ -67,6 +69,7 @@ function isEmpty(value: unknown): boolean {
 }
 
 function valueMatchesType(value: unknown, type: string, options: string[]): boolean {
+  if (typeof value === "string" && value.length > formFieldValueMaxLength(type)) return false;
   if (type === "number") {
     if (typeof value === "number") return Number.isFinite(value);
     return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value));
