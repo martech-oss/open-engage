@@ -155,3 +155,30 @@ it("stops a mid-send message from being retried after cancellation, even for a f
     status: "accepted",
   });
 });
+
+it("does not send a claimed message whose run was cancelled before the send check", async () => {
+  const fixture = await enrolledContact();
+  const recovery = new DeliveryRecoveryRepository(fixture.db);
+  const claimed = await recovery.claimDelivery(await seedQueuedWebhook(fixture.db, fixture));
+  if (!claimed) throw new Error("Expected the delivery to be claimed");
+
+  // Cancellation commits between the worker's claim and its eligibility check.
+  await new AutomationExecutionRepository(fixture.db, {
+    workspaceId: fixture.workspaceId,
+  }).cancelEnrollment(fixture.enrollmentId);
+
+  await expect(recovery.closeIfCancelled(claimed.id, claimed.leaseId)).resolves.toBe(true);
+  // The lease is released, so this attempt can no longer record a send either.
+  await expect(
+    recovery.markAccepted({
+      deliveryId: claimed.id,
+      leaseId: claimed.leaseId,
+      providerMessageId: "provider-1",
+      acceptedAt: new Date().toISOString(),
+    }),
+  ).resolves.toBe(false);
+  await expect(readStatus(fixture.db, claimed.id)).resolves.toEqual({
+    status: "cancelled",
+    lastError: "automation_cancelled",
+  });
+});

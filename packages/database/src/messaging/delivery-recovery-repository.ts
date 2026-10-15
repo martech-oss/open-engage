@@ -98,11 +98,13 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
   }
 
   /**
-   * Closes a claimed delivery instead of sending it when its automation
-   * enrollment was cancelled after the message was queued, including on a
-   * retry or after stale-send recovery re-queued it.
+   * Closes a claimed delivery instead of sending it when its automation was
+   * cancelled: either the enrollment cancel already moved this leased row to
+   * `cancelled`, or the enrollment is cancelled and the row was re-queued (a
+   * retry or stale-send recovery). Releasing the lease means a cancelled
+   * delivery can no longer be marked accepted by this attempt.
    */
-  public async cancelForCancelledEnrollment(deliveryId: string, leaseId: string): Promise<boolean> {
+  public async closeIfCancelled(deliveryId: string, leaseId: string): Promise<boolean> {
     const result = await this.database.orm
       .update(deliveries)
       .set({
@@ -115,8 +117,15 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
       })
       .where(
         and(
-          exactDeliveryLease(deliveryId, leaseId),
-          sql`EXISTS (SELECT 1 FROM ${automationEnrollments} WHERE ${automationEnrollments.id} = ${deliveries.enrollmentId} AND ${automationEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${automationEnrollments.status} = 'cancelled')`,
+          eq(deliveries.id, deliveryId),
+          eq(deliveries.leaseId, leaseId),
+          or(
+            eq(deliveries.status, "cancelled"),
+            and(
+              eq(deliveries.status, "sending"),
+              sql`EXISTS (SELECT 1 FROM ${automationEnrollments} WHERE ${automationEnrollments.id} = ${deliveries.enrollmentId} AND ${automationEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${automationEnrollments.status} = 'cancelled')`,
+            ),
+          ),
         ),
       );
     return changedExactlyOne(result);
