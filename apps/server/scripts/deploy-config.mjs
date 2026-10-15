@@ -12,7 +12,9 @@ export function deployConfigProblems(vars) {
       'vars.ENVIRONMENT is "development"; set it to "production" (the setup CLI does this).',
     );
   const appUrl = URL.parse(String(vars?.APP_URL ?? ""));
-  if (!appUrl || LOOPBACK_HOSTS.has(appUrl.hostname.toLowerCase()))
-    problems.push("vars.APP_URL must be the deployed public URL, not a local address.");
+  // Production cookies are always Secure, so only an HTTPS URL can hold a session;
+  // the setup CLI asks for HTTPS for the same reason.
+  if (!appUrl || appUrl.protocol !== "https:" || LOOPBACK_HOSTS.has(appUrl.hostname.toLowerCase()))
+    problems.push("vars.APP_URL must be the deployed public https:// URL, not a local address.");
   return problems;
 }

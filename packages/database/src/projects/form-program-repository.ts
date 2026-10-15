@@ -104,7 +104,7 @@ export class FormProgramRepository extends WorkspaceRepository {
     if (!binding) {
       // Releasing an unbound form must not remove a binding someone else just made.
       if (expectedProjectId === null) return;
-      await this.database.orm
+      const released = await this.database.orm
         .delete(formProgramBindings)
         .where(
           and(
@@ -113,6 +113,8 @@ export class FormProgramRepository extends WorkspaceRepository {
             eq(formProgramBindings.projectId, expectedProjectId),
           ),
         );
+      if (!changedExactlyOne(released))
+        throw new ProgramError("conflict", "The form binding changed; reload and try again");
       return;
     }
     const parsed = await this.validate(binding);

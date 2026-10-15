@@ -25,6 +25,11 @@ test("refuses a production config that still points at a local or missing APP_UR
   assert.equal(deployConfigProblems({ ENVIRONMENT: "production" }).length, 1);
 });
 
+test("refuses a production APP_URL that is not HTTPS", () => {
+  for (const APP_URL of ["http://app.example.com", "ftp://app.example.com"])
+    assert.equal(deployConfigProblems({ ENVIRONMENT: "production", APP_URL }).length, 1);
+});
+
 test("accepts the configuration the setup CLI writes", () => {
   assert.deepEqual(
     deployConfigProblems({ ENVIRONMENT: "production", APP_URL: "https://app.example.com" }),

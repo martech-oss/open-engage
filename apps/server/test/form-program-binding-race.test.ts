@@ -52,7 +52,10 @@ it("refuses a binding write when the owner it was authorized against has changed
   await expect(f.repository.set(f.formId, f.binding(f.second), f.second)).rejects.toBeInstanceOf(
     ProgramError,
   );
-  await expect(f.repository.set(f.formId, null, f.second)).resolves.toBeUndefined();
+  // Nor does releasing it on behalf of the second Project report success.
+  await expect(f.repository.set(f.formId, null, f.second)).rejects.toMatchObject({
+    code: "conflict",
+  });
   await expect(f.repository.getIntent(f.formId)).resolves.toMatchObject({ projectId: f.first });
 
   await f.repository.set(f.formId, f.binding(f.second), f.first);
