@@ -243,7 +243,7 @@ pnpm cf:types   # Workerの型（worker-configuration.d.ts）を生成
 cp .dev.vars.example apps/server/.dev.vars
 ```
 
-`.dev.vars`の`ENVIRONMENT=development`はローカル実行専用の設定です。セットアップCLIが生成する`apps/server/wrangler.jsonc`の`ENVIRONMENT`は`production`のままにしてください。
+`.dev.vars`の`ENVIRONMENT=development`と`APP_URL=http://localhost:5173`はローカル実行専用の設定です。セットアップCLIが生成する`apps/server/wrangler.jsonc`の`ENVIRONMENT`は`production`のままにしてください。開発用の認証設定（メール確認なし・Secure Cookieなし）は`APP_URL`がloopbackのときだけ有効になるため、セットアップ後も`.dev.vars`の`APP_URL`はローカルのURLにしておきます。
 
 少なくとも次の値を設定します。
 
@@ -403,7 +403,8 @@ Server → Agentは`AGENT_APP`の一方向Bindingのみで、AgentからServer�
 `pnpm deploy`単体と等価です(bootstrap環境固有のBinding差分がないため)。
 
 Serverのデプロイは、`apps/server/wrangler.jsonc`の`vars.ENVIRONMENT`が`development`のまま、または
-`vars.APP_URL`がlocalhost等のローカルアドレスのままの場合に中止されます。メール確認・認証レート制限・
+`vars.APP_URL`がlocalhost等のローカルアドレスやHTTPS以外のURLの場合に中止されます。`--env`や`CLOUDFLARE_ENV`で
+環境を指定したときは、その環境の設定を検査します。メール確認・認証レート制限・
 Secure Cookieを緩める開発用設定は、`ENVIRONMENT=development`かつ`APP_URL`がloopbackのhttp URLの
 ローカル実行時にだけ有効になります。
 

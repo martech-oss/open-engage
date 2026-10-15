@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run --outdir dist",
-    "deploy": "node scripts/check-deploy-config.mjs && wrangler deploy",
+    "deploy": "node scripts/deploy.mjs",
     "email:dev": "email dev --dir src/auth/email-templates",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "test": "vitest run && node --test scripts/public-form-runtime.check.mjs && node --test scripts/deploy-config.check.mjs",

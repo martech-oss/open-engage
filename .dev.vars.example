@@ -1,5 +1,9 @@
 # Local development only; deployed Wrangler config must use production.
 ENVIRONMENT=development
+# Development auth (no email verification or secure cookies) applies only with
+# a loopback APP_URL, so local runs keep it even after the setup CLI has set
+# the deployed URL in wrangler.jsonc.
+APP_URL=http://localhost:5173
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 CREDENTIAL_ENCRYPTION_KEY=replace-with-base64-encoded-32-byte-key
 TRACKING_SIGNING_SECRET=replace-with-at-least-32-random-characters

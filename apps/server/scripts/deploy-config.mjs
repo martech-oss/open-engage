@@ -18,3 +18,21 @@ export function deployConfigProblems(vars) {
     problems.push("vars.APP_URL must be the deployed public https:// URL, not a local address.");
   return problems;
 }
+
+/**
+ * The config file and environment `wrangler deploy` resolves from these
+ * arguments: `--env` takes precedence over CLOUDFLARE_ENV, as in Wrangler.
+ */
+export function deployTarget(args, cloudflareEnv) {
+  let config;
+  let environment = cloudflareEnv || undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    const separator = arg.startsWith("--") ? arg.indexOf("=") : -1;
+    const flag = separator > 0 ? arg.slice(0, separator) : arg;
+    const inline = separator > 0 ? arg.slice(separator + 1) : undefined;
+    if (flag === "--env" || flag === "-e") environment = inline ?? args[++index];
+    else if (flag === "--config" || flag === "-c") config = inline ?? args[++index];
+  }
+  return { config, environment };
+}
