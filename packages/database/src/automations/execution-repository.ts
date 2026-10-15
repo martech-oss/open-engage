@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
+import { deliveries } from "../messaging/schema";
 import { nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import {
@@ -35,6 +36,23 @@ export class AutomationExecutionRepository extends WorkspaceRepository {
             this.inWorkspace(automationEnrollments),
             sql`${automationEnrollments.id} IN (${tree})`,
             eq(automationEnrollments.status, "active"),
+          ),
+        ),
+      // Messages already handed to the delivery queue belong to the cancelled
+      // run too; one mid-send is caught by the worker's own enrollment check.
+      orm
+        .update(deliveries)
+        .set({
+          status: "cancelled",
+          lastError: "automation_cancelled",
+          nextAttemptAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            this.inWorkspace(deliveries),
+            sql`${deliveries.enrollmentId} IN (${tree})`,
+            eq(deliveries.status, "queued"),
           ),
         ),
     ];

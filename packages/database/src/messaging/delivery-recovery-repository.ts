@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { channelMessageSchema, type ChannelMessage } from "@openengage/core/messaging";
 
+import { automationEnrollments } from "../automations/schema";
 import { suppressions } from "../consent/schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
@@ -93,6 +94,31 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
         updatedAt: nowIso(),
       })
       .where(exactDeliveryLease(deliveryId, leaseId));
+    return changedExactlyOne(result);
+  }
+
+  /**
+   * Closes a claimed delivery instead of sending it when its automation
+   * enrollment was cancelled after the message was queued, including on a
+   * retry or after stale-send recovery re-queued it.
+   */
+  public async cancelForCancelledEnrollment(deliveryId: string, leaseId: string): Promise<boolean> {
+    const result = await this.database.orm
+      .update(deliveries)
+      .set({
+        status: "cancelled",
+        lastError: "automation_cancelled",
+        nextAttemptAt: null,
+        leaseId: null,
+        leaseExpiresAt: null,
+        updatedAt: nowIso(),
+      })
+      .where(
+        and(
+          exactDeliveryLease(deliveryId, leaseId),
+          sql`EXISTS (SELECT 1 FROM ${automationEnrollments} WHERE ${automationEnrollments.id} = ${deliveries.enrollmentId} AND ${automationEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${automationEnrollments.status} = 'cancelled')`,
+        ),
+      );
     return changedExactlyOne(result);
   }
 

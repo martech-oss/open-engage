@@ -147,40 +147,58 @@ export class LandingPageRepository extends WorkspaceRepository {
     const versionId = uuidv7();
     const now = nowIso();
     const orm = this.database.orm;
-    await orm.batch([
-      orm.insert(landingPageVersions).values({
-        id: versionId,
-        workspaceId,
-        pageId: sql`CASE WHEN EXISTS (SELECT 1 FROM landing_pages WHERE id = ${page.id} AND workspace_id = ${workspaceId} AND current_version_id = ${page.currentVersionId}) THEN ${page.id} ELSE NULL END`,
-        version: nextVersion,
-        contentDocument: input.content
-          ? landingPageContentCodec.encode(input.content)
-          : landingPageContentCodec.encode(
-              contentDocumentSchema.parse({ schemaVersion: 1, blocks: [] }),
-            ),
-        document: input.document
-          ? JSON.stringify(input.document)
-          : input.content
-            ? null
-            : JSON.stringify(emptyLandingPageDocument(input.name)),
-        publishedAt: input.content && input.status === "published" ? now : null,
-        createdAt: now,
-      }),
-      orm
-        .update(landingPages)
-        .set({
-          name: input.name,
-          slug: input.slug,
-          status: input.content ? input.status : page.status,
-          ...(input.content && input.status === "published"
-            ? { publishedVersionId: versionId }
-            : {}),
-          currentVersionId: versionId,
-          updatedAt: now,
-        })
-        .where(and(eq(landingPages.workspaceId, workspaceId), eq(landingPages.id, page.id))),
-    ]);
+    const insertVersion = orm.insert(landingPageVersions).values({
+      id: versionId,
+      workspaceId,
+      // A concurrent edit or archive nulls the page id, failing the whole batch.
+      pageId: sql`CASE WHEN EXISTS (SELECT 1 FROM landing_pages WHERE id = ${page.id} AND workspace_id = ${workspaceId} AND current_version_id = ${page.currentVersionId} AND status != 'archived') THEN ${page.id} ELSE NULL END`,
+      version: nextVersion,
+      contentDocument: input.content
+        ? landingPageContentCodec.encode(input.content)
+        : landingPageContentCodec.encode(
+            contentDocumentSchema.parse({ schemaVersion: 1, blocks: [] }),
+          ),
+      document: input.document
+        ? JSON.stringify(input.document)
+        : input.content
+          ? null
+          : JSON.stringify(emptyLandingPageDocument(input.name)),
+      publishedAt: input.content && input.status === "published" ? now : null,
+      createdAt: now,
+    });
+    const repoint = orm
+      .update(landingPages)
+      .set({
+        name: input.name,
+        slug: input.slug,
+        status: input.content ? input.status : page.status,
+        ...(input.content && input.status === "published" ? { publishedVersionId: versionId } : {}),
+        currentVersionId: versionId,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(landingPages.workspaceId, workspaceId),
+          eq(landingPages.id, page.id),
+          ne(landingPages.status, "archived"),
+        ),
+      );
+    try {
+      await orm.batch([insertVersion, repoint]);
+    } catch (error) {
+      if (await this.isArchived(page.id)) return { kind: "archived" };
+      throw error;
+    }
     return { kind: "ok", id: page.id, versionId };
+  }
+
+  private async isArchived(id: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ status: landingPages.status })
+      .from(landingPages)
+      .where(and(this.inWorkspace(landingPages), eq(landingPages.id, id)))
+      .get();
+    return row?.status === "archived";
   }
 
   public async archiveLandingPage(id: string): Promise<boolean> {

@@ -191,6 +191,7 @@ export async function processDelivery(deliveryId: string, env: RuntimeEnv): Prom
   const repository = new DeliveryRecoveryRepository(database);
   const delivery = await repository.claimDelivery(deliveryId);
   if (!delivery) return;
+  if (await repository.cancelForCancelledEnrollment(delivery.id, delivery.leaseId)) return;
 
   let result: { providerMessageId: string; acceptedAt: string };
   try {

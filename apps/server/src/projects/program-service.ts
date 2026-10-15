@@ -142,7 +142,7 @@ export async function bindProgramForm(
     if (!priorProject.archivedAt)
       throw new ProgramError("conflict", "Unbind this shared form from its existing Project first");
   }
-  await repository.set(input.formId, input.binding);
+  await repository.set(input.formId, input.binding, previous?.projectId ?? null);
   await writeAuditLog(database, workspace, {
     action: "project.program.bind_form",
     resourceType: "project",
