@@ -1,4 +1,5 @@
 import { contactExportFilterSchema } from "@openengage/core/contacts";
+import { csvCell } from "@openengage/core/shared/csv";
 import { createDatabase } from "@openengage/database/client";
 import {
   ContactImportPartExecutionRepository,
@@ -315,16 +316,3 @@ function requireExportLease(updated: boolean, operation: string): void {
 
 const CONTACT_EXPORT_HEADER =
   "id,email,first_name,last_name,phone,external_id,stage,score,status,custom_fields,created_at,updated_at\n";
-
-export function csvCell(value: unknown): string {
-  let rendered =
-    value === null || value === undefined
-      ? ""
-      : typeof value === "string"
-        ? value
-        : JSON.stringify(value);
-  // Spreadsheets can skip leading whitespace and controls before recognizing a formula.
-  // oxlint-disable-next-line eslint/no-control-regex
-  if (/^[\s\u0000-\u001f\u007f-\u009f]*[=+\-@]/.test(rendered)) rendered = `'${rendered}`;
-  return `"${rendered.replaceAll('"', '""')}"`;
-}

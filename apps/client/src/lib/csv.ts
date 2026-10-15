@@ -1,12 +1,4 @@
-/**
- * Quotes a CSV cell, prefixing a `'` when the text could be read as a formula
- * by a spreadsheet application (CSV injection).
- */
-function csvCell(value: string | number): string {
-  let text = String(value);
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
+import { csvCell } from "@openengage/core/shared/csv";
 
 /**
  * Triggers a download of `rows` as CSV, taking the header order from the first

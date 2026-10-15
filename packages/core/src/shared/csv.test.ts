@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { csvCell } from "./worker";
+import { csvCell } from "./csv";
 
 describe("csvCell", () => {
   it.each([
