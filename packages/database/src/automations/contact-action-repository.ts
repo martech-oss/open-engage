@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { contacts, contactTags, tags } from "../contacts/schema";
 import { segmentMemberships } from "../segments/schema";
@@ -14,6 +14,11 @@ import {
 type ContactActionJob = Pick<AutomationJobRow, "id" | "workspaceId" | "contactId">;
 
 export class AutomationContactActionRepository extends DatabaseRepository {
+  /** Archiving freezes a contact's profile and memberships, even for jobs already due. */
+  private contactNotArchived(job: ContactActionJob) {
+    return sql`EXISTS (SELECT 1 FROM ${contacts} WHERE ${contacts.workspaceId} = ${job.workspaceId} AND ${contacts.id} = ${job.contactId} AND ${contacts.status} != 'archived')`;
+  }
+
   /** Condition nodes: does the contact carry a tag with this slug? */
   public async contactHasTagWithSlug(
     workspaceId: string,
@@ -51,7 +56,7 @@ export class AutomationContactActionRepository extends DatabaseRepository {
               jobId: job.id,
               workspaceId: job.workspaceId,
               leaseId,
-            })}`,
+            })} AND ${this.contactNotArchived(job)}`,
       )
       .onConflictDoNothing();
   }
@@ -67,6 +72,7 @@ export class AutomationContactActionRepository extends DatabaseRepository {
         eq(contactTags.workspaceId, job.workspaceId),
         eq(contactTags.contactId, job.contactId),
         eq(contactTags.tagId, tagId),
+        this.contactNotArchived(job),
         runningActionLeaseExists(this.database, {
           jobId: job.id,
           workspaceId: job.workspaceId,
@@ -95,7 +101,7 @@ export class AutomationContactActionRepository extends DatabaseRepository {
               jobId: job.id,
               workspaceId: job.workspaceId,
               leaseId,
-            })}`,
+            })} AND ${this.contactNotArchived(job)}`,
       )
       .onConflictDoNothing();
     return changedExactlyOne(result);
@@ -112,6 +118,7 @@ export class AutomationContactActionRepository extends DatabaseRepository {
         eq(segmentMemberships.workspaceId, job.workspaceId),
         eq(segmentMemberships.segmentId, segmentId),
         eq(segmentMemberships.contactId, job.contactId),
+        this.contactNotArchived(job),
         runningActionLeaseExists(this.database, {
           jobId: job.id,
           workspaceId: job.workspaceId,
@@ -145,6 +152,8 @@ export class AutomationContactActionRepository extends DatabaseRepository {
         and(
           eq(contacts.workspaceId, job.workspaceId),
           eq(contacts.id, job.contactId),
+          // A job queued before the contact was archived must not edit it now.
+          ne(contacts.status, "archived"),
           runningActionLeaseExists(this.database, {
             jobId: job.id,
             workspaceId: job.workspaceId,
@@ -168,6 +177,8 @@ export class AutomationContactActionRepository extends DatabaseRepository {
         and(
           eq(contacts.workspaceId, job.workspaceId),
           eq(contacts.id, job.contactId),
+          // A job queued before the contact was archived must not edit it now.
+          ne(contacts.status, "archived"),
           runningActionLeaseExists(this.database, {
             jobId: job.id,
             workspaceId: job.workspaceId,

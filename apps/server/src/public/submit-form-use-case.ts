@@ -1,3 +1,4 @@
+import { progressiveFieldKeys } from "@openengage/core/web";
 import type { OpenEngageDatabase } from "@openengage/database/client";
 import { FormProgramRepository, ProgramError } from "@openengage/database/projects";
 import { uuidv7 } from "@openengage/database/shared";
@@ -135,7 +136,11 @@ export class SubmitPublicFormUseCase {
       visitor?.email?.toLowerCase() === primitiveString(body["email"]).trim().toLowerCase();
     const answered =
       visitor && sameEmail
-        ? await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitor.id)
+        ? await repository.findAnsweredFieldsByVisitor(
+            form.workspaceId,
+            visitor.id,
+            progressiveFieldKeys(form.definition),
+          )
         : new Set<string>();
     const validationIssues = validatePublicFormBody(form.definition, answered, body);
     if (validationIssues.length > 0) {
@@ -223,7 +228,9 @@ export class SubmitPublicFormUseCase {
     return {
       kind: "accepted",
       contactId: outcome.contactId,
-      ...(visitorToken ? { visitorToken, visitorId: outcome.visitorId! } : {}),
+      ...(visitorToken ? { visitorToken } : {}),
+      // Only a browser now bound to the contact has history worth attaching.
+      ...(visitorToken && outcome.bound ? { visitorId: outcome.visitorId! } : {}),
       workspaceId: form.workspaceId,
       formId: form.id,
       successMessage: form.successMessage,

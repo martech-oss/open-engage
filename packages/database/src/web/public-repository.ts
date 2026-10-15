@@ -20,6 +20,7 @@ import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import {
   persistPublicFormSubmissionBatch,
+  type ExistingContactTrust,
   type PersistPublicFormSubmissionInput,
 } from "./public-form-submission-writer";
 import {
@@ -55,7 +56,18 @@ export interface PublicFormRecord {
   successMessage: string;
 }
 
-export type { PersistPublicFormSubmissionInput } from "./public-form-submission-writer";
+export type {
+  ExistingContactTrust,
+  PersistPublicFormSubmissionInput,
+} from "./public-form-submission-writer";
+
+function contactTrust(
+  contact: { id: string; status: string },
+  binding: { contactId: string } | null | undefined,
+): ExistingContactTrust {
+  if (contact.status === "archived") return "archived";
+  return binding?.contactId === contact.id ? "verified" : "unverified";
+}
 
 /**
  * Public, unauthenticated lookups and writes behind the hosted signup form
@@ -124,24 +136,28 @@ export class PublicFormRepository extends DatabaseRepository {
     };
   }
 
-  private async findContactIdByEmail(workspaceId: string, email: string): Promise<string | null> {
+  private async findContactByEmail(workspaceId: string, email: string) {
     const row = await this.database.orm
-      .select({ id: contacts.id })
+      .select({ id: contacts.id, status: contacts.status })
       .from(contacts)
       .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.email, email)))
       .get();
-    return row?.id ?? null;
+    return row ?? null;
   }
 
   /**
    * Accepts one submission in a single D1 transaction. The form submission's
    * unique key is part of the same batch as contact mutation and event work,
    * so a duplicate race rolls every earlier statement back.
+   *
+   * An email address alone does not prove who is submitting. A browser is
+   * bound to a contact only when the submission creates that contact or the
+   * browser was already bound to it; see {@link ExistingContactTrust}.
    */
   public async persistSubmission(
     input: PersistPublicFormSubmissionInput,
   ): Promise<
-    | { kind: "accepted"; contactId: string; visitorId: string | null }
+    | { kind: "accepted"; contactId: string; visitorId: string | null; bound: boolean }
     | { kind: "duplicate"; contactId: string | null; visitorId: string | null }
   > {
     const duplicate = await this.findSubmission(input);
@@ -149,16 +165,17 @@ export class PublicFormRepository extends DatabaseRepository {
     let visitorId = input.visitorId ?? null;
     const visitors = new VisitorRepository(this.database);
     for (let attempt = 0; attempt < 3; attempt++) {
-      const existingContactId = await this.findContactIdByEmail(input.workspaceId, input.email);
-      if (visitorId) {
-        const binding = await visitors.binding(input.workspaceId, visitorId);
-        if (binding && binding.contactId !== existingContactId) visitorId = uuidv7();
-      }
+      const contact = await this.findContactByEmail(input.workspaceId, input.email);
+      const binding = visitorId ? await visitors.binding(input.workspaceId, visitorId) : null;
+      const existing = contact ? { id: contact.id, trust: contactTrust(contact, binding) } : null;
+      const binds = existing === null || existing.trust === "verified";
+      // A browser bound to someone else starts a fresh visitor for the new contact.
+      if (binds && binding && binding.contactId !== existing?.id) visitorId = uuidv7();
       try {
         const result = await persistPublicFormSubmissionBatch(
           this.database,
           { ...input, visitorId },
-          existingContactId,
+          existing,
         );
         return { kind: "accepted", ...result };
       } catch (error) {
@@ -166,15 +183,15 @@ export class PublicFormRepository extends DatabaseRepository {
         if (!isConstraintError(error)) throw error;
         const duplicate = await this.findSubmission(input);
         if (duplicate) return { kind: "duplicate", ...duplicate };
-        const binding = visitorId ? await visitors.binding(input.workspaceId, visitorId) : null;
-        if (binding && binding.contactId !== existingContactId) {
+        const current = visitorId ? await visitors.binding(input.workspaceId, visitorId) : null;
+        if (binds && current && current.contactId !== existing?.id) {
           visitorId = uuidv7();
           continue;
         }
         if (
-          existingContactId === null &&
+          existing === null &&
           isUniqueConstraintError(error, CONTACT_EMAIL_UNIQUE_COLUMNS) &&
-          (await this.findContactIdByEmail(input.workspaceId, input.email))
+          (await this.findContactByEmail(input.workspaceId, input.email))
         )
           continue;
         throw error;
@@ -212,7 +229,10 @@ export class PublicFormRepository extends DatabaseRepository {
   public async findAnsweredFieldsByVisitor(
     workspaceId: string,
     visitorId: string,
+    /** Only these keys are reported: the form's own progressive fields. */
+    fieldKeys: ReadonlySet<string>,
   ): Promise<Set<string>> {
+    if (fieldKeys.size === 0) return new Set();
     const row = await this.database.orm
       .select({
         firstName: contacts.firstName,
@@ -247,7 +267,7 @@ export class PublicFormRepository extends DatabaseRepository {
         if (value !== null && value !== undefined && value !== "") answered.add(key);
       }
     }
-    return answered;
+    return new Set([...answered].filter((key) => fieldKeys.has(key)));
   }
 }
 
