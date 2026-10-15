@@ -1,9 +1,4 @@
-import type {
-  BrowserContext,
-  BrowserWorker,
-  Page,
-  Request as PlaywrightRequest,
-} from "@cloudflare/playwright";
+import type { BrowserContext, BrowserWorker, Page } from "@cloudflare/playwright";
 
 export interface CompanyEnrichmentToolBindings {
   AI: Ai;
@@ -41,14 +36,11 @@ export interface WebsiteInspection {
   warnings: string[];
 }
 
-export type InspectionPage = Pick<Page, "goto" | "url" | "evaluate">;
-
-export type InspectionRequest = Pick<PlaywrightRequest, "url" | "redirectedFrom">;
+export type InspectionPage = Pick<Page, "goto" | "url" | "evaluate" | "mainFrame">;
 
 export interface InspectionContext {
   route: BrowserContext["route"];
   routeWebSocket: BrowserContext["routeWebSocket"];
-  on(event: "request", listener: (request: InspectionRequest) => void): unknown;
   newPage(): Promise<InspectionPage>;
   close(): Promise<void>;
 }

@@ -1,5 +1,6 @@
 import { launch, type BrowserWorker } from "@cloudflare/playwright";
 
+import { BrowserRequestPolicy } from "./company-enrichment-browser";
 import { extractHtmlPage, selectRelevantLinks } from "./company-enrichment-html";
 import { capTotalText, normalizePage } from "./company-enrichment-normalization";
 import type {
@@ -11,7 +12,6 @@ import type {
 import {
   assertSafePublicHttpsUrl,
   errorMessage,
-  isSafePublicHttpsUrl,
   readTextLimited,
   timedSignal,
 } from "./company-enrichment-web";
@@ -21,6 +21,7 @@ const MAX_PAGES = 4;
 const MAX_BROWSER_PAGES = 3;
 const STATIC_FETCH_TIMEOUT_MS = 12_000;
 const BROWSER_NAVIGATION_TIMEOUT_MS = 15_000;
+const MAX_BROWSER_REDIRECTS = 5;
 
 export async function inspectWebsite(
   requestedUrl: string,
@@ -66,39 +67,17 @@ export async function inspectWebsite(
     try {
       // A Service Worker's own requests never reach the route handler below.
       const context = await browser.newContext({ serviceWorkers: "block" });
+      const policy = new BrowserRequestPolicy();
       // Routing the whole context also covers any pop-up the page opens.
-      await context.route("**/*", async (route) => {
-        const resourceUrl = route.request().url();
-        if (resourceUrl.startsWith("data:") || resourceUrl.startsWith("blob:")) {
-          await route.continue();
-          return;
-        }
-        if (!isSafePublicHttpsUrl(resourceUrl)) {
-          await route.abort("blockedbyclient");
-          return;
-        }
-        await route.continue();
-      });
+      await context.route("**/*", policy.handle);
+      // WebSockets cannot be relayed through the Worker, so none are opened.
       await context.routeWebSocket(
-        (url) => !isSafePublicHttpsUrl(url.href.replace(/^wss:/, "https:")),
+        () => true,
         (socket) => socket.close(),
       );
-      // Playwright follows redirect hops without consulting the route handler,
-      // so a hop to a disallowed address is caught as it is issued and the
-      // page that triggered it is discarded rather than read.
-      const disallowedRedirects: string[] = [];
-      context.on("request", (request) => {
-        if (request.redirectedFrom() && !isSafePublicHttpsUrl(request.url()))
-          disallowedRedirects.push(request.url());
-      });
       const page = await context.newPage();
-      const render = async (target: string) => {
-        disallowedRedirects.length = 0;
-        const rendered = await renderPage(page, target);
-        const [redirect] = disallowedRedirects;
-        if (redirect) throw new Error(`Redirected to a disallowed address: ${redirect}`);
-        return rendered;
-      };
+      policy.watch(page.mainFrame());
+      const render = (target: string) => renderPage(page, policy, target);
 
       for (const target of browserTargets) {
         signal?.throwIfAborted();
@@ -190,11 +169,33 @@ async function fetchStaticPage(
   throw new Error("Too many redirects");
 }
 
-async function renderPage(page: InspectionPage, requestedUrl: string): Promise<InspectedPage> {
-  await page.goto(assertSafePublicHttpsUrl(requestedUrl).href, {
-    waitUntil: "domcontentloaded",
-    timeout: BROWSER_NAVIGATION_TIMEOUT_MS,
-  });
+async function renderPage(
+  page: InspectionPage,
+  policy: BrowserRequestPolicy,
+  requestedUrl: string,
+): Promise<InspectedPage> {
+  let target = assertSafePublicHttpsUrl(requestedUrl).href;
+  for (let redirects = 0; ; redirects += 1) {
+    policy.takeRedirect();
+    let navigationError: unknown = null;
+    try {
+      await page.goto(target, {
+        waitUntil: "domcontentloaded",
+        timeout: BROWSER_NAVIGATION_TIMEOUT_MS,
+      });
+    } catch (error) {
+      // A redirect ends the navigation with a blocked request.
+      navigationError = error;
+    }
+    const redirect = policy.takeRedirect();
+    if (!redirect) {
+      if (navigationError) throw navigationError;
+      break;
+    }
+    if (!redirect.allowed) throw new Error(`Redirected to a disallowed address: ${redirect.url}`);
+    if (redirects >= MAX_BROWSER_REDIRECTS) throw new Error("Too many redirects");
+    target = redirect.url;
+  }
   const finalUrl = assertSafePublicHttpsUrl(page.url()).href;
   const extracted = await page.evaluate(() => {
     const meta = (selector: string) =>

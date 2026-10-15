@@ -19,7 +19,6 @@ export type {
   InspectionBrowser,
   InspectionContext,
   InspectionPage,
-  InspectionRequest,
 } from "./company-enrichment-types";
 export { assertSafePublicHttpsUrl } from "./company-enrichment-web";
 
