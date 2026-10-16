@@ -170,6 +170,22 @@ export const PROJECT_PROGRAM_TEMPLATES: Record<
   },
 };
 
+/** Visits each status at most once, so the cost is bounded by statuses plus transitions. */
+function statusReachable(definition: ProjectProgramDefinition, from: string, to: string): boolean {
+  const next = new Map(definition.statuses.map((s) => [s.id, s.nextStatusIds]));
+  const seen = new Set<string>([from]);
+  const pending = [from];
+  for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
+    if (id === to) return true;
+    for (const child of next.get(id) ?? [])
+      if (!seen.has(child)) {
+        seen.add(child);
+        pending.push(child);
+      }
+  }
+  return false;
+}
+
 /** The definition supplied here is the member's immutable enrollment version. */
 export function resolveProgramProgress(
   definition: ProjectProgramDefinition,
@@ -192,18 +208,9 @@ export function resolveProgramProgress(
     return { statusId, firstSuccessAt: target.success ? (current.firstSuccessAt ?? now) : null };
   }
   if (current && current.statusId !== statusId) {
-    const seen = new Set<string>();
-    const reachable = (id: string): boolean => {
-      if (id === statusId) return true;
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return (definition.statuses.find((s) => s.id === id)?.nextStatusIds ?? []).some(reachable);
-    };
-    if (!reachable(current.statusId)) {
-      const descendants = (id: string): boolean =>
-        id === current.statusId ||
-        (definition.statuses.find((s) => s.id === id)?.nextStatusIds ?? []).some(descendants);
-      if (input.source === "form" && descendants(statusId)) return current;
+    if (!statusReachable(definition, current.statusId, statusId)) {
+      if (input.source === "form" && statusReachable(definition, statusId, current.statusId))
+        return current;
       throw new Error("Rewind or branch change requires manual correction");
     }
   }

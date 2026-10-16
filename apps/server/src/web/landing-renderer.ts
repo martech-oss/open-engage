@@ -99,5 +99,19 @@ export async function renderLandingPage(
     : options.resolved
       ? '<button id="oe-consent-withdraw" type="button" style="margin:1rem">閲覧計測を停止する</button>'
       : '<aside id="oe-consent" role="region" aria-label="閲覧計測の同意" style="padding:1rem;background:#fff;color:#17202a;border-top:1px solid #ccc"><p>閲覧履歴を問い合わせ情報と関連付けて利用します。フォームは同意せずに送信できます。</p><button id="oe-consent-accept" type="button">閲覧計測を許可</button> <button id="oe-consent-decline" type="button">同意せずに続ける</button></aside>';
-  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="${escapeHtml(document.description)}"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline'; font-src 'none'; script-src ${options.preview ? "'none'" : "'unsafe-inline'"}; connect-src ${options.preview ? "'none'" : escapeHtml(options.origin)}; frame-src ${options.preview ? "'none'" : escapeHtml(options.origin)}; form-action 'none'; base-uri 'none'"><title>${escapeHtml(document.title)}</title><style>${document.css.replaceAll("<", "\\3c ")}</style></head><body>${body}${consent}${runtime}</body></html>`;
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="${escapeHtml(document.description)}"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imageSources(options.imageUrls)}; style-src 'unsafe-inline'; font-src 'none'; script-src ${options.preview ? "'none'" : "'unsafe-inline'"}; connect-src ${options.preview ? "'none'" : escapeHtml(options.origin)}; frame-src ${options.preview ? "'none'" : escapeHtml(options.origin)}; form-action 'none'; base-uri 'none'"><title>${escapeHtml(document.title)}</title><style>${document.css.replaceAll("<", "\\3c ")}</style></head><body>${body}${consent}${runtime}</body></html>`;
+}
+
+/**
+ * Images only enter a page through its managed slots, so the policy names
+ * just the origins those URLs resolve to.
+ */
+function imageSources(imageUrls: Record<string, string>): string {
+  const origins = new Set<string>();
+  for (const url of Object.values(imageUrls)) {
+    const parsed = URL.parse(url);
+    if (parsed && (parsed.protocol === "https:" || parsed.protocol === "http:"))
+      origins.add(parsed.origin);
+  }
+  return [...origins, "data:"].map(escapeHtml).join(" ");
 }

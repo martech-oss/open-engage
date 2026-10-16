@@ -1,4 +1,4 @@
-import type { BrowserWorker, Page } from "@cloudflare/playwright";
+import type { BrowserContext, BrowserWorker, Page } from "@cloudflare/playwright";
 
 export interface CompanyEnrichmentToolBindings {
   AI: Ai;
@@ -36,10 +36,17 @@ export interface WebsiteInspection {
   warnings: string[];
 }
 
-export type InspectionPage = Pick<Page, "route" | "goto" | "url" | "evaluate">;
+export type InspectionPage = Pick<Page, "goto" | "url" | "evaluate" | "mainFrame">;
+
+export interface InspectionContext {
+  route: BrowserContext["route"];
+  routeWebSocket: BrowserContext["routeWebSocket"];
+  newPage(): Promise<InspectionPage>;
+  close(): Promise<void>;
+}
 
 export interface InspectionBrowser {
-  newPage(): Promise<InspectionPage>;
+  newContext(options: { serviceWorkers: "block" }): Promise<InspectionContext>;
   close(): Promise<void>;
 }
 

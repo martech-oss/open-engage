@@ -13,10 +13,18 @@ import type {
 } from "./types";
 import { assertSafeWebhookUrl } from "./webhook-url";
 
+/**
+ * Well inside the five-minute delivery lease, so a slow receiver releases its
+ * slot through the ordinary retry path instead of holding it until the lease
+ * expires.
+ */
+const WEBHOOK_TIMEOUT_MS = 10_000;
+
 export interface WebhookAdapterOptions {
   url: string;
   secret: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export class OutboundWebhookAdapter implements ChannelAdapter {
@@ -45,18 +53,28 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
       },
     });
     const signature = await hmacHex(this.options.secret, `${timestamp}.${body}`);
-    const response = await this.fetcher(this.options.url, {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        "Content-Type": "application/json",
-        "OpenEngage-Event-Id": eventId,
-        "OpenEngage-Timestamp": timestamp,
-        "OpenEngage-Signature": `v1=${signature}`,
-        "Idempotency-Key": message.idempotencyKey,
-      },
-      body,
-    });
+    let response: Response;
+    try {
+      response = await this.fetcher(this.options.url, {
+        method: "POST",
+        redirect: "error",
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? WEBHOOK_TIMEOUT_MS),
+        headers: {
+          "Content-Type": "application/json",
+          "OpenEngage-Event-Id": eventId,
+          "OpenEngage-Timestamp": timestamp,
+          "OpenEngage-Signature": `v1=${signature}`,
+          "Idempotency-Key": message.idempotencyKey,
+        },
+        body,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "TimeoutError")
+        throw new TransientChannelError("Webhook did not respond in time");
+      throw error;
+    }
+    // Only the status matters; an unread body would keep the connection open.
+    await response.body?.cancel().catch(() => undefined);
     if (
       response.status >= 400 &&
       response.status < 500 &&

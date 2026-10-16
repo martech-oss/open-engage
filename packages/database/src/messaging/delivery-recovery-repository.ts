@@ -1,7 +1,8 @@
-import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { channelMessageSchema, type ChannelMessage } from "@openengage/core/messaging";
 
+import { automationEnrollments } from "../automations/schema";
 import { suppressions } from "../consent/schema";
 import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
@@ -96,6 +97,40 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
     return changedExactlyOne(result);
   }
 
+  /**
+   * Closes a claimed delivery instead of sending it when its automation was
+   * cancelled: either the enrollment cancel already moved this leased row to
+   * `cancelled`, or the enrollment is cancelled and the row was re-queued (a
+   * retry or stale-send recovery). Releasing the lease means a cancelled
+   * delivery can no longer be marked accepted by this attempt.
+   */
+  public async closeIfCancelled(deliveryId: string, leaseId: string): Promise<boolean> {
+    const result = await this.database.orm
+      .update(deliveries)
+      .set({
+        status: "cancelled",
+        lastError: "automation_cancelled",
+        nextAttemptAt: null,
+        leaseId: null,
+        leaseExpiresAt: null,
+        updatedAt: nowIso(),
+      })
+      .where(
+        and(
+          eq(deliveries.id, deliveryId),
+          eq(deliveries.leaseId, leaseId),
+          or(
+            eq(deliveries.status, "cancelled"),
+            and(
+              eq(deliveries.status, "sending"),
+              sql`EXISTS (SELECT 1 FROM ${automationEnrollments} WHERE ${automationEnrollments.id} = ${deliveries.enrollmentId} AND ${automationEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${automationEnrollments.status} = 'cancelled')`,
+            ),
+          ),
+        ),
+      );
+    return changedExactlyOne(result);
+  }
+
   public async markProviderSuppressed(deliveryId: string, leaseId: string): Promise<boolean> {
     const now = nowIso();
     const exactLease = exactDeliveryLease(deliveryId, leaseId);
@@ -133,7 +168,11 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
     return changedExactlyOne(result);
   }
 
-  /** Accepted state and its event commit together, and only for this lease. */
+  /**
+   * Accepted state and its event commit together, and only for this lease. A
+   * delivery cancelled mid-send keeps its lease, so a provider that still
+   * accepted it is recorded truthfully.
+   */
   public async markAccepted(input: {
     deliveryId: string;
     leaseId: string;
@@ -141,7 +180,11 @@ export class DeliveryRecoveryRepository extends DatabaseRepository {
     acceptedAt: string;
   }): Promise<boolean> {
     const now = nowIso();
-    const exactLease = exactDeliveryLease(input.deliveryId, input.leaseId);
+    const exactLease = and(
+      eq(deliveries.id, input.deliveryId),
+      eq(deliveries.leaseId, input.leaseId),
+      inArray(deliveries.status, ["sending", "cancelled"]),
+    );
     const orm = this.database.orm;
     const [, result] = await orm.batch([
       orm

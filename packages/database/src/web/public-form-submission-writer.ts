@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import type { ProgramBinding } from "@openengage/core/projects";
 
@@ -35,57 +35,57 @@ export interface PersistPublicFormSubmissionInput {
   formSubmittedEventId: string;
 }
 
+/**
+ * How far a submission may act on the contact that already owns its email.
+ * `verified`: the submitting browser is already bound to that contact.
+ * `unverified`: anyone could have typed the address, so blank fields may be
+ * filled but nothing is overwritten and the browser is not bound to it.
+ * `archived`: the submission is recorded, the contact is left untouched.
+ */
+export type ExistingContactTrust = "verified" | "unverified" | "archived";
+
 /** Writes the contact, submission, event work, and projections in one D1 batch. */
 export async function persistPublicFormSubmissionBatch(
   database: OpenEngageDatabase,
   input: PersistPublicFormSubmissionInput,
-  existingContactId: string | null,
-): Promise<{ contactId: string; visitorId: string | null }> {
+  existing: { id: string; trust: ExistingContactTrust } | null,
+): Promise<{ contactId: string; visitorId: string | null; bound: boolean }> {
   const orm = database.orm;
-  const contactId = existingContactId ?? uuidv7();
-  const programWork = input.programBinding
-    ? await new ProjectMemberRepository(database, {
-        workspaceId: input.workspaceId,
-      }).prepareMutation(
-        {
-          ...input.programBinding,
-          contactId,
-          source: "form",
-          idempotencyKey: `form:${input.submissionId}`,
-        },
-        input.occurredAt,
-      )
-    : null;
-  const contactMutation = existingContactId
-    ? orm
-        .update(contacts)
-        .set({
-          firstName: sql`coalesce(${input.contactFields.firstName}, ${contacts.firstName})`,
-          lastName: sql`coalesce(${input.contactFields.lastName}, ${contacts.lastName})`,
-          phone: sql`coalesce(${input.contactFields.phone}, ${contacts.phone})`,
-          ...(Object.keys(input.contactFields.customFields).length > 0
-            ? {
-                customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), ${JSON.stringify(input.contactFields.customFields)})`,
-              }
-            : {}),
-          updatedAt: input.occurredAt,
-        })
-        .where(and(eq(contacts.workspaceId, input.workspaceId), eq(contacts.id, contactId)))
-    : orm.insert(contacts).values({
-        id: contactId,
-        workspaceId: input.workspaceId,
-        email: input.email,
-        acquisitionProjectId: input.programBinding?.projectId ?? null,
-        firstName: input.contactFields.firstName,
-        lastName: input.contactFields.lastName,
-        phone: input.contactFields.phone,
-        stage: "lead",
-        score: 0,
-        status: "active",
-        customFields: JSON.stringify(input.contactFields.customFields),
-        createdAt: input.occurredAt,
-        updatedAt: input.occurredAt,
-      });
+  const contactId = existing?.id ?? uuidv7();
+  const archived = existing?.trust === "archived";
+  const binds = existing === null || existing.trust === "verified";
+  const programWork =
+    !archived && input.programBinding
+      ? await new ProjectMemberRepository(database, {
+          workspaceId: input.workspaceId,
+        }).prepareMutation(
+          {
+            ...input.programBinding,
+            contactId,
+            source: "form",
+            idempotencyKey: `form:${input.submissionId}`,
+          },
+          input.occurredAt,
+        )
+      : null;
+  const existingContactMutation =
+    existing && !archived
+      ? orm
+          .update(contacts)
+          .set(
+            existing.trust === "verified"
+              ? overwriteContactFields(input)
+              : fillBlankContactFields(input),
+          )
+          .where(
+            and(
+              eq(contacts.workspaceId, input.workspaceId),
+              eq(contacts.id, contactId),
+              // Re-checked in the write itself: an archive racing the read wins.
+              ne(contacts.status, "archived"),
+            ),
+          )
+      : null;
   const identityStatements = input.visitorId
     ? [
         orm
@@ -96,12 +96,16 @@ export async function persistPublicFormSubmissionBatch(
             createdAt: input.occurredAt,
           })
           .onConflictDoNothing(),
-        new VisitorRepository(database).bindingStatement(
-          input.workspaceId,
-          input.visitorId,
-          contactId,
-          input.occurredAt,
-        ),
+        ...(binds
+          ? [
+              new VisitorRepository(database).bindingStatement(
+                input.workspaceId,
+                input.visitorId,
+                contactId,
+                input.occurredAt,
+              ),
+            ]
+          : []),
       ]
     : [];
   const submission = orm.insert(formSubmissions).values({
@@ -130,18 +134,33 @@ export async function persistPublicFormSubmissionBatch(
     createdAt: input.occurredAt,
   });
 
-  if (existingContactId) {
+  const bound = binds && Boolean(input.visitorId);
+  if (existing) {
     await orm.batch([
-      contactMutation,
-      ...identityStatements,
       submission,
+      ...(existingContactMutation ? [existingContactMutation] : []),
+      ...identityStatements,
       ...formSubmitted,
       ...(programWork?.statements ?? []),
     ]);
-    return { contactId, visitorId: input.visitorId ?? null };
+    return { contactId, visitorId: input.visitorId ?? null, bound };
   }
   await orm.batch([
-    contactMutation,
+    orm.insert(contacts).values({
+      id: contactId,
+      workspaceId: input.workspaceId,
+      email: input.email,
+      acquisitionProjectId: input.programBinding?.projectId ?? null,
+      firstName: input.contactFields.firstName,
+      lastName: input.contactFields.lastName,
+      phone: input.contactFields.phone,
+      stage: "lead",
+      score: 0,
+      status: "active",
+      customFields: JSON.stringify(input.contactFields.customFields),
+      createdAt: input.occurredAt,
+      updatedAt: input.occurredAt,
+    }),
     ...identityStatements,
     submission,
     ...contactEventStatements(orm, {
@@ -158,5 +177,35 @@ export async function persistPublicFormSubmissionBatch(
     ...formSubmitted,
     ...(programWork?.statements ?? []),
   ]);
-  return { contactId, visitorId: input.visitorId ?? null };
+  return { contactId, visitorId: input.visitorId ?? null, bound };
+}
+
+function overwriteContactFields(input: PersistPublicFormSubmissionInput) {
+  return {
+    firstName: sql`coalesce(${input.contactFields.firstName}, ${contacts.firstName})`,
+    lastName: sql`coalesce(${input.contactFields.lastName}, ${contacts.lastName})`,
+    phone: sql`coalesce(${input.contactFields.phone}, ${contacts.phone})`,
+    ...(Object.keys(input.contactFields.customFields).length > 0
+      ? {
+          customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), ${JSON.stringify(input.contactFields.customFields)})`,
+        }
+      : {}),
+    updatedAt: input.occurredAt,
+  };
+}
+
+/** Adds answers only where the contact has none, so stored values never change. */
+function fillBlankContactFields(input: PersistPublicFormSubmissionInput) {
+  return {
+    firstName: sql`coalesce(nullif(${contacts.firstName}, ''), ${input.contactFields.firstName})`,
+    lastName: sql`coalesce(nullif(${contacts.lastName}, ''), ${input.contactFields.lastName})`,
+    phone: sql`coalesce(nullif(${contacts.phone}, ''), ${input.contactFields.phone})`,
+    ...(Object.keys(input.contactFields.customFields).length > 0
+      ? {
+          // Custom keys are validated as [A-Za-z0-9_-]+, so the quoted path is exact.
+          customFields: sql`json_patch(coalesce(${contacts.customFields}, '{}'), (SELECT json_group_object(incoming.key, incoming.value) FROM json_each(${JSON.stringify(input.contactFields.customFields)}) AS incoming WHERE coalesce(json_extract(coalesce(${contacts.customFields}, '{}'), '$."' || incoming.key || '"'), '') = ''))`,
+        }
+      : {}),
+    updatedAt: input.occurredAt,
+  };
 }

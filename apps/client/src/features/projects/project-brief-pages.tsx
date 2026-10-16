@@ -40,6 +40,11 @@ import {
 } from "./project-brief-detail-view";
 
 type ReviewAction = "approve" | "reject" | "withdraw";
+/** The brief revision a reviewer saw when opening the dialog; the decision applies to it only. */
+interface ReviewTarget {
+  action: ReviewAction;
+  rowVersion: number;
+}
 type GenerationAction = "segment" | "sequence" | "automation";
 
 const AutomationAiSheet = lazy(async () => ({
@@ -68,7 +73,7 @@ export function ProjectBriefDetailPage({ id }: { id: string }): ReactNode {
   const createSegment = useCreateSegment();
   const createAutomation = useCreateAutomation();
   const [editOpen, setEditOpen] = useState(false);
-  const [reviewAction, setReviewAction] = useState<ReviewAction | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [generationOpen, setGenerationOpen] = useState<GenerationAction | null>(null);
   const [error, setError] = useState("");
@@ -84,15 +89,23 @@ export function ProjectBriefDetailPage({ id }: { id: string }): ReactNode {
     }
   }
 
+  function openReview(action: ReviewAction): void {
+    setReviewTarget({ action, rowVersion: detail.rowVersion });
+  }
+
   async function review(comment: string): Promise<void> {
-    if (reviewAction === "approve") {
-      await approve.mutateAsync({ id, comment, expectedRowVersion: detail.rowVersion });
+    if (!reviewTarget) return;
+    // A refetch may change `detail` while the dialog is open; the server rejects
+    // this pinned revision instead of applying the decision to unseen content.
+    const expectedRowVersion = reviewTarget.rowVersion;
+    if (reviewTarget.action === "approve") {
+      await approve.mutateAsync({ id, comment, expectedRowVersion });
       toast.success("承認しました");
-    } else if (reviewAction === "reject") {
-      await reject.mutateAsync({ id, comment, expectedRowVersion: detail.rowVersion });
+    } else if (reviewTarget.action === "reject") {
+      await reject.mutateAsync({ id, comment, expectedRowVersion });
       toast.success("差戻しました");
     } else {
-      await withdraw.mutateAsync({ id, reason: comment, expectedRowVersion: detail.rowVersion });
+      await withdraw.mutateAsync({ id, reason: comment, expectedRowVersion });
       toast.success("承認申請を取り消しました");
     }
   }
@@ -142,8 +155,8 @@ export function ProjectBriefDetailPage({ id }: { id: string }): ReactNode {
               "承認を依頼しました",
             )
           }
-          onReview={setReviewAction}
-          onWithdraw={() => setReviewAction("withdraw")}
+          onReview={openReview}
+          onWithdraw={() => openReview("withdraw")}
           onReopen={() =>
             void run(
               () => reopen.mutateAsync({ id, expectedRowVersion: detail.rowVersion }),
@@ -185,12 +198,13 @@ export function ProjectBriefDetailPage({ id }: { id: string }): ReactNode {
           onSave={saveBrief}
         />
       ) : null}
-      {reviewAction ? (
+      {reviewTarget ? (
         <ReviewProjectBriefDialog
-          key={reviewAction}
-          kind={reviewAction}
+          key={reviewTarget.action}
+          kind={reviewTarget.action}
+          stale={reviewTarget.rowVersion !== detail.rowVersion}
           onOpenChange={(open) => {
-            if (!open) setReviewAction(null);
+            if (!open) setReviewTarget(null);
           }}
           onSubmit={review}
         />

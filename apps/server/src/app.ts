@@ -13,6 +13,7 @@ import { registerEmailImageRoutes } from "./messaging/email-image-routes";
 import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
+import { publicRequestBodyLimit } from "./public/http";
 import { registerPublicRoutes } from "./public/routes";
 
 const app = new Hono<AppEnvironment>();
@@ -25,6 +26,8 @@ app.use(
     allowMethods: ["GET", "POST", "OPTIONS"],
   }),
 );
+// Sign-up and sign-in bodies are unauthenticated too, so they share the public ceiling.
+app.use("/api/auth/*", publicRequestBodyLimit);
 app.on(["GET", "POST"], "/api/auth/*", (context) => {
   const requestOrigin = new URL(context.req.url).origin;
   return createAuth(context.env, requestOrigin).handler(context.req.raw);

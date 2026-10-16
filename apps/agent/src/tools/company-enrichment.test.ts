@@ -1,4 +1,4 @@
-import type { BrowserWorker } from "@cloudflare/playwright";
+import type { BrowserWorker, Frame, Route } from "@cloudflare/playwright";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -9,12 +9,184 @@ import {
   selectRelevantLinks,
   type BrowserLauncher,
   type InspectionBrowser,
+  type InspectionContext,
   type InspectionPage,
 } from "./company-enrichment";
+import { BrowserRequestPolicy } from "./company-enrichment-browser";
 
 vi.mock("@cloudflare/playwright", () => ({ launch: vi.fn<() => Promise<never>>() }));
 
 const browserBinding = { fetch: vi.fn<typeof fetch>() } satisfies BrowserWorker;
+const mainFrame = {} as Frame;
+
+interface FakeRequest {
+  url: string;
+  resourceType?: string;
+  frame?: Frame | null;
+  navigation?: boolean;
+  status?: number;
+  location?: string;
+  fetchError?: Error;
+}
+
+/** A Playwright route over one request, recording what the policy did with it. */
+function fakeRoute(input: FakeRequest) {
+  const calls = {
+    fetch: vi.fn<(options: unknown) => void>(),
+    fulfill: vi.fn<() => void>(),
+    abort: vi.fn<(code?: string) => void>(),
+    continue: vi.fn<() => void>(),
+    dispose: vi.fn<() => void>(),
+  };
+  const route = {
+    request: () => ({
+      url: () => input.url,
+      resourceType: () => input.resourceType ?? "document",
+      isNavigationRequest: () => input.navigation ?? true,
+      frame: () => input.frame ?? mainFrame,
+    }),
+    fetch: async (options: unknown) => {
+      calls.fetch(options);
+      if (input.fetchError) throw input.fetchError;
+      return {
+        status: () => input.status ?? 200,
+        headers: () => (input.location ? { location: input.location } : {}),
+        dispose: async () => calls.dispose(),
+      };
+    },
+    fulfill: async () => calls.fulfill(),
+    abort: async (code?: string) => calls.abort(code),
+    continue: async () => calls.continue(),
+  } as unknown as Route;
+  return { route, calls };
+}
+
+/**
+ * A browser whose page navigations go through the context's route handler,
+ * answered from `site` (200 unless listed), as the real browser would.
+ */
+function browserWith(
+  page: InspectionPage,
+  site: Record<string, { status: number; location?: string }> = {},
+) {
+  let handler: ((route: Route) => Promise<void>) | undefined;
+  const fetched: string[] = [];
+  let current = "";
+  const context = {
+    route: vi.fn<InspectionContext["route"]>().mockImplementation(async (_url, routeHandler) => {
+      handler = routeHandler as (route: Route) => Promise<void>;
+    }),
+    routeWebSocket: vi.fn<InspectionContext["routeWebSocket"]>().mockResolvedValue(undefined),
+    newPage: vi.fn<InspectionContext["newPage"]>().mockResolvedValue({
+      ...page,
+      mainFrame: () => mainFrame,
+      url: () => current,
+      goto: async (url, options) => {
+        const { route, calls } = fakeRoute({ url, ...site[url] });
+        calls.fetch.mockImplementation(() => fetched.push(url));
+        await handler?.(route);
+        if (calls.abort.mock.calls.length > 0) throw new Error("net::ERR_BLOCKED_BY_CLIENT");
+        current = url;
+        return page.goto(url, options);
+      },
+    }),
+    close: vi.fn<InspectionContext["close"]>().mockResolvedValue(undefined),
+  } satisfies InspectionContext;
+  const browser = {
+    newContext: vi.fn<InspectionBrowser["newContext"]>().mockResolvedValue(context),
+    close: vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined),
+  } satisfies InspectionBrowser;
+  return { browser, context, fetched };
+}
+
+function renderedPage(title = "Example"): InspectionPage {
+  return {
+    goto: vi.fn<InspectionPage["goto"]>().mockResolvedValue(null),
+    url: vi.fn<InspectionPage["url"]>().mockReturnValue("https://example.com/"),
+    mainFrame: vi.fn<InspectionPage["mainFrame"]>().mockReturnValue(mainFrame),
+    evaluate: vi.fn<InspectionPage["evaluate"]>().mockResolvedValue({
+      title,
+      description: "Description",
+      text: "Rendered company information ".repeat(60),
+      links: [],
+      jsonLd: [],
+      imageCandidates: [],
+    }),
+  };
+}
+
+describe("browser request policy", () => {
+  it("relays requests from the Worker with redirects disabled", async () => {
+    const { route, calls } = fakeRoute({
+      url: "https://example.com/app.js",
+      resourceType: "script",
+    });
+    await new BrowserRequestPolicy().handle(route);
+    expect(calls.fetch).toHaveBeenCalledWith({ maxRedirects: 0, timeout: 10_000 });
+    expect(calls.fulfill).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { url: "https://example.com/logo.png", resourceType: "image" },
+    { url: "https://example.com/font.woff2", resourceType: "font" },
+    { url: "https://10.0.0.5/internal", resourceType: "xhr" },
+    { url: "http://example.com/plain", resourceType: "document" },
+  ])("refuses $url ($resourceType) without fetching it", async (request) => {
+    const { route, calls } = fakeRoute(request);
+    await new BrowserRequestPolicy().handle(route);
+    expect(calls.fetch).not.toHaveBeenCalled();
+    expect(calls.abort).toHaveBeenCalledWith("blockedbyclient");
+  });
+
+  it("lets inline data URLs through without a request", async () => {
+    const { route, calls } = fakeRoute({ url: "data:text/plain,hi" });
+    await new BrowserRequestPolicy().handle(route);
+    expect(calls.continue).toHaveBeenCalledOnce();
+    expect(calls.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["/about", "https://example.com/about", true],
+    ["https://10.0.0.5/admin", "https://10.0.0.5/admin", false],
+    ["http://example.com/", "http://example.com/", false],
+  ])(
+    "ends a page redirect to %s and reports it for the caller to follow",
+    async (location, url, allowed) => {
+      const policy = new BrowserRequestPolicy();
+      policy.watch(mainFrame);
+      const { route, calls } = fakeRoute({ url: "https://example.com/", status: 302, location });
+      await policy.handle(route);
+      expect(calls.abort).toHaveBeenCalledWith("blockedbyclient");
+      expect(calls.fetch).toHaveBeenCalledOnce();
+      expect(calls.dispose).toHaveBeenCalledOnce();
+      expect(policy.takeRedirect()).toEqual({ url, allowed });
+      expect(policy.takeRedirect()).toBeNull();
+    },
+  );
+
+  it("drops redirects of sub-resources and frames without reporting them", async () => {
+    const policy = new BrowserRequestPolicy();
+    policy.watch(mainFrame);
+    for (const request of [
+      { url: "https://example.com/app.js", resourceType: "script", navigation: false },
+      { url: "https://example.com/embed", frame: {} as Frame },
+    ]) {
+      const { route, calls } = fakeRoute({ ...request, status: 301, location: "/elsewhere" });
+      await policy.handle(route);
+      expect(calls.abort).toHaveBeenCalledWith("blockedbyclient");
+    }
+    expect(policy.takeRedirect()).toBeNull();
+  });
+
+  it("fails a request the Worker could not fetch", async () => {
+    const { route, calls } = fakeRoute({
+      url: "https://example.com/",
+      fetchError: new Error("connection reset"),
+    });
+    await new BrowserRequestPolicy().handle(route);
+    expect(calls.abort).toHaveBeenCalledWith("failed");
+  });
+});
 
 describe("company enrichment URL safety", () => {
   it.each([
@@ -131,24 +303,7 @@ describe("HTML inspection", () => {
   });
 
   it("closes Playwright after rendering succeeds", async () => {
-    const close = vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined);
-    const page = {
-      route: vi.fn<InspectionPage["route"]>().mockResolvedValue(undefined),
-      goto: vi.fn<InspectionPage["goto"]>().mockResolvedValue(null),
-      url: vi.fn<InspectionPage["url"]>().mockReturnValue("https://example.com/"),
-      evaluate: vi.fn<InspectionPage["evaluate"]>().mockResolvedValue({
-        title: "Example",
-        description: "Description",
-        text: "Rendered company information ".repeat(60),
-        links: [],
-        jsonLd: [],
-        imageCandidates: [],
-      }),
-    } satisfies InspectionPage;
-    const browser = {
-      newPage: vi.fn<InspectionBrowser["newPage"]>().mockResolvedValue(page),
-      close,
-    } satisfies InspectionBrowser;
+    const { browser, context } = browserWith(renderedPage());
     const launchBrowser = vi.fn<BrowserLauncher>().mockResolvedValue(browser);
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("static unavailable"));
 
@@ -161,14 +316,77 @@ describe("HTML inspection", () => {
     );
 
     expect(result.browserUsed).toBe(true);
-    expect(close).toHaveBeenCalledOnce();
+    expect(browser.close).toHaveBeenCalledOnce();
+    // Policy applies to the whole context, with Service Workers refused.
+    expect(browser.newContext).toHaveBeenCalledWith({ serviceWorkers: "block" });
+    expect(context.route).toHaveBeenCalledOnce();
+    expect(context.routeWebSocket).toHaveBeenCalledOnce();
+  });
+
+  it("follows a page redirect itself after validating the target", async () => {
+    const { browser, fetched } = browserWith(renderedPage(), {
+      "https://example.com/": { status: 301, location: "https://www.example.com/" },
+    });
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("static unavailable"));
+
+    const result = await inspectWebsite(
+      "https://example.com/",
+      browserBinding,
+      fetcher,
+      undefined,
+      vi.fn<BrowserLauncher>().mockResolvedValue(browser),
+    );
+    expect(result.pages[0]?.url).toBe("https://www.example.com/");
+    expect(fetched).toEqual(["https://example.com/", "https://www.example.com/"]);
+  });
+
+  it("never contacts a disallowed redirect target", async () => {
+    const page = renderedPage();
+    const { browser, fetched } = browserWith(page, {
+      "https://example.com/": { status: 302, location: "https://10.0.0.5/admin" },
+    });
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("static unavailable"));
+
+    await expect(
+      inspectWebsite(
+        "https://example.com/",
+        browserBinding,
+        fetcher,
+        undefined,
+        vi.fn<BrowserLauncher>().mockResolvedValue(browser),
+      ),
+    ).rejects.toThrow("could not be read");
+    expect(fetched).toEqual(["https://example.com/"]);
+    expect(page.evaluate).not.toHaveBeenCalled();
+  });
+
+  it("stops after a bounded number of redirects", async () => {
+    const site = Object.fromEntries(
+      Array.from({ length: 8 }, (_, hop) => [
+        `https://example.com/${hop}`,
+        { status: 302, location: `https://example.com/${hop + 1}` },
+      ]),
+    );
+    const { browser, fetched } = browserWith(renderedPage(), site);
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("static unavailable"));
+
+    await expect(
+      inspectWebsite(
+        "https://example.com/0",
+        browserBinding,
+        fetcher,
+        undefined,
+        vi.fn<BrowserLauncher>().mockResolvedValue(browser),
+      ),
+    ).rejects.toThrow("could not be read");
+    expect(fetched).toHaveLength(6);
   });
 
   it("prefers rendered content over a sparse static copy of the same page", async () => {
     const page = {
-      route: vi.fn<InspectionPage["route"]>().mockResolvedValue(undefined),
       goto: vi.fn<InspectionPage["goto"]>().mockResolvedValue(null),
       url: vi.fn<InspectionPage["url"]>().mockReturnValue("https://example.com/"),
+      mainFrame: vi.fn<InspectionPage["mainFrame"]>().mockReturnValue(mainFrame),
       evaluate: vi.fn<InspectionPage["evaluate"]>().mockResolvedValue({
         title: "Rendered Example",
         description: "Rendered description",
@@ -178,10 +396,7 @@ describe("HTML inspection", () => {
         imageCandidates: [],
       }),
     } satisfies InspectionPage;
-    const browser = {
-      newPage: vi.fn<InspectionBrowser["newPage"]>().mockResolvedValue(page),
-      close: vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined),
-    } satisfies InspectionBrowser;
+    const { browser } = browserWith(page);
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response("<html><title>Static Example</title><body>Too sparse</body></html>", {
         headers: { "content-type": "text/html" },
@@ -205,23 +420,51 @@ describe("HTML inspection", () => {
   });
 
   it("closes Playwright when rendering fails", async () => {
-    const close = vi.fn<InspectionBrowser["close"]>().mockResolvedValue(undefined);
     const failedPage = {
-      route: vi.fn<InspectionPage["route"]>().mockResolvedValue(undefined),
       goto: vi.fn<InspectionPage["goto"]>().mockRejectedValue(new Error("navigation failed")),
       url: vi.fn<InspectionPage["url"]>().mockReturnValue("https://example.com/"),
+      mainFrame: vi.fn<InspectionPage["mainFrame"]>().mockReturnValue(mainFrame),
       evaluate: vi.fn<InspectionPage["evaluate"]>(),
     } satisfies InspectionPage;
-    const browser = {
-      newPage: vi.fn<InspectionBrowser["newPage"]>().mockResolvedValue(failedPage),
-      close,
-    } satisfies InspectionBrowser;
+    const { browser } = browserWith(failedPage);
     const launchBrowser = vi.fn<BrowserLauncher>().mockResolvedValue(browser);
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("static unavailable"));
 
     await expect(
       inspectWebsite("https://example.com/", browserBinding, fetcher, undefined, launchBrowser),
     ).rejects.toThrow("could not be read");
-    expect(close).toHaveBeenCalledOnce();
+    expect(browser.close).toHaveBeenCalledOnce();
+  });
+
+  it("abandons a static page whose body stalls past the caller's cancellation", async () => {
+    const controller = new AbortController();
+    let cancelled = false;
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(stream) {
+            stream.enqueue(new TextEncoder().encode("<html><title>Slow</title>"));
+            // Headers arrived; the rest of the body never does.
+          },
+          cancel: () => {
+            cancelled = true;
+          },
+        }),
+        { headers: { "content-type": "text/html" } },
+      ),
+    );
+    const { browser } = browserWith(renderedPage());
+    setTimeout(() => controller.abort(new Error("caller gave up")), 20);
+
+    await expect(
+      inspectWebsite(
+        "https://example.com/",
+        browserBinding,
+        fetcher,
+        controller.signal,
+        vi.fn<BrowserLauncher>().mockResolvedValue(browser),
+      ),
+    ).rejects.toThrow();
+    expect(cancelled).toBe(true);
   });
 });

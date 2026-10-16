@@ -117,6 +117,43 @@ describe("versioned program membership semantics", () => {
       ),
     ).toEqual(current);
   });
+  it("walks densely connected status graphs once per status", () => {
+    // Every chain status links to all later ones (~2^47 distinct paths), and
+    // "other" sits on a separate branch that no chain status reaches.
+    const ids = Array.from({ length: 49 }, (_, index) => `s${index}`);
+    const parsed = program.projectProgramDefinitionSchema.parse({
+      kind: "custom",
+      initialStatusId: "s0",
+      statuses: [
+        ...ids.map((id, index) => ({
+          id,
+          label: id,
+          success: index === 48,
+          nextStatusIds: ids.slice(index + 1),
+        })),
+        { id: "other", label: "other", success: false, nextStatusIds: [] },
+      ],
+    });
+    const started = performance.now();
+    // A form re-submission searches every descendant of s0 for "other" before refusing.
+    expect(() =>
+      program.resolveProgramProgress(
+        parsed,
+        { statusId: "other", firstSuccessAt: null },
+        { statusId: "s0", source: "form" },
+        "2026-09-03T00:00:00.000Z",
+      ),
+    ).toThrow(/correction/);
+    expect(
+      program.resolveProgramProgress(
+        parsed,
+        { statusId: "s0", firstSuccessAt: null },
+        { statusId: "s48", source: "form" },
+        "2026-09-03T00:00:00.000Z",
+      ).statusId,
+    ).toBe("s48");
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
   it("parses quoted CSV and reports malformed rows independently", () => {
     expect(program.parseProgramMemberCsv).toBeTypeOf("function");
     expect(

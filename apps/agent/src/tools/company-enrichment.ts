@@ -17,6 +17,7 @@ export type {
   BrowserLauncher,
   CompanyEnrichmentToolBindings,
   InspectionBrowser,
+  InspectionContext,
   InspectionPage,
 } from "./company-enrichment-types";
 export { assertSafePublicHttpsUrl } from "./company-enrichment-web";

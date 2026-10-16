@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 
+import { progressiveFieldKeys } from "@openengage/core/web";
 import { PublicFormRepository } from "@openengage/database/web";
 
 import { apiError } from "../auth/access";
@@ -45,7 +46,13 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       visitor?.email?.toLowerCase() === body.email.trim().toLowerCase();
     const answered =
       sameEmail && visitor
-        ? [...(await repository.findAnsweredFieldsByVisitor(form.workspaceId, visitor.id))]
+        ? [
+            ...(await repository.findAnsweredFieldsByVisitor(
+              form.workspaceId,
+              visitor.id,
+              progressiveFieldKeys(form.definition),
+            )),
+          ]
         : [];
     return context.json({ data: { answered } });
   });
@@ -120,6 +127,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       ? await new PublicFormRepository(context.get("database")).findAnsweredFieldsByVisitor(
           form.workspaceId,
           visitor.id,
+          progressiveFieldKeys(form.definition),
         )
       : undefined;
     return context.html(

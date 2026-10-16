@@ -91,7 +91,7 @@ export type VariableSnapshot = z.infer<typeof variableSnapshotSchema>;
 
 export class VariableResolutionError extends Error {
   constructor(
-    public readonly kind: "undefined" | "type" | "context" | "expression",
+    public readonly kind: "undefined" | "type" | "context" | "expression" | "size",
     message: string,
   ) {
     super(message);
@@ -166,23 +166,50 @@ export function variableTextReferences(text: string): VariableRef[] {
   if (diagnostics.length) throw new VariableResolutionError("expression", diagnostics[0]!);
   return references;
 }
+/** The largest resolved text any caller stores (a landing page's HTML body). */
+export const RESOLVED_VARIABLE_TEXT_MAX_LENGTH = 200_000;
+
+/**
+ * The output length is checked before each piece is appended, so a short
+ * template repeating a long value fails without first building the full text.
+ */
 export function resolveVariableText(
   text: string,
   snapshot: VariableSnapshot,
-  options: { html?: boolean } = {},
+  options: { html?: boolean; maxLength?: number } = {},
 ): string {
   variableTextReferences(text);
-  return text.replace(
-    /\{\{\s*variables\.([A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g,
-    (_match, key: string) => {
-      const value = resolveVariableRef({ kind: "variable", key, type: "string" }, snapshot);
-      return options.html
-        ? value.replace(
-            /[&<>"']/g,
-            (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
-          )
-        : value;
-    },
+  const maxLength = options.maxLength ?? RESOLVED_VARIABLE_TEXT_MAX_LENGTH;
+  const resolved = new Map<string, string>();
+  const parts: string[] = [];
+  let length = 0;
+  let cursor = 0;
+  const append = (part: string) => {
+    length += part.length;
+    if (length > maxLength)
+      throw new VariableResolutionError("size", `Resolved text exceeds ${maxLength} characters`);
+    parts.push(part);
+  };
+  for (const match of text.matchAll(/\{\{\s*variables\.([A-Za-z][A-Za-z0-9_]{0,63})\s*\}\}/g)) {
+    const key = match[1]!;
+    append(text.slice(cursor, match.index));
+    let value = resolved.get(key);
+    if (value === undefined) {
+      value = resolveVariableRef({ kind: "variable", key, type: "string" }, snapshot);
+      if (options.html) value = escapeVariableHtml(value);
+      resolved.set(key, value);
+    }
+    append(value);
+    cursor = match.index + match[0].length;
+  }
+  append(text.slice(cursor));
+  return parts.join("");
+}
+
+function escapeVariableHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
 }
 

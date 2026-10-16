@@ -17,6 +17,15 @@ export const FORM_FIELD_INPUT_TYPES = [
 export const formFieldInputTypeSchema = z.enum(FORM_FIELD_INPUT_TYPES);
 export type FormFieldInputType = z.infer<typeof formFieldInputTypeSchema>;
 
+export const FORM_FIELDS_MAX = 50;
+/** Longest answer a public form accepts per field; textareas hold free-form inquiries. */
+export const FORM_TEXTAREA_VALUE_MAX_LENGTH = 4_000;
+const FORM_FIELD_VALUE_MAX_LENGTH = 1_000;
+
+export function formFieldValueMaxLength(type: string): number {
+  return type === "textarea" ? FORM_TEXTAREA_VALUE_MAX_LENGTH : FORM_FIELD_VALUE_MAX_LENGTH;
+}
+
 export const formConditionSchema = z
   .object({
     field: z.string().min(1).max(191),
@@ -57,7 +66,7 @@ export type FormField = z.infer<typeof formFieldSchema>;
 export const signupFormDefinitionSchema = z
   .object({
     style: z.enum(["inline", "floating-bar", "floating-box", "modal"]).optional(),
-    fields: z.array(formFieldSchema).max(50).optional(),
+    fields: z.array(formFieldSchema).max(FORM_FIELDS_MAX).optional(),
     /** Cap on how many progressive fields one visit may ask for. */
     progressiveMaxFields: z.number().int().min(1).max(10).default(3),
   })
@@ -65,16 +74,24 @@ export const signupFormDefinitionSchema = z
     const fields = new Map((definition.fields ?? []).map((field) => [field.key, field]));
     if (fields.size !== (definition.fields?.length ?? 0))
       context.addIssue({ code: "custom", message: "項目キーは重複できません", path: ["fields"] });
+    // Each key is resolved once, so the check stays linear in fields and
+    // conditions however many paths the condition graph has.
+    const state = new Map<string, "visiting" | "valid" | "invalid">();
+    const visit = (key: string): boolean => {
+      const known = state.get(key);
+      // Re-entering a key still on the stack means a cycle reaches it.
+      if (known) return known === "valid";
+      const node = fields.get(key);
+      if (!node) return false;
+      state.set(key, "visiting");
+      const valid = [node.visibleWhen, node.requiredWhen].every(
+        (condition) => !condition || visit(condition.field),
+      );
+      state.set(key, valid ? "valid" : "invalid");
+      return valid;
+    };
     for (const [index, field] of (definition.fields ?? []).entries()) {
-      const visit = (key: string, seen: Set<string>): boolean => {
-        if (seen.has(key)) return false;
-        const node = fields.get(key);
-        if (!node) return false;
-        return [node.visibleWhen, node.requiredWhen].every(
-          (condition) => !condition || visit(condition.field, new Set([...seen, key])),
-        );
-      };
-      if (!visit(field.key, new Set()))
+      if (!visit(field.key))
         context.addIssue({
           code: "custom",
           message: "条件は存在する項目を参照し、循環しないようにしてください",

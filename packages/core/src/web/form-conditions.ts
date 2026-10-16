@@ -67,3 +67,15 @@ export function resolveFormFields(
       required: field.required || Boolean(field.requiredWhen && rules.matches(field.requiredWhen)),
     }));
 }
+
+/**
+ * The fields whose answered state a public form may reveal: only the ones it
+ * drops for Progressive Profiling, never the rest of the contact's profile.
+ */
+export function progressiveFieldKeys(definition: SignupFormDefinition): Set<string> {
+  return new Set(
+    (definition.fields ?? [])
+      .filter((field) => field.progressive && field.key !== "email")
+      .map((field) => field.key),
+  );
+}

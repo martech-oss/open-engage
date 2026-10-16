@@ -1,7 +1,9 @@
 import type { Context, Hono } from "hono";
 
+import { normalizeAssetContentType } from "@openengage/core/assets";
 import { GeneratedEmailImageRepository } from "@openengage/database/messaging";
 
+import { ASSET_CSP } from "../assets/response";
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import type { AppEnvironment } from "../env";
 
@@ -30,19 +32,34 @@ export function registerEmailImageRoutes(app: Hono<AppEnvironment>): void {
     );
     const notFound = () =>
       apiError(context, 404, "generated_email_image_not_found", "生成画像が見つかりません");
-    if (!row) return notFound();
+    // The asset can be replaced after generation, so only a raster image is
+    // still treated as the generated preview.
+    const contentType = row ? normalizeAssetContentType(row.contentType) : "";
+    if (!row || !PREVIEWABLE_IMAGE_TYPES.has(contentType)) return notFound();
     const object = await context.env.ASSETS_BUCKET.get(row.r2Key);
     if (!object) return notFound();
 
-    const headers = new Headers({
-      "Cache-Control": "private, no-store",
-      "Content-Type": row.contentType,
-      "X-Content-Type-Options": "nosniff",
+    // Headers are set explicitly rather than copied from the object's stored
+    // metadata, and carry the same sandbox as every other asset response.
+    return new Response(object.body, {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Type": contentType,
+        "Content-Disposition": "inline",
+        "Content-Security-Policy": ASSET_CSP,
+        "X-Content-Type-Options": "nosniff",
+      },
     });
-    object.writeHttpMetadata(headers);
-    return new Response(object.body, { headers });
   });
 }
+
+const PREVIEWABLE_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+]);
 
 function accessError(context: RouteContext, error: unknown): Response {
   if (error instanceof WorkspaceAccessError) {

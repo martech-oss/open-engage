@@ -18,6 +18,33 @@ describe("public boundary primitives", () => {
     );
   });
 
+  it.each([
+    ["/docs/a/b", "/docs/*", true],
+    ["/docs", "/docs/*", false],
+    ["/docs/", "/docs/*", true],
+    ["/a/b/c", "*/b/*", true],
+    ["/abcabc", "*abc", true],
+    ["/abab", "/*ab*ab", true],
+    ["/ab", "/*ab*ab", false],
+    ["/aXbXc", "/a*b*c", true],
+    ["/aXcXb", "/a*b*c", false],
+    ["/abc", "/abc", true],
+    ["/abc", "/ab", false],
+    ["/a**b", "/a**b", true],
+    ["/ab", "/a**b", true],
+  ])("matches %s against %s like an anchored glob", (path, pattern, expected) => {
+    expect(pagePatternMatches(`https://example.com${path}`, pattern)).toBe(expected);
+  });
+
+  it("matches adversarial wildcard patterns without backtracking", () => {
+    const pattern = `/${"a*".repeat(240)}b`;
+    const started = performance.now();
+    expect(pagePatternMatches(`https://example.com/${"a".repeat(8_000)}`, pattern)).toBe(false);
+    // Paths beyond the length cap never match, even a catch-all suffix.
+    expect(pagePatternMatches(`https://example.com/${"a".repeat(9_000)}b`, "*b")).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
   it("redacts transport metadata without mutating the submitted payload", () => {
     const payload = { email: "person@example.com", turnstileToken: "secret", oe_v: "visitor" };
     expect(redactFormPayload(payload)).toEqual({ email: "person@example.com" });

@@ -111,4 +111,25 @@ describe("published variable resolution", () => {
       /undefined/i,
     );
   });
+  it("stops expanding once the resolved text would exceed its limit", () => {
+    const snapshot = variables.createVariableSnapshot(
+      [definition("long", "string", "<".repeat(20_000))],
+      "ws",
+      null,
+    );
+    const template = "{{variables.long}}".repeat(10_000);
+    expect(() => variables.resolveVariableText(template, snapshot, { html: true })).toThrow(
+      variables.VariableResolutionError,
+    );
+    // The escaped length counts: 20,000 "<" become 80,000 characters.
+    expect(() =>
+      variables.resolveVariableText("{{variables.long}}", snapshot, {
+        html: true,
+        maxLength: 79_999,
+      }),
+    ).toThrow(/exceeds 79999/);
+    expect(
+      variables.resolveVariableText("a{{variables.long}}b", snapshot, { maxLength: 20_002 }),
+    ).toHaveLength(20_002);
+  });
 });

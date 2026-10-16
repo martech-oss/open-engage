@@ -52,6 +52,19 @@ describe("web variable publication", () => {
     expect(resolved.images[0]!.assetId).toBe("{{variables.title}}");
     expect(doc.title).toBe("{{variables.title}}");
   });
+  it("rejects a slot whose resolved text outgrows its schema limit before building it", () => {
+    // The 19-character title passes 200 after 11 copies; HTML-escaped it is 35 characters.
+    const title = "{{variables.title}}".repeat(11);
+    expect(() =>
+      web.resolveLandingVariables({ ...emptyLandingPageDocument(), title }, snapshot),
+    ).toThrow(/exceeds 200/);
+    expect(() =>
+      web.resolveLandingVariables(
+        { ...emptyLandingPageDocument(), html: `<p>${"{{variables.title}}".repeat(6_000)}</p>` },
+        snapshot,
+      ),
+    ).toThrow(/exceeds 200000/);
+  });
   it("refuses interpolation in HTML attributes and CSS", () => {
     expect(typeof web.resolveLandingVariables).toBe("function");
     expect(() =>

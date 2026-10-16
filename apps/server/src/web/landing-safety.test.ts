@@ -42,6 +42,26 @@ describe("landing page safe HTML and CSS", () => {
       }),
     ).rejects.toThrow();
   });
+  it.each([
+    String.raw`body{background:\75 rl("https://evil.test/a")}`,
+    String.raw`body{background:\55 RL("https://evil.test/a")}`,
+    String.raw`body{background:u\72 l("https://evil.test/a")}`,
+    String.raw`body{background:\69mage-set("https://evil.test/a" 1x)}`,
+    String.raw`body{background:\000075rl("https://evil.test/a")}`,
+    String.raw`body{background:\u\r\l("https://evil.test/a")}`,
+    'body{background:src("https://evil.test/a")}',
+    String.raw`body{\62 ehavior:none}`,
+    String.raw`@\69 mport "https://evil.test/a.css";`,
+  ])("rejects escaped resource loads the browser would decode: %s", async (css) => {
+    await expect(sanitizeLandingDocument({ ...emptyLandingPageDocument(), css })).rejects.toThrow();
+  });
+  it("still accepts escaped names that decode to permitted CSS", async () => {
+    const result = await sanitizeLandingDocument({
+      ...emptyLandingPageDocument(),
+      css: String.raw`main{color:\72 gb(0 0 0)}`,
+    });
+    expect(result.css).toBe(String.raw`main{color:\72 gb(0 0 0)}`);
+  });
   it("keeps repeated sanitization stable and supports safe brand CSS variables", async () => {
     const doc = {
       ...emptyLandingPageDocument(),

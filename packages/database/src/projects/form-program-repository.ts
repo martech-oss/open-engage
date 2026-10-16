@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import {
   programBindingSchema,
@@ -7,11 +7,12 @@ import {
   type ProgramBindingIntent,
 } from "@openengage/core/projects";
 
-import { nowIso } from "../shared/database-utils";
+import { changedExactlyOne, nowIso } from "../shared/database-utils";
 import { WorkspaceRepository } from "../shared/repository-base";
 import { forms } from "../web/schema";
 import { formProgramBindings } from "./form-program-schema";
 import { ProjectProgramRepository, ProgramError } from "./program-repository";
+import { projects } from "./schema";
 export class FormProgramRepository extends WorkspaceRepository {
   public async getIntent(formId: string): Promise<ProgramBindingIntent | null> {
     const row = await this.database.orm
@@ -83,7 +84,17 @@ export class FormProgramRepository extends WorkspaceRepository {
         and(this.inWorkspace(formProgramBindings), eq(formProgramBindings.projectId, projectId)),
       );
   }
-  public async set(formId: string, binding: ProgramBinding | null) {
+  /**
+   * `expectedProjectId` is the binding's owner when the caller authorized the
+   * change (null for an unbound form). The write applies only if that still
+   * holds and a new target Project is still active, so a concurrent rebind or
+   * archive between the check and the write surfaces as a conflict.
+   */
+  public async set(
+    formId: string,
+    binding: ProgramBinding | null,
+    expectedProjectId: string | null,
+  ) {
     const form = await this.database.orm
       .select({ id: forms.id })
       .from(forms)
@@ -91,18 +102,44 @@ export class FormProgramRepository extends WorkspaceRepository {
       .get();
     if (!form) throw new ProgramError("not_found", "Form not found in workspace");
     if (!binding) {
-      await this.database.orm
+      // Releasing an unbound form must not remove a binding someone else just made.
+      if (expectedProjectId === null) return;
+      const released = await this.database.orm
         .delete(formProgramBindings)
-        .where(and(this.inWorkspace(formProgramBindings), eq(formProgramBindings.formId, formId)));
+        .where(
+          and(
+            this.inWorkspace(formProgramBindings),
+            eq(formProgramBindings.formId, formId),
+            eq(formProgramBindings.projectId, expectedProjectId),
+          ),
+        );
+      if (!changedExactlyOne(released))
+        throw new ProgramError("conflict", "The form binding changed; reload and try again");
       return;
     }
     const parsed = await this.validate(binding);
-    await this.database.orm
-      .insert(formProgramBindings)
-      .values({ workspaceId: this.context.workspaceId, formId, ...parsed, updatedAt: nowIso() })
-      .onConflictDoUpdate({
-        target: [formProgramBindings.workspaceId, formProgramBindings.formId],
-        set: { ...parsed, updatedAt: nowIso() },
-      });
+    const now = nowIso();
+    const targetActive = sql`EXISTS (SELECT 1 FROM ${projects} WHERE ${projects.workspaceId} = ${this.context.workspaceId} AND ${projects.id} = ${parsed.projectId} AND ${projects.archivedAt} IS NULL)`;
+    const result =
+      expectedProjectId === null
+        ? await this.database.orm
+            .insert(formProgramBindings)
+            .select(
+              sql`SELECT ${this.context.workspaceId}, ${formId}, ${parsed.projectId}, ${parsed.definitionVersion}, ${parsed.statusId}, ${now} WHERE ${targetActive}`,
+            )
+            .onConflictDoNothing()
+        : await this.database.orm
+            .update(formProgramBindings)
+            .set({ ...parsed, updatedAt: now })
+            .where(
+              and(
+                this.inWorkspace(formProgramBindings),
+                eq(formProgramBindings.formId, formId),
+                eq(formProgramBindings.projectId, expectedProjectId),
+                targetActive,
+              ),
+            );
+    if (!changedExactlyOne(result))
+      throw new ProgramError("conflict", "The form binding changed; reload and try again");
   }
 }

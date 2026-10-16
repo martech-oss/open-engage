@@ -1,5 +1,6 @@
 import { launch, type BrowserWorker } from "@cloudflare/playwright";
 
+import { BrowserRequestPolicy } from "./company-enrichment-browser";
 import { extractHtmlPage, selectRelevantLinks } from "./company-enrichment-html";
 import { capTotalText, normalizePage } from "./company-enrichment-normalization";
 import type {
@@ -11,7 +12,6 @@ import type {
 import {
   assertSafePublicHttpsUrl,
   errorMessage,
-  isSafePublicHttpsUrl,
   readTextLimited,
   timedSignal,
 } from "./company-enrichment-web";
@@ -21,6 +21,7 @@ const MAX_PAGES = 4;
 const MAX_BROWSER_PAGES = 3;
 const STATIC_FETCH_TIMEOUT_MS = 12_000;
 const BROWSER_NAVIGATION_TIMEOUT_MS = 15_000;
+const MAX_BROWSER_REDIRECTS = 5;
 
 export async function inspectWebsite(
   requestedUrl: string,
@@ -64,24 +65,24 @@ export async function inspectWebsite(
   if (browserTargets.length > 0) {
     const browser = await launchBrowser(browserBinding);
     try {
-      const page = await browser.newPage();
-      await page.route("**/*", async (route) => {
-        const resourceUrl = route.request().url();
-        if (resourceUrl.startsWith("data:") || resourceUrl.startsWith("blob:")) {
-          await route.continue();
-          return;
-        }
-        if (!isSafePublicHttpsUrl(resourceUrl)) {
-          await route.abort("blockedbyclient");
-          return;
-        }
-        await route.continue();
-      });
+      // A Service Worker's own requests never reach the route handler below.
+      const context = await browser.newContext({ serviceWorkers: "block" });
+      const policy = new BrowserRequestPolicy();
+      // Routing the whole context also covers any pop-up the page opens.
+      await context.route("**/*", policy.handle);
+      // WebSockets cannot be relayed through the Worker, so none are opened.
+      await context.routeWebSocket(
+        () => true,
+        (socket) => socket.close(),
+      );
+      const page = await context.newPage();
+      policy.watch(page.mainFrame());
+      const render = (target: string) => renderPage(page, policy, target);
 
       for (const target of browserTargets) {
         signal?.throwIfAborted();
         try {
-          const rendered = await renderPage(page, target);
+          const rendered = await render(target);
           renderedPages.set(rendered.url, rendered);
         } catch (error) {
           warnings.push(`Browser rendering failed for ${target}: ${errorMessage(error)}`);
@@ -98,7 +99,7 @@ export async function inspectWebsite(
         for (const target of moreLinks) {
           signal?.throwIfAborted();
           try {
-            const rendered = await renderPage(page, target);
+            const rendered = await render(target);
             renderedPages.set(rendered.url, rendered);
           } catch (error) {
             warnings.push(`Browser rendering failed for ${target}: ${errorMessage(error)}`);
@@ -129,36 +130,72 @@ async function fetchStaticPage(
 ): Promise<InspectedPage> {
   let url = assertSafePublicHttpsUrl(requestedUrl);
   for (let redirect = 0; redirect <= 5; redirect += 1) {
+    // The deadline and the caller's cancellation cover the body as well as
+    // the headers, and every exit releases the response stream.
     const timed = timedSignal(signal, STATIC_FETCH_TIMEOUT_MS);
-    const response = await fetcher(url, {
-      redirect: "manual",
-      signal: timed.signal,
-      headers: { Accept: "text/html,application/xhtml+xml;q=0.9" },
-    }).finally(timed.dispose);
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location) throw new Error(`Redirect ${response.status} had no location`);
-      url = assertSafePublicHttpsUrl(new URL(location, url).href);
-      continue;
+    try {
+      const response = await fetcher(url, {
+        redirect: "manual",
+        signal: timed.signal,
+        headers: { Accept: "text/html,application/xhtml+xml;q=0.9" },
+      });
+      if (response.status >= 300 && response.status < 400) {
+        await discardBody(response);
+        const location = response.headers.get("location");
+        if (!location) throw new Error(`Redirect ${response.status} had no location`);
+        url = assertSafePublicHttpsUrl(new URL(location, url).href);
+        continue;
+      }
+      if (!response.ok) {
+        await discardBody(response);
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+      const declaredLength = Number(response.headers.get("content-length") ?? "0");
+      if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
+        await discardBody(response);
+        throw new Error(`Unsupported content type: ${contentType || "unknown"}`);
+      }
+      if (declaredLength > MAX_RESPONSE_BYTES) {
+        await discardBody(response);
+        throw new Error("HTML response is too large");
+      }
+      const html = await readTextLimited(response.body, MAX_RESPONSE_BYTES, timed.signal);
+      return extractHtmlPage(url.href, html, "static");
+    } finally {
+      timed.dispose();
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
-      throw new Error(`Unsupported content type: ${contentType || "unknown"}`);
-    }
-    const declaredLength = Number(response.headers.get("content-length") ?? "0");
-    if (declaredLength > MAX_RESPONSE_BYTES) throw new Error("HTML response is too large");
-    const html = await readTextLimited(response.body, MAX_RESPONSE_BYTES);
-    return extractHtmlPage(url.href, html, "static");
   }
   throw new Error("Too many redirects");
 }
 
-async function renderPage(page: InspectionPage, requestedUrl: string): Promise<InspectedPage> {
-  await page.goto(assertSafePublicHttpsUrl(requestedUrl).href, {
-    waitUntil: "domcontentloaded",
-    timeout: BROWSER_NAVIGATION_TIMEOUT_MS,
-  });
+async function renderPage(
+  page: InspectionPage,
+  policy: BrowserRequestPolicy,
+  requestedUrl: string,
+): Promise<InspectedPage> {
+  let target = assertSafePublicHttpsUrl(requestedUrl).href;
+  for (let redirects = 0; ; redirects += 1) {
+    policy.takeRedirect();
+    let navigationError: unknown = null;
+    try {
+      await page.goto(target, {
+        waitUntil: "domcontentloaded",
+        timeout: BROWSER_NAVIGATION_TIMEOUT_MS,
+      });
+    } catch (error) {
+      // A redirect ends the navigation with a blocked request.
+      navigationError = error;
+    }
+    const redirect = policy.takeRedirect();
+    if (!redirect) {
+      if (navigationError) throw navigationError;
+      break;
+    }
+    if (!redirect.allowed) throw new Error(`Redirected to a disallowed address: ${redirect.url}`);
+    if (redirects >= MAX_BROWSER_REDIRECTS) throw new Error("Too many redirects");
+    target = redirect.url;
+  }
   const finalUrl = assertSafePublicHttpsUrl(page.url()).href;
   const extracted = await page.evaluate(() => {
     const meta = (selector: string) =>
@@ -189,4 +226,8 @@ async function renderPage(page: InspectionPage, requestedUrl: string): Promise<I
     };
   });
   return normalizePage(finalUrl, extracted, "browser");
+}
+
+async function discardBody(response: Response): Promise<void> {
+  await response.body?.cancel().catch(() => undefined);
 }

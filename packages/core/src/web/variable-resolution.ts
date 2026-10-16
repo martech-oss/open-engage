@@ -8,6 +8,10 @@ import {
 import { signupFormDefinitionSchema, type SignupFormDefinition } from "./form-schema";
 import { landingPageDocumentSchema, type LandingPageDocument } from "./landing-document";
 
+// Each slot stops expanding at its schema limit instead of after building the text.
+const FORM_FIELD_LABEL_MAX_LENGTH = 191;
+const FORM_SUCCESS_MESSAGE_MAX_LENGTH = 500;
+
 export function resolveFormVariables(
   definition: SignupFormDefinition,
   successMessage: string,
@@ -18,10 +22,18 @@ export function resolveFormVariables(
       ...definition,
       fields: definition.fields?.map((field) => ({
         ...field,
-        ...(field.label === undefined ? {} : { label: resolveVariableText(field.label, snapshot) }),
+        ...(field.label === undefined
+          ? {}
+          : {
+              label: resolveVariableText(field.label, snapshot, {
+                maxLength: FORM_FIELD_LABEL_MAX_LENGTH,
+              }),
+            }),
       })),
     }),
-    successMessage: resolveVariableText(successMessage, snapshot),
+    successMessage: resolveVariableText(successMessage, snapshot, {
+      maxLength: FORM_SUCCESS_MESSAGE_MAX_LENGTH,
+    }),
   };
 }
 export function formVariableReferences(
@@ -39,32 +51,36 @@ export function resolveLandingVariables(
   snapshot: VariableSnapshot,
   formSnapshots: Record<string, VariableSnapshot> = {},
 ): LandingPageDocument {
-  const text = (value: string) => resolveVariableText(value, snapshot);
+  const text = (value: string, maxLength: number) =>
+    resolveVariableText(value, snapshot, { maxLength });
   validateLandingVariablePlacement(document);
-  const html = (value: string) => resolveVariableText(value, snapshot, { html: true });
+  const html = (value: string, maxLength: number) =>
+    resolveVariableText(value, snapshot, { html: true, maxLength });
   return landingPageDocumentSchema.parse({
     ...document,
-    title: text(document.title),
-    description: text(document.description),
-    html: html(document.html),
+    title: text(document.title, 200),
+    description: text(document.description, 500),
+    html: html(document.html, 200_000),
     ctas: document.ctas.map((cta) => {
       const { hrefVariable, ...literal } = cta;
       if (!hrefVariable && variableTextReferences(cta.href).length)
         throw new Error("CTA URLs require a typed variable reference");
       return {
         ...literal,
-        label: text(cta.label),
+        label: text(cta.label, 200),
         href: hrefVariable ? resolveVariableRef(hrefVariable, snapshot) : cta.href,
       };
     }),
-    images: document.images.map((image) => ({ ...image, alt: text(image.alt) })),
+    images: document.images.map((image) => ({ ...image, alt: text(image.alt, 500) })),
     dynamicSlots: document.dynamicSlots.map((slot) => ({
       ...slot,
-      fallbackHtml: html(slot.fallbackHtml),
+      fallbackHtml: html(slot.fallbackHtml, 20_000),
     })),
     forms: document.forms.map((form) => ({
       ...form,
-      name: resolveVariableText(form.name, formSnapshots[form.refId] ?? snapshot),
+      name: resolveVariableText(form.name, formSnapshots[form.refId] ?? snapshot, {
+        maxLength: 191,
+      }),
       ...resolveFormVariables(
         form.definition,
         form.successMessage,
